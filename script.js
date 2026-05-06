@@ -3429,7 +3429,7 @@ function openStudentColumnSearch(field, label) {
     const input = document.getElementById('studentColumnSearchInput');
     const searchInput = document.getElementById('studentSearchInput');
     const previousValue = studentColumnSearchFilter?.field === field
-        ? studentColumnSearchFilter.value
+        ? studentColumnSearchFilter.rawValue
         : (searchInput?.value || '');
 
     if (!modal || !input) {
@@ -3465,7 +3465,7 @@ function applyStudentColumnSearchValue(field, label, value) {
 
     const normalizedValue = String(value || '').trim();
     studentColumnSearchFilter = normalizedValue
-        ? { field, label, value: normalizedValue.toLowerCase() }
+        ? { field, label, rawValue: normalizedValue, value: normalizedValue.toLowerCase() }
         : null;
 
     if (searchInput) {
@@ -3517,6 +3517,7 @@ function renderStudents(term = '') {
     }
 
     const columnSearch = studentColumnSearchFilter;
+    const activeSearchTerm = columnSearch ? columnSearch.value : term;
     populateStudentQuickFilterOptions();
     const selectedQuickValues = getStudentQuickFilterSelectedValues(quickFilter);
     const parsedFilters = parseStudentQuickFilterValues(selectedQuickValues);
@@ -3533,13 +3534,13 @@ function renderStudents(term = '') {
     const students = getData(STORAGE_KEY_STUDENTS);
     const filtered = students.filter(s =>
         (
-            !term ||
+            !activeSearchTerm ||
             (columnSearch
-                ? String(getStudentColumnSearchText(s, columnSearch.field)).toLowerCase().includes(term)
+                ? String(getStudentColumnSearchText(s, columnSearch.field)).toLowerCase().includes(activeSearchTerm)
                 : (
-                    (s.fullName && s.fullName.toLowerCase().includes(term)) ||
-                    (s.rollNo && s.rollNo.toString().toLowerCase().includes(term)) ||
-                    (s.studentCode && s.studentCode.toLowerCase().includes(term))
+                    (s.fullName && s.fullName.toLowerCase().includes(activeSearchTerm)) ||
+                    (s.rollNo && s.rollNo.toString().toLowerCase().includes(activeSearchTerm)) ||
+                    (s.studentCode && s.studentCode.toLowerCase().includes(activeSearchTerm))
                 ))
         ) &&
         (genderSet.size === 0 || genderSet.has(String(s.gender || '').toLowerCase())) &&
