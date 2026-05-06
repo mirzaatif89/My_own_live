@@ -3209,7 +3209,7 @@ function parseStudentQuickFilterValues(values) {
 }
 
 function getStudentClassSortRank(className) {
-    const normalized = String(className || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const normalized = String(className || '').trim().toLowerCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ');
     const defaultIndex = DEFAULT_STUDENT_CLASS_ORDER.findIndex((name) => name.toLowerCase() === normalized);
     if (defaultIndex !== -1) return defaultIndex;
 
@@ -3239,7 +3239,7 @@ function getStudentClassSortRank(className) {
         nine: 9,
         ten: 10
     };
-    const classMatch = normalized.match(/^class\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b/);
+    const classMatch = normalized.match(/^(?:class|grade)\s*(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b/);
     if (classMatch) {
         const classNumber = wordNumbers[classMatch[1]] || Number.parseInt(classMatch[1], 10);
         if (Number.isFinite(classNumber)) return 2 + classNumber;
