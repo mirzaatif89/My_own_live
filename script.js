@@ -3255,6 +3255,13 @@ function compareStudentClassNames(a, b) {
     return String(a || '').localeCompare(String(b || ''), undefined, { numeric: true, sensitivity: 'base' });
 }
 
+function getStudentQuickFilterClassLabel(className) {
+    const normalized = String(className || '').trim().toLowerCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ');
+    if (normalized === 'nursery' || normalized === 'nursary' || normalized === 'kg1') return 'nursary (KG1)';
+    if (normalized === 'prep' || normalized === 'kg2') return 'PREP(KG2)';
+    return className;
+}
+
 function getStudentQuickFilterLabelForValue(value) {
     const quickFilter = document.getElementById('studentQuickFilter');
     if (!quickFilter) return '';
@@ -3765,7 +3772,7 @@ function populateStudentQuickFilterOptions() {
             classes.forEach((className) => {
                 const option = document.createElement('option');
                 option.value = `class:${className}`;
-                option.textContent = className;
+                option.textContent = getStudentQuickFilterClassLabel(className);
                 classGroup.appendChild(option);
             });
             quickFilter.appendChild(classGroup);
