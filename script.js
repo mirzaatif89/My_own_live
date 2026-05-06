@@ -3257,8 +3257,8 @@ function compareStudentClassNames(a, b) {
 
 function getStudentQuickFilterClassLabel(className) {
     const normalized = String(className || '').trim().toLowerCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ');
-    if (normalized === 'nursery' || normalized === 'nursary' || normalized === 'kg1') return 'nursary (KG1)';
-    if (normalized === 'prep' || normalized === 'kg2') return 'PREP(KG2)';
+    if (normalized === 'nursery' || normalized === 'nursary' || normalized === 'kg1') return 'KG1';
+    if (normalized === 'prep' || normalized === 'kg2') return 'KG2';
     return className;
 }
 
