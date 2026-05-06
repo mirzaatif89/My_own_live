@@ -167,6 +167,21 @@ function defineSpecialNoticeModel(db) {
     });
 }
 
+function defineWhatsAppMessageLogModel(db) {
+    return db.define('WhatsAppMessageLog', {
+        id: { type: DataTypes.STRING, primaryKey: true },
+        studentId: DataTypes.STRING,
+        studentName: DataTypes.STRING,
+        phoneNumber: DataTypes.STRING,
+        messageType: DataTypes.STRING,
+        messageContent: DataTypes.TEXT('long'),
+        status: { type: DataTypes.STRING, defaultValue: 'pending' },
+        providerMessageId: DataTypes.STRING,
+        errorMessage: DataTypes.TEXT,
+        sentAt: DataTypes.DATE
+    });
+}
+
 function defineAppSettingModel(db) {
     return db.define('AppSetting', {
         settingKey: { type: DataTypes.STRING, primaryKey: true },
@@ -322,6 +337,7 @@ async function getDb() {
             defineTeacherAttendanceModel(db);
             defineAppSettingModel(db);
             defineSpecialNoticeModel(db);
+            defineWhatsAppMessageLogModel(db);
 
             await db.sync();
             await ensureLegacySchema(db);

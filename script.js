@@ -3168,6 +3168,7 @@ function parseStudentQuickFilterValues(values) {
     const normalizedValues = normalizeStudentQuickFilterValues(values);
     const genders = [];
     const campuses = [];
+    const classes = [];
     let below5 = false;
 
     normalizedValues.forEach((value) => {
@@ -3183,6 +3184,12 @@ function parseStudentQuickFilterValues(values) {
             return;
         }
 
+        if (value.startsWith('class:')) {
+            const className = value.slice('class:'.length);
+            if (className) classes.push(className);
+            return;
+        }
+
         if (value === 'age:below5') {
             below5 = true;
         }
@@ -3191,6 +3198,7 @@ function parseStudentQuickFilterValues(values) {
     return {
         genders,
         campuses,
+        classes,
         below5
     };
 }
@@ -3361,6 +3369,7 @@ function renderStudents(term = '') {
 
     const genderSet = new Set(parsedFilters.genders.map((gender) => String(gender || '').toLowerCase()));
     let campusSet = new Set(parsedFilters.campuses.map((campus) => String(campus || '').toLowerCase()));
+    const classSet = new Set(parsedFilters.classes.map((className) => String(className || '').toLowerCase()));
     const requireBelow5 = parsedFilters.below5;
 
     if (loggedInUser?.role === 'Branch' && loggedInUser.campusName) {
@@ -3377,6 +3386,7 @@ function renderStudents(term = '') {
         ) &&
         (genderSet.size === 0 || genderSet.has(String(s.gender || '').toLowerCase())) &&
         (!requireBelow5 || isStudentBelowAge(s, 5)) &&
+        (classSet.size === 0 || classSet.has(String(s.classGrade || '').toLowerCase())) &&
         (campusSet.size === 0 || campusSet.has(String(s.campusName || 'Main Campus').toLowerCase()))
     );
 
@@ -3461,6 +3471,7 @@ function printStudentsList() {
 
     const genderSet = new Set(parsedFilters.genders.map((gender) => String(gender || '').toLowerCase()));
     let campusSet = new Set(parsedFilters.campuses.map((campus) => String(campus || '').toLowerCase()));
+    const classSet = new Set(parsedFilters.classes.map((className) => String(className || '').toLowerCase()));
     const requireBelow5 = parsedFilters.below5;
 
     if (loggedInUser?.role === 'Branch' && loggedInUser.campusName) {
@@ -3478,6 +3489,7 @@ function printStudentsList() {
             ) &&
             (genderSet.size === 0 || genderSet.has(String(s.gender || '').toLowerCase())) &&
             (!requireBelow5 || isStudentBelowAge(s, 5)) &&
+            (classSet.size === 0 || classSet.has(String(s.classGrade || '').toLowerCase())) &&
             (campusSet.size === 0 || campusSet.has(String(s.campusName || 'Main Campus').toLowerCase()))
         )
         .sort((a, b) => {
@@ -3635,6 +3647,7 @@ function populateStudentQuickFilterOptions() {
 
     const students = getData(STORAGE_KEY_STUDENTS);
     const campusMap = new Map();
+    const classMap = new Map();
     [...DEFAULT_CAMPUS_NAMES,
         ...studentQuickFilterBranchCampuses,
         ...students.map((student) => String(student.campusName || 'Main Campus').trim())
@@ -3646,6 +3659,17 @@ function populateStudentQuickFilterOptions() {
             if (!campusMap.has(key)) campusMap.set(key, normalized);
         });
 
+    [
+        ...getData(STORAGE_KEY_CLASSES).map((item) => String(item?.name || '').trim()),
+        ...students.map((student) => String(student.classGrade || '').trim())
+    ]
+        .forEach((className) => {
+            const normalized = String(className || '').trim();
+            if (!normalized) return;
+            const key = normalized.toLowerCase();
+            if (!classMap.has(key)) classMap.set(key, normalized);
+        });
+
     if (loggedInUser?.role === 'Branch' && loggedInUser.campusName) {
         const normalizedBranchCampus = String(loggedInUser.campusName || '').trim();
         if (normalizedBranchCampus) {
@@ -3655,7 +3679,11 @@ function populateStudentQuickFilterOptions() {
     }
 
     const campuses = Array.from(campusMap.values()).sort((a, b) => a.localeCompare(b));
-    const signature = campuses.map((name) => String(name || '').toLowerCase()).join('|');
+    const classes = Array.from(classMap.values()).sort((a, b) => a.localeCompare(b));
+    const signature = [
+        `campuses:${campuses.map((name) => String(name || '').toLowerCase()).join('|')}`,
+        `classes:${classes.map((name) => String(name || '').toLowerCase()).join('|')}`
+    ].join('||');
     const needsRebuild = quickFilter.dataset.signature !== signature || !quickFilter.options.length;
 
     if (needsRebuild) {
@@ -3677,6 +3705,18 @@ function populateStudentQuickFilterOptions() {
                 campusGroup.appendChild(option);
             });
             quickFilter.appendChild(campusGroup);
+        }
+
+        if (classes.length) {
+            const classGroup = document.createElement('optgroup');
+            classGroup.label = 'Classes';
+            classes.forEach((className) => {
+                const option = document.createElement('option');
+                option.value = `class:${className}`;
+                option.textContent = className;
+                classGroup.appendChild(option);
+            });
+            quickFilter.appendChild(classGroup);
         }
 
         quickFilter.dataset.signature = signature;

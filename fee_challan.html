@@ -902,7 +902,7 @@
         @media print {
             @page {
                 size: A4;
-                margin: 2.5mm;
+                margin: 2mm;
             }
 
             body {
@@ -931,18 +931,26 @@
             }
 
             .preview-sheet {
-                border: none;
+                border: 1px solid #6b7280;
                 margin: 0;
+                height: 91mm;
+                overflow: hidden;
+                box-sizing: border-box;
                 break-inside: avoid;
                 page-break-inside: avoid;
                 page-break-after: avoid;
             }
 
             .preview-sheet + .preview-sheet {
-                margin-top: 0.6mm;
+                margin-top: 0;
             }
 
             .challan-bulk-group {
+                height: 276mm;
+                display: grid;
+                grid-template-rows: repeat(3, 1fr);
+                gap: 0.5mm;
+                overflow: hidden;
                 break-inside: avoid;
                 page-break-inside: avoid;
                 break-after: page;
@@ -955,51 +963,73 @@
             }
 
             .challan-bulk-group + .challan-bulk-group {
-                margin-top: 3mm;
+                margin-top: 0;
             }
 
             .challan-paper {
-                padding: 0 0 1mm;
+                height: auto;
+                box-sizing: border-box;
+                padding: 0.6mm 0.9mm 0.4mm;
+                transform: scale(0.9);
+                transform-origin: top left;
+                width: 111.2%;
             }
 
             .challan-copy-label {
-                font-size: 9px;
-                margin-bottom: 2px;
+                font-size: 7px;
+                line-height: 1;
+                margin-bottom: 0.35mm;
             }
 
             .challan-table {
-                font-size: 9.5px;
+                font-size: 7px;
+                line-height: 1.08;
             }
 
             .challan-table td,
             .challan-table th {
-                padding: 3px 4px;
+                padding: 0.65mm 0.8mm;
+                white-space: normal;
             }
 
             .challan-school-mark {
-                width: 66px;
+                width: auto;
             }
 
             .challan-school-logo {
-                width: 42px;
-                height: 42px;
+                width: 22px;
+                height: 22px;
             }
 
             .challan-school-title {
-                font-size: 16px;
+                font-size: 10px;
+                line-height: 1.1;
             }
 
             .challan-school-subtitle {
-                font-size: 10px;
+                font-size: 6.6px;
+                line-height: 1.05;
             }
 
             .challan-urdu-note {
-                font-size: 9px;
-                min-height: 16px;
+                font-size: 6.3px;
+                line-height: 1.05;
+                min-height: 0;
+            }
+
+            .challan-label {
+                width: auto;
+                white-space: nowrap;
+            }
+
+            .challan-value,
+            .challan-value-wide {
+                width: auto;
             }
 
             .challan-subvalue {
-                font-size: 9px;
+                font-size: 6px;
+                line-height: 1.05;
             }
 
             .challan-month-picker-grid {
@@ -1007,28 +1037,29 @@
             }
 
             .challan-qr-cell {
-                width: 70px;
+                width: 34px;
             }
 
             .challan-qr-cell img {
-                width: 56px;
-                height: 56px;
+                width: 24px;
+                height: 24px;
             }
 
             .challan-qr-svg svg {
-                width: 56px;
-                height: 56px;
+                width: 24px;
+                height: 24px;
             }
 
             .challan-qr-note {
-                font-size: 8px;
-                line-height: 1.25;
+                font-size: 5.8px;
+                line-height: 1.05;
             }
 
             .challan-footer {
-                gap: 8px;
-                font-size: 10px;
-                padding: 6px 2px 0;
+                gap: 3px;
+                font-size: 6.1px;
+                line-height: 1.1;
+                padding: 0.5mm 0.3mm 0;
             }
         }
     </style>
@@ -1357,7 +1388,7 @@
             }
         };
         const challanFormFields = ['challanNumber', 'challanStudent', 'studentSid', 'studentAdmNo', 'studentClass', 'studentRollNo', 'fatherName', 'fatherMobile', 'challanSession', 'challanMonth', 'feeMonth', 'dueDate', 'baseAmount', 'payNowAmount', 'additionalCharges', 'discountValue', 'particulars', 'schoolName', 'schoolAddress', 'urduNote', 'challanNotes'];
-        const printCopies = ['School Copy', 'Student Copy'];
+        const printCopies = ['Parents Copy', 'School Copy', 'Information Copy'];
         const CHALLAN_MONTHLY_FEES_KEY = 'eduCore_monthly_fees';
         const CHALLAN_PAYMENT_DETAILS_KEY = 'eduCore_payment_details';
         const CHALLAN_MONTHS = [
@@ -3109,6 +3140,14 @@
                     <div class="challan-paper">
                         <div class="challan-copy-label">${escapeHtml(copyLabel)}</div>
                         <table class="challan-table">
+                            <colgroup>
+                                <col style="width: 13%;">
+                                <col style="width: 20%;">
+                                <col style="width: 16%;">
+                                <col style="width: 22%;">
+                                <col style="width: 13%;">
+                                <col style="width: 16%;">
+                            </colgroup>
                             <tr>
                                 <td class="challan-school-mark"><img class="challan-school-logo" src="images/logo.jpeg" alt="School logo"></td>
                                 <td colspan="5" class="challan-school-title">${escapeHtml(data.schoolName)}</td>

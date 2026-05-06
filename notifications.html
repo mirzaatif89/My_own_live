@@ -78,6 +78,20 @@
             font: inherit;
         }
 
+        .whatsapp-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .whatsapp-status {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            margin-top: 0.75rem;
+            min-height: 1.2rem;
+        }
+
         .birthday-list {
             display: grid;
             gap: 0.8rem;
@@ -353,8 +367,14 @@
                             <button type="button" class="notification-tab" data-filter="upcoming">Next 30 Days</button>
                             <button type="button" class="notification-tab" data-filter="all">All Birthdays</button>
                         </div>
-                        <input class="notification-search" id="birthdaySearchInput" type="search" placeholder="Search student, class, roll no...">
+                        <div class="whatsapp-actions">
+                            <button type="button" class="btn btn-primary" id="sendBirthdayWhatsappBtn">
+                                <i data-lucide="send"></i> Send Birthday WhatsApp
+                            </button>
+                            <input class="notification-search" id="birthdaySearchInput" type="search" placeholder="Search student, class, roll no...">
+                        </div>
                     </div>
+                    <div class="whatsapp-status" id="birthdayWhatsappStatus"></div>
 
                     <div class="birthday-list" id="birthdayList" style="margin-top: 1rem;"></div>
                     <div class="empty-state" id="birthdayEmptyState" style="display: none;">
@@ -368,8 +388,14 @@
                             <h3 style="margin: 0;">Pending Fee Notifications</h3>
                             <p style="color: var(--text-secondary); margin-top: 0.25rem;">Students with unpaid monthly fee records.</p>
                         </div>
-                        <input class="notification-search" id="feeSearchInput" type="search" placeholder="Search pending fee student...">
+                        <div class="whatsapp-actions">
+                            <button type="button" class="btn btn-primary" id="sendFeeWhatsappBtn">
+                                <i data-lucide="send"></i> Send Fee WhatsApp
+                            </button>
+                            <input class="notification-search" id="feeSearchInput" type="search" placeholder="Search pending fee student...">
+                        </div>
                     </div>
+                    <div class="whatsapp-status" id="feeWhatsappStatus"></div>
 
                     <div class="fee-alert-list" id="feeAlertList" style="margin-top: 1rem;"></div>
                     <div class="empty-state" id="feeAlertEmptyState" style="display: none;">
@@ -659,6 +685,51 @@
             if (window.lucide) window.lucide.createIcons();
         }
 
+        function setWhatsAppStatus(targetId, message, isError = false) {
+            const target = document.getElementById(targetId);
+            if (!target) return;
+            target.textContent = message || '';
+            target.style.color = isError ? 'var(--danger-color)' : 'var(--text-secondary)';
+        }
+
+        async function sendWhatsAppToStudents({ students, messageType, statusId, buttonId }) {
+            const button = document.getElementById(buttonId);
+            const studentIds = (students || []).map((student) => student.id).filter(Boolean);
+
+            if (!studentIds.length) {
+                setWhatsAppStatus(statusId, 'No students selected for WhatsApp.', true);
+                return;
+            }
+
+            const originalText = button.innerHTML;
+            button.disabled = true;
+            button.innerHTML = '<i data-lucide="loader"></i> Sending...';
+            if (window.lucide) window.lucide.createIcons();
+            setWhatsAppStatus(statusId, `Sending WhatsApp messages to ${studentIds.length} student(s)...`);
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/whatsapp/send-students`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ studentIds, messageType })
+                });
+                const result = await parseJsonResponse(response, 'WhatsApp messages could not be sent.');
+                if (!response.ok || result.success === false) {
+                    throw new Error(result.message || 'WhatsApp messages could not be sent.');
+                }
+
+                const summary = result.summary || {};
+                setWhatsAppStatus(statusId, `WhatsApp done: ${summary.sent || 0} sent, ${summary.failed || 0} failed.`);
+                pushNotification('WhatsApp Messages', `${summary.sent || 0} sent, ${summary.failed || 0} failed.`, 'send');
+            } catch (error) {
+                setWhatsAppStatus(statusId, error.message || 'WhatsApp messages could not be sent.', true);
+            } finally {
+                button.disabled = false;
+                button.innerHTML = originalText;
+                if (window.lucide) window.lucide.createIcons();
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             document.querySelectorAll('.notification-tab').forEach((button) => {
                 button.addEventListener('click', () => {
@@ -670,6 +741,23 @@
 
             document.getElementById('birthdaySearchInput').addEventListener('input', renderBirthdayNotifications);
             document.getElementById('feeSearchInput').addEventListener('input', renderFeeNotifications);
+            document.getElementById('sendBirthdayWhatsappBtn').addEventListener('click', () => {
+                const todayStudents = birthdayStudents.filter((student) => student.birthday?.isToday);
+                sendWhatsAppToStudents({
+                    students: todayStudents,
+                    messageType: 'birthday',
+                    statusId: 'birthdayWhatsappStatus',
+                    buttonId: 'sendBirthdayWhatsappBtn'
+                });
+            });
+            document.getElementById('sendFeeWhatsappBtn').addEventListener('click', () => {
+                sendWhatsAppToStudents({
+                    students: feeAlertStudents,
+                    messageType: 'fee_due',
+                    statusId: 'feeWhatsappStatus',
+                    buttonId: 'sendFeeWhatsappBtn'
+                });
+            });
             loadNotificationStudents();
             if (window.lucide) window.lucide.createIcons();
         });

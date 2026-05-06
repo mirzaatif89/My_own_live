@@ -9,6 +9,11 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const mysql = require('mysql2/promise');
 const QRCode = require('qrcode');
+const nodemailer = require('nodemailer');
+const {
+    sendAutomaticAlerts,
+    sendBulkToStudents
+} = require('./api/_lib/whatsapp');
 
 require('dotenv').config();
 
@@ -74,6 +79,7 @@ app.get('/health', (_req, res) => {
 
 let sequelize;
 let startupPromise = null;
+let emailTransporter = null;
 let isInitialized = false;
 const ACTIVE_SESSION_TTL_MS = 90000;
 const activeSessions = new Map();
@@ -1187,6 +1193,61 @@ app.delete('/api/special-notices/:id', async (req, res) => {
     }
 });
 
+app.post('/api/whatsapp/send-students', async (req, res) => {
+    if (!sequelize) return res.status(503).json({ success: false, message: 'Database offline' });
+
+    try {
+        const payload = req.body || {};
+        const studentIds = Array.isArray(payload.studentIds) ? payload.studentIds : [];
+        if (!studentIds.length) {
+            return res.status(400).json({ success: false, message: 'Select at least one student.' });
+        }
+
+        const result = await sendBulkToStudents(sequelize, {
+            studentIds,
+            messageTemplate: String(payload.messageTemplate || '').trim(),
+            messageType: String(payload.messageType || 'custom').trim() || 'custom',
+            extra: payload.extra || {}
+        });
+
+        res.json({ success: true, ...result });
+    } catch (err) {
+        res.status(err.statusCode || 500).json({ success: false, message: err.message });
+    }
+});
+
+app.post('/api/whatsapp/auto-alerts', async (req, res) => {
+    if (!sequelize) return res.status(503).json({ success: false, message: 'Database offline' });
+
+    try {
+        const expectedSecret = process.env.WHATSAPP_CRON_SECRET || '';
+        const providedSecret = req.headers['x-cron-secret'] || req.body?.secret || '';
+        if (expectedSecret && providedSecret !== expectedSecret) {
+            return res.status(401).json({ success: false, message: 'Invalid WhatsApp cron secret.' });
+        }
+
+        const result = await sendAutomaticAlerts(sequelize, {
+            birthdays: req.body?.birthdays !== false,
+            feeDues: req.body?.feeDues !== false
+        });
+        res.json({ success: true, ...result });
+    } catch (err) {
+        res.status(err.statusCode || 500).json({ success: false, message: err.message });
+    }
+});
+
+app.get('/api/whatsapp/logs', async (req, res) => {
+    if (!sequelize) return res.status(503).json({ success: false, message: 'Database offline' });
+
+    try {
+        const Log = sequelize.models.WhatsAppMessageLog;
+        const logs = Log ? await Log.findAll({ order: [['createdAt', 'DESC']], limit: 100 }) : [];
+        res.json({ success: true, logs });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
 app.post('/api/reset-data', authenticateToken, async (req, res) => {
     if (req.user.role !== 'Admin') {
         return res.status(403).json({ success: false, message: 'Admin access required.' });
@@ -1684,6 +1745,72 @@ app.post('/api/fees/challan-tokens', async (req, res) => {
     }
 });
 
+app.post('/api/email/fee-reminder', async (req, res) => {
+    try {
+        const {
+            to,
+            studentName,
+            rollNo,
+            classGrade,
+            amount,
+            month,
+            pendingMonths
+        } = req.body || {};
+
+        const recipient = normalizeOptionalEmail(to);
+        const safeStudentName = String(studentName || '').trim();
+
+        if (!recipient || !safeStudentName) {
+            return res.status(400).json({ success: false, message: 'Student email and name are required.' });
+        }
+
+        const pendingMonthList = Array.isArray(pendingMonths)
+            ? pendingMonths.map((item) => String(item || '').trim()).filter(Boolean)
+            : [];
+        const safeAmount = Number(amount || 0);
+        const safeMonth = String(month || '').trim() || 'Current Month';
+        const schoolName = process.env.SCHOOL_NAME || 'My Own Science School';
+
+        await getEmailTransporter().sendMail({
+            from: getEmailFromAddress(),
+            to: recipient,
+            subject: `Fee Reminder - ${safeStudentName}`,
+            text: [
+                `Dear Parent,`,
+                ``,
+                `This is a fee reminder for ${safeStudentName}.`,
+                rollNo ? `Roll No: ${rollNo}` : '',
+                classGrade ? `Class: ${classGrade}` : '',
+                `Month: ${pendingMonthList.length ? pendingMonthList.join(', ') : safeMonth}`,
+                `Pending Amount: PKR ${safeAmount.toLocaleString('en-PK')}`,
+                ``,
+                `Please submit the pending fee at your earliest convenience.`,
+                ``,
+                `Regards,`,
+                schoolName
+            ].filter((line) => line !== '').join('\n'),
+            html: `
+                <div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6;">
+                    <p>Dear Parent,</p>
+                    <p>This is a fee reminder for <strong>${escapeEmailHtml(safeStudentName)}</strong>.</p>
+                    <table style="border-collapse: collapse; margin: 16px 0;">
+                        ${rollNo ? `<tr><td style="padding: 4px 12px 4px 0; color: #64748b;">Roll No</td><td style="padding: 4px 0;"><strong>${escapeEmailHtml(rollNo)}</strong></td></tr>` : ''}
+                        ${classGrade ? `<tr><td style="padding: 4px 12px 4px 0; color: #64748b;">Class</td><td style="padding: 4px 0;"><strong>${escapeEmailHtml(classGrade)}</strong></td></tr>` : ''}
+                        <tr><td style="padding: 4px 12px 4px 0; color: #64748b;">Month</td><td style="padding: 4px 0;"><strong>${escapeEmailHtml(pendingMonthList.length ? pendingMonthList.join(', ') : safeMonth)}</strong></td></tr>
+                        <tr><td style="padding: 4px 12px 4px 0; color: #64748b;">Pending Amount</td><td style="padding: 4px 0;"><strong>PKR ${safeAmount.toLocaleString('en-PK')}</strong></td></tr>
+                    </table>
+                    <p>Please submit the pending fee at your earliest convenience.</p>
+                    <p>Regards,<br>${escapeEmailHtml(schoolName)}</p>
+                </div>
+            `
+        });
+
+        res.json({ success: true, message: 'Fee reminder email sent successfully.' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message || 'Fee reminder email could not be sent.' });
+    }
+});
+
 app.post('/api/fees/manual-payment', async (req, res) => {
     if (!sequelize) {
         return res.status(503).json({ success: false, message: 'Database offline' });
@@ -1824,6 +1951,87 @@ app.get('/api/fees/payments', async (req, res) => {
             success: false,
             message: error.message || 'Fee payments could not be loaded.'
         });
+    }
+});
+
+app.post('/api/fees/mark-unpaid', async (req, res) => {
+    if (!sequelize) {
+        return res.status(503).json({ success: false, message: 'Database offline' });
+    }
+
+    try {
+        const { studentId, feeMonth, challanNumbers } = req.body || {};
+        const sid = String(studentId || '').trim();
+        const month = String(feeMonth || '').trim();
+
+        if (!sid || !month) {
+            return res.status(400).json({ success: false, message: 'studentId and feeMonth are required.' });
+        }
+
+        const Student = sequelize.models.Student;
+        const FeePayment = sequelize.models.FeePayment;
+        const FeeDueBalance = sequelize.models.FeeDueBalance;
+        const student = await Student.findByPk(sid);
+
+        if (!student) {
+            return res.status(404).json({ success: false, message: 'Student not found.' });
+        }
+
+        const cleanChallans = Array.isArray(challanNumbers)
+            ? challanNumbers.map((item) => String(item || '').trim()).filter(Boolean)
+            : [];
+
+        const where = {
+            studentId: sid,
+            status: { [Op.in]: ['Paid', 'Partial'] }
+        };
+
+        if (cleanChallans.length) {
+            where.challanNumber = { [Op.in]: cleanChallans };
+        } else {
+            where.feeMonth = { [Op.like]: `%${month}%` };
+        }
+
+        const payments = await FeePayment.findAll({ where });
+        if (!payments.length) {
+            return res.status(404).json({ success: false, message: 'No paid payment record found for this month.' });
+        }
+
+        const removedAmount = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+        await FeePayment.update({
+            status: 'Voided',
+            paymentSource: 'Correction'
+        }, { where });
+
+        if (FeeDueBalance && removedAmount > 0) {
+            const existingDue = await FeeDueBalance.findByPk(sid);
+            const currentBalance = existingDue ? Number(existingDue.balance || 0) : 0;
+            const safeCurrent = Number.isFinite(currentBalance) ? currentBalance : 0;
+
+            await FeeDueBalance.upsert({
+                studentId: sid,
+                balance: safeCurrent + removedAmount,
+                updatedAtLabel: new Date().toLocaleString('en-GB')
+            });
+        }
+
+        const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        if (month.toLowerCase() === MONTHS[new Date().getMonth()].toLowerCase()) {
+            await Student.update({ feesStatus: 'Pending', paymentDate: null }, { where: { id: sid } });
+        }
+
+        const allStudents = await Student.findAll();
+        io.emit('students_update', allStudents);
+        io.emit('fee_payment_update', { studentId: sid, feeMonth: month, status: 'Voided' });
+
+        return res.json({
+            success: true,
+            message: 'Fee marked as unpaid.',
+            removedCount: payments.length,
+            removedAmount
+        });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: error.message || 'Could not mark unpaid.' });
     }
 });
 
@@ -2420,6 +2628,21 @@ function defineSpecialNoticeModel(db) {
     });
 }
 
+function defineWhatsAppMessageLogModel(db) {
+    return db.define('WhatsAppMessageLog', {
+        id: { type: DataTypes.STRING, primaryKey: true },
+        studentId: DataTypes.STRING,
+        studentName: DataTypes.STRING,
+        phoneNumber: DataTypes.STRING,
+        messageType: DataTypes.STRING,
+        messageContent: DataTypes.TEXT('long'),
+        status: { type: DataTypes.STRING, defaultValue: 'pending' },
+        providerMessageId: DataTypes.STRING,
+        errorMessage: DataTypes.TEXT,
+        sentAt: DataTypes.DATE
+    });
+}
+
 function normalizeAttendanceStatus(status) {
     if (status === 'P') return 'Present';
     if (status === 'A') return 'Absent';
@@ -2476,6 +2699,45 @@ function buildTeacherAttendanceStore(records) {
 
 function getRequestBaseUrl(req) {
     return `${req.protocol}://${req.get('host')}`;
+}
+
+function getEmailTransporter() {
+    const host = process.env.SMTP_HOST || process.env.EMAIL_HOST;
+    const port = Number(process.env.SMTP_PORT || process.env.EMAIL_PORT || 587);
+    const user = process.env.SMTP_USER || process.env.EMAIL_USER;
+    const pass = process.env.SMTP_PASS || process.env.SMTP_PSAS || process.env.EMAIL_PASS;
+    const secure = String(process.env.SMTP_SECURE || process.env.EMAIL_SECURE || '').toLowerCase() === 'true';
+
+    if (!host || !user || !pass) {
+        throw new Error('SMTP settings are missing. Please set SMTP_HOST, SMTP_USER, and SMTP_PASS in .env.');
+    }
+
+    if (!emailTransporter) {
+        emailTransporter = nodemailer.createTransport({
+            host,
+            port,
+            secure,
+            auth: { user, pass }
+        });
+    }
+
+    return emailTransporter;
+}
+
+function getEmailFromAddress() {
+    const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.EMAIL_FROM_EMAIL || process.env.SMTP_USER || process.env.EMAIL_USER;
+    const fromName = process.env.SMTP_FROM_NAME || process.env.EMAIL_FROM_NAME || process.env.SCHOOL_NAME || 'School';
+
+    return fromEmail ? `"${fromName}" <${fromEmail}>` : fromName;
+}
+
+function escapeEmailHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 function renderFeePaymentPage({ title, message, details = [], success = true }) {
@@ -2782,6 +3044,7 @@ async function startServer() {
         defineStudentAttendanceModel(sequelize);
         defineTeacherAttendanceModel(sequelize);
         defineSpecialNoticeModel(sequelize);
+        defineWhatsAppMessageLogModel(sequelize);
 
         // Avoid Sequelize's repeated ALTER-based index churn on MySQL.
         // Missing legacy columns are handled separately in ensureLegacySchema().
