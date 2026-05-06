@@ -31,6 +31,11 @@ const API_BASE_URL = `${BACKEND_URL}/api`;
 let socket;
 let activePortalSessionsCache = [];
 const DEFAULT_CAMPUS_NAMES = ['Main Campus', 'Ali campus', 'Fatima Campus'];
+const DEFAULT_STUDENT_CLASS_ORDER = [
+    'Play Group', 'Nursery', 'Prep',
+    'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5',
+    'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'
+];
 let studentQuickFilterBranchCampuses = [];
 const FALLBACK_ROUTE_TO_PAGE = {
     login: 'index.html',
@@ -3203,6 +3208,53 @@ function parseStudentQuickFilterValues(values) {
     };
 }
 
+function getStudentClassSortRank(className) {
+    const normalized = String(className || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const defaultIndex = DEFAULT_STUDENT_CLASS_ORDER.findIndex((name) => name.toLowerCase() === normalized);
+    if (defaultIndex !== -1) return defaultIndex;
+
+    const aliasRanks = {
+        play: 0,
+        pg: 0,
+        playgroup: 0,
+        'play group': 0,
+        kg1: 1,
+        nursery: 1,
+        nursary: 1,
+        kg2: 2,
+        prep: 2,
+        preschool: 2
+    };
+    if (Object.prototype.hasOwnProperty.call(aliasRanks, normalized)) return aliasRanks[normalized];
+
+    const wordNumbers = {
+        one: 1,
+        two: 2,
+        three: 3,
+        four: 4,
+        five: 5,
+        six: 6,
+        seven: 7,
+        eight: 8,
+        nine: 9,
+        ten: 10
+    };
+    const classMatch = normalized.match(/^class\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b/);
+    if (classMatch) {
+        const classNumber = wordNumbers[classMatch[1]] || Number.parseInt(classMatch[1], 10);
+        if (Number.isFinite(classNumber)) return 2 + classNumber;
+    }
+
+    return 1000;
+}
+
+function compareStudentClassNames(a, b) {
+    const rankA = getStudentClassSortRank(a);
+    const rankB = getStudentClassSortRank(b);
+    if (rankA !== rankB) return rankA - rankB;
+    return String(a || '').localeCompare(String(b || ''), undefined, { numeric: true, sensitivity: 'base' });
+}
+
 function getStudentQuickFilterLabelForValue(value) {
     const quickFilter = document.getElementById('studentQuickFilter');
     if (!quickFilter) return '';
@@ -3679,7 +3731,7 @@ function populateStudentQuickFilterOptions() {
     }
 
     const campuses = Array.from(campusMap.values()).sort((a, b) => a.localeCompare(b));
-    const classes = Array.from(classMap.values()).sort((a, b) => a.localeCompare(b));
+    const classes = Array.from(classMap.values()).sort(compareStudentClassNames);
     const signature = [
         `campuses:${campuses.map((name) => String(name || '').toLowerCase()).join('|')}`,
         `classes:${classes.map((name) => String(name || '').toLowerCase()).join('|')}`

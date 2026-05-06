@@ -452,14 +452,9 @@
                             Class: <span id="spanClass" style="color: var(--text-primary);"></span>
                         </p>
                     </div>
-                    <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; justify-content: flex-end;">
-                        <button class="back-btn" onclick="sendFeeReminderEmailForCurrentStudent()">
-                            <i data-lucide="mail" size="18"></i> Send Email
-                        </button>
-                        <button class="back-btn" onclick="backToStudentList()">
-                            <i data-lucide="arrow-left" size="18"></i> Back to Students
-                        </button>
-                    </div>
+                    <button class="back-btn" onclick="backToStudentList()">
+                        <i data-lucide="arrow-left" size="18"></i> Back to Students
+                    </button>
                 </div>
 
                 <div id="monthListContainer">
@@ -934,105 +929,6 @@
 
             renderMonthlyFeeRecord(studentId);
             window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-
-        function getPendingFeeMonthsForStudent(student) {
-            const monthlyFees = JSON.parse(localStorage.getItem(STORAGE_KEY_MONTHLY_FEES)) || {};
-            const paymentDetails = JSON.parse(localStorage.getItem('eduCore_payment_details') || '{}');
-            const studentRecord = monthlyFees[student.id] || {};
-            const studentPayments = paymentDetails[student.id] || {};
-            const monthlyFee = parseInt(student?.monthlyFee || 0, 10) || 0;
-
-            let admissionMonthIndex = 0;
-            let admissionYear = new Date().getFullYear();
-
-            if (student?.admissionDate) {
-                const admissionDate = new Date(student.admissionDate);
-                admissionMonthIndex = admissionDate.getMonth();
-                admissionYear = admissionDate.getFullYear();
-            }
-
-            const currentYear = new Date().getFullYear();
-            const currentMonthIndex = new Date().getMonth();
-            const pendingMonths = [];
-
-            for (let year = admissionYear; year <= currentYear; year++) {
-                const startMonth = year === admissionYear ? admissionMonthIndex : 0;
-                const endMonth = year === currentYear ? currentMonthIndex : 11;
-
-                for (let index = startMonth; index <= endMonth; index++) {
-                    const month = monthsList[index];
-                    const paidAmount = Number(studentPayments[month]?.amount || 0);
-                    const isPaid = studentRecord[month] === 'Paid' || (monthlyFee > 0 && paidAmount >= monthlyFee);
-
-                    if (!isPaid) pendingMonths.push(month);
-                }
-            }
-
-            return pendingMonths;
-        }
-
-        async function sendFeeReminderEmailForCurrentStudent() {
-            const recordView = document.getElementById('studentFeeRecordView');
-            const studentId = recordView?.dataset?.studentId;
-            const students = getData(STORAGE_KEY_STUDENTS);
-            const student = students.find(s => String(s.id) === String(studentId));
-
-            if (!student) {
-                alert('Student record not found.');
-                return;
-            }
-
-            if (!student.email) {
-                alert('Student email not found. Please add email in student profile first.');
-                return;
-            }
-
-            const summary = getStudentFeeSummary(student);
-            if (summary.pendingAmount <= 0) {
-                alert('No pending fee found for this student.');
-                return;
-            }
-
-            const sendButton = document.activeElement;
-            const previousText = sendButton?.innerHTML;
-
-            try {
-                if (sendButton) {
-                    sendButton.disabled = true;
-                    sendButton.innerHTML = '<i data-lucide="loader-circle" size="18"></i> Sending...';
-                    if (window.lucide) lucide.createIcons();
-                }
-
-                const response = await fetch(`${API_BASE_URL}/email/fee-reminder`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        to: student.email,
-                        studentName: student.fullName,
-                        rollNo: student.rollNo,
-                        classGrade: student.classGrade,
-                        amount: summary.pendingAmount,
-                        month: CURRENT_MONTH_NAME,
-                        pendingMonths: getPendingFeeMonthsForStudent(student)
-                    })
-                });
-
-                const result = await response.json().catch(() => ({}));
-                if (!response.ok || !result.success) {
-                    throw new Error(result.message || 'Email could not be sent.');
-                }
-
-                alert(result.message || 'Fee reminder email sent successfully.');
-            } catch (error) {
-                alert(error.message || 'Email could not be sent.');
-            } finally {
-                if (sendButton) {
-                    sendButton.disabled = false;
-                    sendButton.innerHTML = previousText;
-                    if (window.lucide) lucide.createIcons();
-                }
-            }
         }
 
         function renderMonthlyFeeRecord(studentId) {
