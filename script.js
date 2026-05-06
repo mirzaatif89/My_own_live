@@ -37,6 +37,7 @@ const DEFAULT_STUDENT_CLASS_ORDER = [
     'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'
 ];
 let studentQuickFilterBranchCampuses = [];
+let studentColumnSearchFilter = null;
 const FALLBACK_ROUTE_TO_PAGE = {
     login: 'index.html',
     index: 'index.html',
@@ -662,7 +663,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const printMode = document.getElementById('studentPrintMode');
         bindStudentQuickFilterMultiSelect();
         if (studentSearch) {
-            studentSearch.addEventListener('input', renderStudents);
+            studentSearch.addEventListener('input', () => {
+                studentColumnSearchFilter = null;
+                studentSearch.placeholder = 'Search by name, roll no, or student ID';
+                renderStudents();
+            });
         }
         if (quickFilter) {
             quickFilter.addEventListener('change', renderStudents);
@@ -3405,6 +3410,41 @@ function createStudentQuickFilterMenuItem(optionElement) {
     return label;
 }
 
+function getStudentStatusLabel(student) {
+    return isStudentTerminated(student) ? 'Terminated' : (student?.feesStatus || 'Pending');
+}
+
+function getStudentColumnSearchText(student, field) {
+    if (!student) return '';
+    if (field === 'status') return getStudentStatusLabel(student);
+    if (field === 'campusName') return student.campusName || 'Main Campus';
+    if (field === 'dob') return `${student.dob || ''} ${formatDateForDisplay(student.dob)}`;
+    return student[field] || '';
+}
+
+function openStudentColumnSearch(field, label) {
+    const searchInput = document.getElementById('studentSearchInput');
+    const previousValue = studentColumnSearchFilter?.field === field
+        ? studentColumnSearchFilter.value
+        : (searchInput?.value || '');
+    const value = window.prompt(`Search ${label}`, previousValue || '');
+    if (value === null) return;
+
+    const normalizedValue = String(value || '').trim();
+    studentColumnSearchFilter = normalizedValue
+        ? { field, label, value: normalizedValue.toLowerCase() }
+        : null;
+
+    if (searchInput) {
+        searchInput.value = normalizedValue;
+        searchInput.placeholder = studentColumnSearchFilter
+            ? `Searching ${label}...`
+            : 'Search by name, roll no, or student ID';
+    }
+
+    renderStudents();
+}
+
 function renderStudents(term = '') {
     const tbody = document.getElementById('studentTableBody');
     if (!tbody) return;
@@ -3422,6 +3462,7 @@ function renderStudents(term = '') {
         term = term.toLowerCase().trim();
     }
 
+    const columnSearch = studentColumnSearchFilter;
     populateStudentQuickFilterOptions();
     const selectedQuickValues = getStudentQuickFilterSelectedValues(quickFilter);
     const parsedFilters = parseStudentQuickFilterValues(selectedQuickValues);
@@ -3439,9 +3480,13 @@ function renderStudents(term = '') {
     const filtered = students.filter(s =>
         (
             !term ||
-            (s.fullName && s.fullName.toLowerCase().includes(term)) ||
-            (s.rollNo && s.rollNo.toString().toLowerCase().includes(term)) ||
-            (s.studentCode && s.studentCode.toLowerCase().includes(term))
+            (columnSearch
+                ? String(getStudentColumnSearchText(s, columnSearch.field)).toLowerCase().includes(term)
+                : (
+                    (s.fullName && s.fullName.toLowerCase().includes(term)) ||
+                    (s.rollNo && s.rollNo.toString().toLowerCase().includes(term)) ||
+                    (s.studentCode && s.studentCode.toLowerCase().includes(term))
+                ))
         ) &&
         (genderSet.size === 0 || genderSet.has(String(s.gender || '').toLowerCase())) &&
         (!requireBelow5 || isStudentBelowAge(s, 5)) &&
@@ -3462,7 +3507,7 @@ function renderStudents(term = '') {
         noData.style.display = 'none';
         filtered.forEach(s => {
             const terminated = isStudentTerminated(s);
-            const statusLabel = terminated ? 'Terminated' : (s.feesStatus || 'Pending');
+            const statusLabel = getStudentStatusLabel(s);
             let statusClass = terminated
                 ? 'status-failed'
                 : (s.feesStatus === 'Paid' ? 'status-paid' : (s.feesStatus === 'Late' ? 'status-failed' : 'status-pending'));
