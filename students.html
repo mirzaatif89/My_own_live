@@ -295,17 +295,17 @@
         .student-th-with-search {
             display: inline-flex;
             align-items: center;
-            gap: 0.35rem;
+            gap: 0.25rem;
             white-space: nowrap;
         }
 
         .student-column-search-btn {
-            width: 22px;
-            height: 22px;
+            width: 18px;
+            height: 18px;
             border: 0;
             border-radius: 50%;
             background: transparent;
-            color: var(--text-secondary);
+            color: var(--primary-color);
             cursor: pointer;
             display: inline-flex;
             align-items: center;
@@ -322,8 +322,136 @@
         }
 
         .student-column-search-btn i {
-            width: 13px;
-            height: 13px;
+            width: 11px;
+            height: 11px;
+            stroke-width: 2.4;
+        }
+
+        .student-search-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.42);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            z-index: 1200;
+        }
+
+        .student-search-overlay.active {
+            display: flex;
+        }
+
+        .student-search-modal {
+            width: min(420px, 100%);
+            background: #ffffff;
+            border: 1px solid rgba(32, 176, 164, 0.24);
+            border-radius: 1rem;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
+            padding: 1.3rem;
+        }
+
+        .student-search-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .student-search-modal-title {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            margin: 0;
+            font-size: 1rem;
+            color: var(--text-primary);
+        }
+
+        .student-search-modal-title span {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: rgba(32, 176, 164, 0.12);
+            color: var(--primary-color);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .student-search-modal-title i {
+            width: 16px;
+            height: 16px;
+        }
+
+        .student-search-close {
+            width: 30px;
+            height: 30px;
+            border: 0;
+            border-radius: 50%;
+            background: #f8fafc;
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .student-search-close:hover,
+        .student-search-close:focus {
+            color: var(--primary-color);
+            background: rgba(32, 176, 164, 0.1);
+            outline: none;
+        }
+
+        .student-search-modal label {
+            display: block;
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            margin-bottom: 0.45rem;
+        }
+
+        .student-search-input-wrap {
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            border: 1px solid var(--border-color);
+            border-radius: 0.8rem;
+            padding: 0 0.9rem;
+            background: #ffffff;
+        }
+
+        .student-search-input-wrap:focus-within {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(32, 176, 164, 0.12);
+        }
+
+        .student-search-input-wrap i {
+            width: 16px;
+            height: 16px;
+            color: var(--primary-color);
+            flex-shrink: 0;
+        }
+
+        .student-search-input-wrap input {
+            width: 100%;
+            border: 0;
+            outline: none;
+            padding: 0.9rem 0;
+            font: inherit;
+        }
+
+        .student-search-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.7rem;
+            margin-top: 1.2rem;
+            flex-wrap: wrap;
+        }
+
+        .student-search-actions .btn {
+            min-width: 95px;
         }
 
         @media (max-width: 900px) {
@@ -804,6 +932,32 @@
             <p id="successMessage" style="color: var(--text-secondary); margin: 1rem 0 2rem;"></p>
             <button class="btn btn-primary" style="width: 100%;" onclick="closeSuccessModal()">Great!</button>
         </div>
+    </div>
+
+    <div id="studentColumnSearchModal" class="student-search-overlay" role="dialog" aria-modal="true"
+        aria-labelledby="studentColumnSearchTitle" onclick="if(event.target===this) closeStudentColumnSearchModal()">
+        <form class="student-search-modal" onsubmit="applyStudentColumnSearch(event)">
+            <div class="student-search-modal-header">
+                <h2 class="student-search-modal-title" id="studentColumnSearchTitle">
+                    <span><i data-lucide="search"></i></span>
+                    Search
+                </h2>
+                <button type="button" class="student-search-close" aria-label="Close search"
+                    onclick="closeStudentColumnSearchModal()">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <label for="studentColumnSearchInput" id="studentColumnSearchLabel">Search</label>
+            <div class="student-search-input-wrap">
+                <i data-lucide="search"></i>
+                <input type="text" id="studentColumnSearchInput" autocomplete="off" placeholder="Type to search">
+            </div>
+            <div class="student-search-actions">
+                <button type="button" class="btn btn-outline" onclick="clearStudentColumnSearch()">Clear</button>
+                <button type="button" class="btn btn-outline" onclick="closeStudentColumnSearchModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Search</button>
+            </div>
+        </form>
     </div>
 
     <div id="studentViewModal" class="student-view-overlay" onclick="if(event.target===this) closeStudentViewModal()">

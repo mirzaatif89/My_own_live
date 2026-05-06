@@ -3423,12 +3423,45 @@ function getStudentColumnSearchText(student, field) {
 }
 
 function openStudentColumnSearch(field, label) {
+    const modal = document.getElementById('studentColumnSearchModal');
+    const title = document.getElementById('studentColumnSearchTitle');
+    const labelEl = document.getElementById('studentColumnSearchLabel');
+    const input = document.getElementById('studentColumnSearchInput');
     const searchInput = document.getElementById('studentSearchInput');
     const previousValue = studentColumnSearchFilter?.field === field
         ? studentColumnSearchFilter.value
         : (searchInput?.value || '');
-    const value = window.prompt(`Search ${label}`, previousValue || '');
-    if (value === null) return;
+
+    if (!modal || !input) {
+        applyStudentColumnSearchValue(field, label, previousValue);
+        return;
+    }
+
+    modal.dataset.field = field;
+    modal.dataset.label = label;
+    if (title) {
+        title.innerHTML = `<span><i data-lucide="search"></i></span> Search ${label}`;
+    }
+    if (labelEl) labelEl.textContent = `Search ${label}`;
+    input.value = previousValue || '';
+    input.placeholder = `Enter ${label}`;
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    if (window.lucide) lucide.createIcons();
+    setTimeout(() => {
+        input.focus();
+        input.select();
+    }, 0);
+}
+
+function closeStudentColumnSearchModal() {
+    const modal = document.getElementById('studentColumnSearchModal');
+    if (modal) modal.classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+function applyStudentColumnSearchValue(field, label, value) {
+    const searchInput = document.getElementById('studentSearchInput');
 
     const normalizedValue = String(value || '').trim();
     studentColumnSearchFilter = normalizedValue
@@ -3443,6 +3476,27 @@ function openStudentColumnSearch(field, label) {
     }
 
     renderStudents();
+}
+
+function applyStudentColumnSearch(event) {
+    if (event) event.preventDefault();
+    const modal = document.getElementById('studentColumnSearchModal');
+    const input = document.getElementById('studentColumnSearchInput');
+    const field = modal?.dataset?.field || '';
+    const label = modal?.dataset?.label || 'Column';
+    if (!field) return;
+    applyStudentColumnSearchValue(field, label, input?.value || '');
+    closeStudentColumnSearchModal();
+}
+
+function clearStudentColumnSearch() {
+    const modal = document.getElementById('studentColumnSearchModal');
+    const field = modal?.dataset?.field || studentColumnSearchFilter?.field || '';
+    const label = modal?.dataset?.label || studentColumnSearchFilter?.label || 'Column';
+    if (field) {
+        applyStudentColumnSearchValue(field, label, '');
+    }
+    closeStudentColumnSearchModal();
 }
 
 function renderStudents(term = '') {
