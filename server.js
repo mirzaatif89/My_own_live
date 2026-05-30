@@ -9,6 +9,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const mysql = require('mysql2/promise');
 const QRCode = require('qrcode');
+const { getSmtpConfig, sendSmtpEmail } = require('./api/_lib/mailer');
 
 require('dotenv').config();
 
@@ -2309,6 +2310,36 @@ app.delete('/api/staff/:id', authenticateToken, async (req, res) => {
         res.json({ success: true, message: 'Staff deleted successfully.' });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.get('/api/email/config', authenticateToken, (req, res) => {
+    const config = getSmtpConfig();
+    res.json({
+        success: true,
+        configured: Boolean(config.host && config.port && config.user && config.pass && config.fromEmail),
+        host: config.host || '',
+        port: config.port || 587,
+        secure: config.secure,
+        user: config.user ? config.user.replace(/^(.{2}).*(@.*)?$/, '$1***$2') : '',
+        fromEmail: config.fromEmail || '',
+        fromName: config.fromName || ''
+    });
+});
+
+app.post('/api/email/send', authenticateToken, async (req, res) => {
+    try {
+        const result = await sendSmtpEmail(req.body || {});
+        res.json({
+            success: true,
+            message: 'Email sent successfully.',
+            ...result
+        });
+    } catch (error) {
+        res.status(error.statusCode || 500).json({
+            success: false,
+            message: error.message || 'Email could not be sent.'
+        });
     }
 });
 

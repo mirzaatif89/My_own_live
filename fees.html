@@ -110,6 +110,34 @@
             color: var(--primary-color);
         }
 
+        .section-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .print-unpaid-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.55rem;
+            padding: 0.75rem 1.25rem;
+            border: none;
+            border-radius: 0.75rem;
+            cursor: pointer;
+            transition: var(--transition);
+            background: var(--primary-color);
+            color: white;
+            font-weight: 700;
+            font-size: 0.9rem;
+        }
+
+        .print-unpaid-btn:hover {
+            background: var(--primary-dark);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+        }
+
         .status-paid-badge {
             background: #dcfce7;
             color: #166534;
@@ -273,6 +301,93 @@
             box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.16);
         }
 
+        .bulk-fee-panel {
+            background: #fff;
+            border: 1px solid var(--border-color);
+            border-radius: 1rem;
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .bulk-fee-panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .bulk-fee-panel-header h2 {
+            margin: 0 0 0.25rem;
+            font-size: 1.15rem;
+        }
+
+        .bulk-fee-panel-header p {
+            margin: 0;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .bulk-fee-controls {
+            display: grid;
+            grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto;
+            gap: 0.85rem;
+            align-items: end;
+        }
+
+        .bulk-fee-field label {
+            display: block;
+            margin-bottom: 0.4rem;
+            color: var(--text-secondary);
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04rem;
+        }
+
+        .bulk-fee-field select {
+            width: 100%;
+            min-height: 44px;
+            border: 1px solid var(--border-color);
+            border-radius: 0.75rem;
+            padding: 0 0.85rem;
+            background: #fff;
+            color: var(--text-primary);
+            font-weight: 600;
+            outline: none;
+        }
+
+        .bulk-fee-field select:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+        }
+
+        .bulk-fee-summary {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px dashed var(--border-color);
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .bulk-fee-summary strong {
+            color: var(--text-primary);
+        }
+
+        @media (max-width: 900px) {
+            .bulk-fee-controls {
+                grid-template-columns: 1fr;
+            }
+
+            .bulk-fee-panel-header {
+                flex-direction: column;
+            }
+        }
+
         @keyframes slideIn {
             from {
                 opacity: 0;
@@ -397,6 +512,38 @@
 
             <!-- Grid View (Classes) -->
             <div id="feesGridView">
+                <section class="bulk-fee-panel">
+                    <div class="bulk-fee-panel-header">
+                        <div>
+                            <h2>Bulk Fee Status Print</h2>
+                            <p>Select a class and print paid, pending, or full fee status in one report.</p>
+                        </div>
+                    </div>
+                    <div class="bulk-fee-controls">
+                        <div class="bulk-fee-field">
+                            <label for="bulkFeeClassFilter">Class</label>
+                            <select id="bulkFeeClassFilter">
+                                <option value="all">All Classes</option>
+                            </select>
+                        </div>
+                        <div class="bulk-fee-field">
+                            <label for="bulkFeeStatusFilter">Status</label>
+                            <select id="bulkFeeStatusFilter">
+                                <option value="all">Full Status</option>
+                                <option value="pending">Pending Fees</option>
+                                <option value="paid">Paid Fees</option>
+                            </select>
+                        </div>
+                        <button class="print-unpaid-btn" type="button" onclick="printBulkFeeStatusReport()">
+                            <i data-lucide="printer" size="18"></i> Print Report
+                        </button>
+                    </div>
+                    <div class="bulk-fee-summary" id="bulkFeeSummary">
+                        <span>Students: <strong>0</strong></span>
+                        <span>Paid: <strong>PKR 0</strong></span>
+                        <span>Pending: <strong>PKR 0</strong></span>
+                    </div>
+                </section>
                 <div class="classes-grid" id="feesClassGrid">
                     <!-- Classes will be generated here -->
                 </div>
@@ -410,9 +557,14 @@
                         <p id="selectedClassSubtitle" style="color: var(--text-secondary); font-size: 0.9rem;">Select a
                             student to manage monthly fee records</p>
                     </div>
-                    <button class="back-btn" onclick="backToFeesList()">
-                        <i data-lucide="arrow-left" size="18"></i> Back to Classes
-                    </button>
+                    <div class="section-actions">
+                        <button class="print-unpaid-btn" onclick="printSelectedClassUnpaidFees()">
+                            <i data-lucide="printer" size="18"></i> Print Unpaid List
+                        </button>
+                        <button class="back-btn" onclick="backToFeesList()">
+                            <i data-lucide="arrow-left" size="18"></i> Back to Classes
+                        </button>
+                    </div>
                 </div>
 
                 <div class="table-container">
@@ -707,6 +859,7 @@
         document.addEventListener('DOMContentLoaded', async () => {
             await loadFeesStudents();
             renderFeesClassGrid();
+            initializeBulkFeeFilters();
 
             // Search implementation
             const searchInput = document.getElementById('feeSearchInput');
@@ -773,6 +926,415 @@
             return String(student?.feesStatus || '').trim().toLowerCase() === 'terminated';
         }
 
+        function escapeFeeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[char]));
+        }
+
+        function studentMatchesFeeClass(student, classId) {
+            if (classId === 'all' || classId === 'search_results') return true;
+            const cls = feeClasses.find(c => c.id === classId);
+            if (!cls) return false;
+            const studentClass = String(student?.classGrade || '').toLowerCase().trim();
+            return cls.keywords.some(k => studentClass === k || studentClass === `class ${k}`);
+        }
+
+        function getFeeClassLabel(classId) {
+            if (classId === 'all') return 'All Classes';
+            const cls = feeClasses.find(c => c.id === classId);
+            return cls ? cls.name : 'Selected Class';
+        }
+
+        function getApplicableFeeMonths(student) {
+            let admissionMonthIndex = 0;
+            let admissionYear = new Date().getFullYear();
+
+            if (student?.admissionDate) {
+                const admissionDate = new Date(student.admissionDate);
+                if (!Number.isNaN(admissionDate.getTime())) {
+                    admissionMonthIndex = admissionDate.getMonth();
+                    admissionYear = admissionDate.getFullYear();
+                }
+            }
+
+            const currentYear = new Date().getFullYear();
+            const currentMonthIndex = new Date().getMonth();
+            const applicableMonths = [];
+
+            for (let year = admissionYear; year <= currentYear; year++) {
+                const startMonth = year === admissionYear ? admissionMonthIndex : 0;
+                const endMonth = year === currentYear ? currentMonthIndex : 11;
+                for (let i = startMonth; i <= endMonth; i++) {
+                    applicableMonths.push(monthsList[i]);
+                }
+            }
+
+            return applicableMonths;
+        }
+
+        function getStudentPendingFeeDetails(student) {
+            if (isStudentTerminated(student)) {
+                return { pendingMonths: [], pendingAmount: 0, paidAmount: 0 };
+            }
+
+            const monthlyFees = JSON.parse(localStorage.getItem(STORAGE_KEY_MONTHLY_FEES)) || {};
+            const paymentDetails = JSON.parse(localStorage.getItem('eduCore_payment_details') || '{}');
+            const studentRecord = monthlyFees[student.id] || {};
+            const studentPayments = paymentDetails[student.id] || {};
+            const monthlyFee = parseInt(student?.monthlyFee || 0, 10) || 0;
+
+            const getPaidForMonth = (month) => {
+                const paid = Number(studentPayments[month]?.amount || 0);
+                if (paid > 0) return paid;
+                if (studentRecord[month] === 'Paid' && monthlyFee > 0) return monthlyFee;
+                return 0;
+            };
+
+            return getApplicableFeeMonths(student).reduce((summary, month) => {
+                const paidForMonth = getPaidForMonth(month);
+                summary.paidAmount += paidForMonth;
+
+                const dueForMonth = Math.max(monthlyFee - paidForMonth, 0);
+                if (dueForMonth > 0) {
+                    summary.pendingMonths.push({
+                        month,
+                        paidAmount: paidForMonth,
+                        dueAmount: dueForMonth
+                    });
+                    summary.pendingAmount += dueForMonth;
+                }
+
+                return summary;
+            }, { pendingMonths: [], pendingAmount: 0, paidAmount: 0 });
+        }
+
+        function getFeesStudentsForClass(classId, term = '') {
+            const students = (getData(STORAGE_KEY_STUDENTS) || []).filter((s) => !isStudentTerminated(s));
+            let filteredStudents = [];
+
+            if (classId === 'all' || classId === 'search_results') {
+                filteredStudents = students;
+            } else {
+                filteredStudents = students.filter(s => studentMatchesFeeClass(s, classId));
+            }
+
+            const normalizedTerm = String(term || '').toLowerCase().trim();
+            if (!normalizedTerm) return filteredStudents;
+
+            return filteredStudents.filter(s =>
+                (s.fullName || '').toLowerCase().includes(normalizedTerm) ||
+                (s.rollNo || '').toString().toLowerCase().includes(normalizedTerm) ||
+                (s.fatherName || '').toLowerCase().includes(normalizedTerm)
+            );
+        }
+
+        function getBulkFeeReportRows(classId, statusFilter) {
+            return getFeesStudentsForClass(classId).map((student) => {
+                const summary = getStudentFeeSummary(student);
+                const pendingDetails = getStudentPendingFeeDetails(student);
+                const isPaid = summary.pendingAmount <= 0 && summary.totalAmount > 0;
+                const status = isPaid ? 'Paid' : 'Pending';
+
+                return {
+                    student,
+                    summary,
+                    pendingDetails,
+                    status
+                };
+            }).filter((row) => {
+                if (statusFilter === 'paid') return row.status === 'Paid';
+                if (statusFilter === 'pending') return row.status === 'Pending';
+                return true;
+            });
+        }
+
+        function initializeBulkFeeFilters() {
+            const classSelect = document.getElementById('bulkFeeClassFilter');
+            const statusSelect = document.getElementById('bulkFeeStatusFilter');
+            if (!classSelect || !statusSelect) return;
+
+            classSelect.innerHTML = '<option value="all">All Classes</option>' + feeClasses.map((cls) => (
+                `<option value="${escapeFeeHtml(cls.id)}">${escapeFeeHtml(cls.name)}</option>`
+            )).join('');
+
+            classSelect.addEventListener('change', updateBulkFeeSummary);
+            statusSelect.addEventListener('change', updateBulkFeeSummary);
+            updateBulkFeeSummary();
+        }
+
+        function updateBulkFeeSummary() {
+            const summaryEl = document.getElementById('bulkFeeSummary');
+            const classId = document.getElementById('bulkFeeClassFilter')?.value || 'all';
+            const statusFilter = document.getElementById('bulkFeeStatusFilter')?.value || 'all';
+            if (!summaryEl) return;
+
+            const rows = getBulkFeeReportRows(classId, statusFilter);
+            const paidTotal = rows.reduce((sum, row) => sum + row.summary.paidAmount, 0);
+            const pendingTotal = rows.reduce((sum, row) => sum + row.summary.pendingAmount, 0);
+            const paidStudents = rows.filter((row) => row.status === 'Paid').length;
+            const pendingStudents = rows.filter((row) => row.status === 'Pending').length;
+
+            summaryEl.innerHTML = `
+                <span>Selected: <strong>${escapeFeeHtml(getFeeClassLabel(classId))}</strong></span>
+                <span>Students: <strong>${rows.length}</strong></span>
+                <span>Paid Students: <strong>${paidStudents}</strong></span>
+                <span>Pending Students: <strong>${pendingStudents}</strong></span>
+                <span>Paid: <strong>PKR ${paidTotal.toLocaleString('en-PK')}</strong></span>
+                <span>Pending: <strong>PKR ${pendingTotal.toLocaleString('en-PK')}</strong></span>
+            `;
+        }
+
+        function printBulkFeeStatusReport() {
+            const classId = document.getElementById('bulkFeeClassFilter')?.value || 'all';
+            const statusFilter = document.getElementById('bulkFeeStatusFilter')?.value || 'all';
+            const classLabel = getFeeClassLabel(classId);
+            const statusLabel = statusFilter === 'paid' ? 'Paid Fees' : statusFilter === 'pending' ? 'Pending Fees' : 'Full Fee Status';
+            const reportDate = new Date().toLocaleDateString('en-GB');
+            const rows = getBulkFeeReportRows(classId, statusFilter);
+
+            if (!rows.length) {
+                alert('No fee records found for the selected class and status.');
+                return;
+            }
+
+            const paidTotal = rows.reduce((sum, row) => sum + row.summary.paidAmount, 0);
+            const pendingTotal = rows.reduce((sum, row) => sum + row.summary.pendingAmount, 0);
+            const monthlyTotal = rows.reduce((sum, row) => sum + (parseInt(row.student.monthlyFee || 0, 10) || 0), 0);
+
+            const rowsHtml = rows.map((row, index) => {
+                const { student, summary, pendingDetails, status } = row;
+                const pendingMonths = pendingDetails.pendingMonths.map((item) => {
+                    const partial = item.paidAmount > 0 ? `Paid PKR ${item.paidAmount.toLocaleString('en-PK')}, Due PKR ${item.dueAmount.toLocaleString('en-PK')}` : `Due PKR ${item.dueAmount.toLocaleString('en-PK')}`;
+                    return `${item.month} (${partial})`;
+                }).join(', ');
+                const statusClass = status === 'Paid' ? 'paid' : 'pending';
+
+                return `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${escapeFeeHtml(student.rollNo || '-')}</td>
+                        <td>${escapeFeeHtml(student.fullName || student.studentName || '-')}</td>
+                        <td>${escapeFeeHtml(student.fatherName || '-')}</td>
+                        <td>${escapeFeeHtml(student.classGrade || '-')}</td>
+                        <td>PKR ${(parseInt(student.monthlyFee || 0, 10) || 0).toLocaleString('en-PK')}</td>
+                        <td><span class="status ${statusClass}">${status}</span></td>
+                        <td>${summary.paidCount}</td>
+                        <td>${summary.pendingCount}</td>
+                        <td>PKR ${summary.paidAmount.toLocaleString('en-PK')}</td>
+                        <td>PKR ${summary.pendingAmount.toLocaleString('en-PK')}</td>
+                        <td>${escapeFeeHtml(pendingMonths || '-')}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            const printWindow = window.open('', '_blank', 'width=1200,height=800');
+            if (!printWindow) {
+                alert('Please allow popups to print the fee status report.');
+                return;
+            }
+
+            printWindow.document.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>${escapeFeeHtml(statusLabel)} - ${escapeFeeHtml(classLabel)}</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; color: #111827; margin: 24px; }
+                        .report-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; border-bottom: 2px solid #111827; padding-bottom: 14px; margin-bottom: 18px; }
+                        h1 { margin: 0 0 6px; font-size: 24px; }
+                        .meta { color: #4b5563; font-size: 13px; line-height: 1.5; }
+                        .summary { display: grid; grid-template-columns: repeat(4, minmax(130px, 1fr)); gap: 10px; margin: 0 0 18px; }
+                        .summary div { border: 1px solid #d1d5db; padding: 9px; background: #f9fafb; }
+                        .summary span { display: block; color: #6b7280; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04rem; }
+                        .summary strong { display: block; margin-top: 3px; font-size: 15px; }
+                        table { width: 100%; border-collapse: collapse; font-size: 11px; }
+                        th, td { border: 1px solid #d1d5db; padding: 6px; text-align: left; vertical-align: top; }
+                        th { background: #f3f4f6; font-weight: 700; }
+                        tfoot td { font-weight: 700; background: #f9fafb; }
+                        .status { display: inline-block; padding: 2px 7px; border-radius: 999px; font-weight: 700; font-size: 10px; }
+                        .status.paid { background: #dcfce7; color: #166534; }
+                        .status.pending { background: #fee2e2; color: #991b1b; }
+                        @media print {
+                            @page { size: A4 landscape; margin: 8mm; }
+                            body { margin: 0; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="report-header">
+                        <div>
+                            <h1>${escapeFeeHtml(statusLabel)}</h1>
+                            <div class="meta">Class: ${escapeFeeHtml(classLabel)}</div>
+                        </div>
+                        <div class="meta">
+                            Apexiums School System<br>
+                            Printed: ${escapeFeeHtml(reportDate)}
+                        </div>
+                    </div>
+                    <div class="summary">
+                        <div><span>Total Students</span><strong>${rows.length}</strong></div>
+                        <div><span>Monthly Fee Total</span><strong>PKR ${monthlyTotal.toLocaleString('en-PK')}</strong></div>
+                        <div><span>Paid Amount</span><strong>PKR ${paidTotal.toLocaleString('en-PK')}</strong></div>
+                        <div><span>Pending Amount</span><strong>PKR ${pendingTotal.toLocaleString('en-PK')}</strong></div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Roll No</th>
+                                <th>Student Name</th>
+                                <th>Father Name</th>
+                                <th>Class</th>
+                                <th>Monthly Fee</th>
+                                <th>Status</th>
+                                <th>Paid Months</th>
+                                <th>Pending Months</th>
+                                <th>Paid Amount</th>
+                                <th>Pending Amount</th>
+                                <th>Pending Detail</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rowsHtml}</tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="9">Totals</td>
+                                <td>PKR ${paidTotal.toLocaleString('en-PK')}</td>
+                                <td>PKR ${pendingTotal.toLocaleString('en-PK')}</td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                    <script>
+                        window.onload = function() {
+                            window.print();
+                        };
+                    <\/script>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+        }
+
+        function printSelectedClassUnpaidFees() {
+            const tableView = document.getElementById('feesTableView');
+            const classId = tableView.dataset.classId || 'all';
+            const term = classId === 'search_results' ? document.getElementById('feeSearchInput').value : '';
+            const classTitle = document.getElementById('selectedClassTitle').innerText || 'Students';
+            const reportDate = new Date().toLocaleDateString('en-GB');
+
+            const unpaidStudents = getFeesStudentsForClass(classId, term)
+                .map((student) => ({
+                    student,
+                    details: getStudentPendingFeeDetails(student)
+                }))
+                .filter((row) => row.details.pendingAmount > 0);
+
+            if (!unpaidStudents.length) {
+                alert('No unpaid fee records found for this class.');
+                return;
+            }
+
+            const rowsHtml = unpaidStudents.map(({ student, details }, index) => {
+                const pendingMonths = details.pendingMonths.map((item) => {
+                    const partial = item.paidAmount > 0 ? ` (Paid PKR ${item.paidAmount.toLocaleString('en-PK')}, Due PKR ${item.dueAmount.toLocaleString('en-PK')})` : '';
+                    return `${item.month}${partial}`;
+                }).join(', ');
+
+                return `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${escapeFeeHtml(student.rollNo || '-')}</td>
+                        <td>${escapeFeeHtml(student.fullName || student.studentName || '-')}</td>
+                        <td>${escapeFeeHtml(student.fatherName || '-')}</td>
+                        <td>${escapeFeeHtml(student.classGrade || '-')}</td>
+                        <td>PKR ${(parseInt(student.monthlyFee || 0, 10) || 0).toLocaleString('en-PK')}</td>
+                        <td>${escapeFeeHtml(pendingMonths || '-')}</td>
+                        <td>PKR ${details.pendingAmount.toLocaleString('en-PK')}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            const totalPending = unpaidStudents.reduce((sum, row) => sum + row.details.pendingAmount, 0);
+            const printWindow = window.open('', '_blank', 'width=1100,height=750');
+            if (!printWindow) {
+                alert('Please allow popups to print the unpaid fee list.');
+                return;
+            }
+
+            printWindow.document.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Unpaid Fees - ${escapeFeeHtml(classTitle)}</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; color: #111827; margin: 24px; }
+                        .report-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; border-bottom: 2px solid #111827; padding-bottom: 14px; margin-bottom: 18px; }
+                        h1 { margin: 0 0 6px; font-size: 24px; }
+                        .meta { color: #4b5563; font-size: 13px; line-height: 1.5; }
+                        .summary { display: flex; gap: 18px; margin: 0 0 18px; font-size: 14px; }
+                        .summary strong { font-size: 16px; }
+                        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+                        th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; vertical-align: top; }
+                        th { background: #f3f4f6; font-weight: 700; }
+                        tfoot td { font-weight: 700; background: #f9fafb; }
+                        @media print {
+                            body { margin: 12mm; }
+                            button { display: none; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="report-header">
+                        <div>
+                            <h1>Unpaid Fee List</h1>
+                            <div class="meta">${escapeFeeHtml(classTitle)}${term ? ` | Search: ${escapeFeeHtml(term)}` : ''}</div>
+                        </div>
+                        <div class="meta">
+                            Apexiums School System<br>
+                            Printed: ${escapeFeeHtml(reportDate)}
+                        </div>
+                    </div>
+                    <div class="summary">
+                        <div>Total Students: <strong>${unpaidStudents.length}</strong></div>
+                        <div>Total Pending: <strong>PKR ${totalPending.toLocaleString('en-PK')}</strong></div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Roll No</th>
+                                <th>Student Name</th>
+                                <th>Father Name</th>
+                                <th>Class</th>
+                                <th>Monthly Fee</th>
+                                <th>Unpaid / Pending Months</th>
+                                <th>Pending Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rowsHtml}</tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="7">Total Pending Amount</td>
+                                <td>PKR ${totalPending.toLocaleString('en-PK')}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                    <script>
+                        window.onload = function() {
+                            window.print();
+                        };
+                    <\/script>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+        }
+
         function renderFeesClassGrid() {
             const grid = document.getElementById('feesClassGrid');
             const students = (getData(STORAGE_KEY_STUDENTS) || []).filter((s) => !isStudentTerminated(s));
@@ -797,10 +1359,7 @@
             grid.appendChild(allCard);
 
             feeClasses.forEach(cls => {
-                const classStudents = students.filter(s => {
-                    const sClass = (s.classGrade || '').toLowerCase().trim();
-                    return cls.keywords.some(k => sClass === k || sClass === `class ${k}`);
-                });
+                const classStudents = students.filter(s => studentMatchesFeeClass(s, cls.id));
 
                 const card = document.createElement('div');
                 card.className = 'fee-card';
@@ -813,6 +1372,7 @@
                 grid.appendChild(card);
             });
 
+            updateBulkFeeSummary();
             if (window.lucide) lucide.createIcons();
         }
 
@@ -836,27 +1396,7 @@
         function renderClassStudentList(classId, term = '') {
             const tbody = document.getElementById('studentListTableBody');
             const noData = document.getElementById('noFeeData');
-            const students = (getData(STORAGE_KEY_STUDENTS) || []).filter((s) => !isStudentTerminated(s));
-
-            let filteredStudents = [];
-
-            if (classId === 'all') {
-                filteredStudents = students;
-            } else {
-                const cls = feeClasses.find(c => c.id === classId);
-                filteredStudents = students.filter(s => {
-                    const sClass = (s.classGrade || '').toLowerCase().trim();
-                    return cls.keywords.some(k => sClass === k || sClass === `class ${k}`);
-                });
-            }
-
-            if (term) {
-                filteredStudents = filteredStudents.filter(s =>
-                    (s.fullName || '').toLowerCase().includes(term) ||
-                    (s.rollNo || '').toString().toLowerCase().includes(term) ||
-                    (s.fatherName || '').toLowerCase().includes(term)
-                );
-            }
+            const filteredStudents = getFeesStudentsForClass(classId, term);
 
             tbody.innerHTML = '';
 

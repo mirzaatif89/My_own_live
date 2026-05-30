@@ -244,6 +244,21 @@
                         </div>
 
                         <div class="notice-field">
+                            <label for="noticePrintDate">Notice Date</label>
+                            <input type="date" id="noticePrintDate">
+                        </div>
+
+                        <label class="target-option">
+                            <input type="checkbox" id="noticeShowSignature" checked>
+                            Show signature line
+                        </label>
+
+                        <div class="notice-field" id="noticeSignatureField">
+                            <label for="noticeSignatureLabel">Signature Label</label>
+                            <input type="text" id="noticeSignatureLabel" value="Authorized Signature" placeholder="Authorized Signature">
+                        </div>
+
+                        <div class="notice-field">
                             <label for="noticeMessage">Notice Message</label>
                             <textarea id="noticeMessage" placeholder="Write the official school notice here..." required></textarea>
                         </div>
@@ -270,7 +285,7 @@
                         <div class="notice-preview-header">
                             <img class="notice-logo" src="images/logo.jpeg" alt="School logo">
                             <div>
-                                <h2>My own Science school</h2>
+                                <h2>Apexiums School</h2>
                                 <p>Official Special Notice</p>
                             </div>
                         </div>
@@ -278,7 +293,7 @@
                         <div class="notice-preview-message" id="previewMessage">Write a notice to preview the printable format.</div>
                         <div class="notice-preview-footer">
                             <span id="previewDate">Date: -</span>
-                            <span>Authorized Signature: __________</span>
+                            <span id="previewSignature">Authorized Signature: __________</span>
                         </div>
                     </div>
                 </div>
@@ -316,12 +331,34 @@
             return Array.from(document.querySelectorAll('input[name="targetPortal"]:checked')).map((input) => input.value);
         }
 
+        function getTodayDateInputValue() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        function formatNoticeDate(value) {
+            const raw = String(value || '').trim();
+            if (!raw) return new Date().toLocaleDateString('en-GB');
+            const parsed = new Date(`${raw}T00:00:00`);
+            return Number.isNaN(parsed.getTime()) ? raw : parsed.toLocaleDateString('en-GB');
+        }
+
         function getNoticeDraft() {
+            const noticeDate = document.getElementById('noticePrintDate').value || getTodayDateInputValue();
+            const showSignature = document.getElementById('noticeShowSignature').checked;
+            const signatureLabel = document.getElementById('noticeSignatureLabel').value.trim() || 'Authorized Signature';
             return {
                 id: document.getElementById('noticeId').value || `NOTICE-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                 title: document.getElementById('noticeTitle').value.trim(),
                 message: document.getElementById('noticeMessage').value.trim(),
                 targetPortals: getSelectedNoticeTargets(),
+                noticeDate,
+                noticeDateLabel: formatNoticeDate(noticeDate),
+                showSignature,
+                signatureLabel,
                 createdAtLabel: new Date().toLocaleString('en-GB')
             };
         }
@@ -329,9 +366,15 @@
         function updateNoticePreview() {
             const title = document.getElementById('noticeTitle').value.trim() || 'Notice Title';
             const message = document.getElementById('noticeMessage').value.trim() || 'Write a notice to preview the printable format.';
+            const noticeDate = document.getElementById('noticePrintDate').value || getTodayDateInputValue();
+            const showSignature = document.getElementById('noticeShowSignature').checked;
+            const signatureLabel = document.getElementById('noticeSignatureLabel').value.trim() || 'Authorized Signature';
             document.getElementById('previewTitle').textContent = title;
             document.getElementById('previewMessage').textContent = message;
-            document.getElementById('previewDate').textContent = `Date: ${new Date().toLocaleDateString('en-GB')}`;
+            document.getElementById('previewDate').textContent = `Date: ${formatNoticeDate(noticeDate)}`;
+            document.getElementById('previewSignature').textContent = showSignature ? `${signatureLabel}: __________` : '';
+            document.getElementById('previewSignature').style.display = showSignature ? 'inline' : 'none';
+            document.getElementById('noticeSignatureField').style.display = showSignature ? 'block' : 'none';
         }
 
         function validateNotice(draft, requireTargets = false) {
@@ -349,6 +392,9 @@
         function printCurrentNotice() {
             const draft = getNoticeDraft();
             if (!validateNotice(draft, false)) return;
+            const signatureHtml = draft.showSignature
+                ? `<span>${escapeHtml(draft.signatureLabel)}: __________</span>`
+                : '';
 
             const printWindow = window.open('', '_blank', 'width=900,height=700');
             printWindow.document.write(`
@@ -371,11 +417,11 @@
                     <div class="sheet">
                         <div class="head">
                             <img class="logo" src="images/logo.jpeg" alt="School logo">
-                            <div><h1>My own Science school</h1><div>Official Special Notice</div></div>
+                            <div><h1>Apexiums School</h1><div>Official Special Notice</div></div>
                         </div>
                         <h2>${escapeHtml(draft.title)}</h2>
                         <div class="message">${escapeHtml(draft.message)}</div>
-                        <div class="foot"><span>Date: ${new Date().toLocaleDateString('en-GB')}</span><span>Authorized Signature: __________</span></div>
+                        <div class="foot"><span>Date: ${escapeHtml(draft.noticeDateLabel)}</span>${signatureHtml}</div>
                     </div>
                     <script>window.onload = () => { window.print(); window.close(); };<\/script>
                 </body>
@@ -450,6 +496,9 @@
             document.getElementById('noticeId').value = notice.id;
             document.getElementById('noticeTitle').value = notice.title || '';
             document.getElementById('noticeMessage').value = notice.message || '';
+            document.getElementById('noticePrintDate').value = notice.noticeDate || getTodayDateInputValue();
+            document.getElementById('noticeShowSignature').checked = notice.showSignature !== false;
+            document.getElementById('noticeSignatureLabel').value = notice.signatureLabel || 'Authorized Signature';
             document.querySelectorAll('input[name="targetPortal"]').forEach((input) => {
                 input.checked = (notice.targetPortals || []).includes(input.value);
             });
@@ -491,12 +540,19 @@
         function resetNoticeForm() {
             document.getElementById('specialNoticeForm').reset();
             document.getElementById('noticeId').value = '';
+            document.getElementById('noticePrintDate').value = getTodayDateInputValue();
+            document.getElementById('noticeShowSignature').checked = true;
+            document.getElementById('noticeSignatureLabel').value = 'Authorized Signature';
             updateNoticePreview();
         }
 
         document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('noticeTitle').addEventListener('input', updateNoticePreview);
             document.getElementById('noticeMessage').addEventListener('input', updateNoticePreview);
+            document.getElementById('noticePrintDate').value = getTodayDateInputValue();
+            document.getElementById('noticePrintDate').addEventListener('change', updateNoticePreview);
+            document.getElementById('noticeShowSignature').addEventListener('change', updateNoticePreview);
+            document.getElementById('noticeSignatureLabel').addEventListener('input', updateNoticePreview);
             updateNoticePreview();
             loadSpecialNotices();
         });

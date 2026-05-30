@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Exam Result - My own Science school</title>
+    <title>Exam Result - Apexiums School</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -154,7 +154,7 @@
                             <div class="result-form-section">
                                 <h4>Date Sheet Header</h4>
                                 <div class="result-form-fields">
-                                    <label>School Name<input type="text" id="dateSheetSchoolName" value="My own Science school" placeholder="Enter school name"></label>
+                                    <label>School Name<input type="text" id="dateSheetSchoolName" value="Apexiums School" placeholder="Enter school name"></label>
                                     <label>Exam Title<input type="text" id="dateSheetExamTitle" placeholder="Enter exam title"></label>
                                     <label>Session<input type="text" id="dateSheetSession" placeholder="Enter session"></label>
                                     <label>Target Class / Group<input type="text" id="dateSheetClassGroup" placeholder="Enter class / group"></label>
@@ -196,7 +196,7 @@
                                     <div class="date-sheet-header-top">
                                         <img class="date-sheet-logo" src="images/logo.jpeg" alt="School logo">
                                         <div>
-                                            <h2 id="previewDateSheetSchoolName">My own Science school</h2>
+                                            <h2 id="previewDateSheetSchoolName">Apexiums School</h2>
                                             <p id="previewDateSheetCampus"></p>
                                         </div>
                                         <img class="date-sheet-logo" src="images/logo.jpeg" alt="School logo">
@@ -259,7 +259,7 @@
                         <div class="result-form-section">
                             <h4>School Header</h4>
                             <div class="result-form-fields">
-                                <label>School Name<input type="text" id="schoolName" value="My own Science school" placeholder="Enter school name"></label>
+                                <label>School Name<input type="text" id="schoolName" value="Apexiums School" placeholder="Enter school name"></label>
                                 <label>Campus / Branch<input type="text" id="campusName" placeholder="Enter campus / branch"></label>
                                 <label>Contact Line<input type="text" id="schoolContact" placeholder="Enter contact line"></label>
                                 <label>Term Title<input type="text" id="termTitle" placeholder="Enter term title"></label>
@@ -268,7 +268,7 @@
                                     <i data-lucide="shield-check" size="18"></i>
                                     <div>
                                         <strong>Fixed Result Card Logo</strong>
-                                        <span>Your logo at images/logo.jpeg will print on every result card.</span>
+                                        <span>The Apexiums logo at images/logo.jpeg will print on every result card.</span>
                                     </div>
                                 </div>
                             </div>
@@ -337,11 +337,11 @@
 
                     <div class="result-card-sheet" id="resultCardSheet">
                         <div class="result-card-frame">
-                            <div class="result-card-watermark">MY OWN</div>
+                            <div class="result-card-watermark">APEXIUMS</div>
                             <div class="result-card-topbar">
                                 <div class="result-logo-box"><img id="previewLeftLogo" alt="Left school logo"></div>
                                 <div class="result-school-center">
-                                    <h2 id="previewSchoolName">My own Science school</h2>
+                                    <h2 id="previewSchoolName">Apexiums School</h2>
                                     <p id="previewCampusName"></p>
                                     <p id="previewSchoolContact"></p>
                                 </div>
@@ -1200,11 +1200,12 @@
         @media print {
             @page {
                 size: A4 portrait;
-                margin: 4mm;
+                margin: 0;
             }
 
             body {
                 background: #fff;
+                margin: 0 !important;
             }
 
             .sidebar,
@@ -1260,7 +1261,7 @@
             body.print-schedule .date-sheet-frame,
             body.print-result .result-card-frame {
                 box-shadow: none;
-                margin: 0 auto;
+                margin: 0 auto !important;
             }
 
             body.print-result .result-card-sheet {
@@ -1269,38 +1270,45 @@
                 background: #fff !important;
                 border-radius: 0 !important;
                 padding: 0 !important;
+                min-height: 297mm !important;
+                break-inside: avoid-page !important;
+                page-break-inside: avoid !important;
             }
 
             body.print-result .result-card-frame {
-                width: 202mm !important;
-                max-width: 202mm !important;
-                min-height: 289mm !important;
-                padding: 5mm 5mm 4mm !important;
+                width: 210mm !important;
+                max-width: 210mm !important;
+                min-height: 297mm !important;
+                height: 297mm !important;
+                padding: 8mm 7mm 6mm !important;
                 border: 1px solid #363636 !important;
                 box-sizing: border-box !important;
+                display: flex !important;
+                flex-direction: column !important;
                 break-inside: avoid-page !important;
                 page-break-inside: avoid !important;
                 page-break-after: avoid !important;
+                overflow: hidden !important;
             }
 
             body.print-result .result-card-watermark {
-                font-size: 40px !important;
-                letter-spacing: 5px !important;
+                font-size: 54px !important;
+                letter-spacing: 7px !important;
             }
 
             body.print-result .result-card-topbar {
-                grid-template-columns: 48px 1fr !important;
-                gap: 6px !important;
-                padding: 4px 6px !important;
+                grid-template-columns: 56px 1fr !important;
+                gap: 8px !important;
+                padding: 7px 9px !important;
             }
 
             body.print-result .result-logo-box {
-                height: 38px !important;
-                font-size: 9px !important;
+                height: 48px !important;
+                font-size: 10px !important;
             }
 
             body.print-result .result-school-center h2 {
-                font-size: 14px !important;
+                font-size: 17px !important;
             }
 
             body.print-result .result-school-center p,
@@ -1316,31 +1324,31 @@
             body.print-result .position-value,
             body.print-result .signature-line span,
             body.print-result .signature-line strong {
-                font-size: 10px !important;
-                line-height: 1.15 !important;
+                font-size: 11px !important;
+                line-height: 1.2 !important;
             }
 
             body.print-result .result-term-title {
-                margin: 6px auto 5px !important;
-                font-size: 12px !important;
+                margin: 8px auto 7px !important;
+                font-size: 14px !important;
             }
 
             body.print-result .student-meta-row {
                 gap: 8px !important;
-                margin-bottom: 4px !important;
+                margin-bottom: 6px !important;
             }
 
             body.print-result .meta-field,
             body.print-result .remarks-block,
             body.print-result .signature-block {
-                min-height: 18px !important;
-                padding-bottom: 1px !important;
+                min-height: 22px !important;
+                padding-bottom: 2px !important;
             }
 
             body.print-result .grade-chip {
-                width: 120px !important;
-                padding: 2px 6px !important;
-                font-size: 10px !important;
+                width: 145px !important;
+                padding: 4px 8px !important;
+                font-size: 11px !important;
             }
 
             body.print-result .result-marks-table td,
@@ -1348,52 +1356,239 @@
             body.print-result .behavior-table td,
             body.print-result .behavior-table th,
             body.print-result .grading-table td {
-                padding: 2px 3px !important;
+                padding: 4px 5px !important;
             }
 
             body.print-result .position-row {
-                margin-top: 4px !important;
+                margin-top: 8px !important;
             }
 
             body.print-result .position-label,
             body.print-result .position-value {
-                min-height: 24px !important;
-                padding: 2px 6px !important;
+                min-height: 34px !important;
+                padding: 5px 8px !important;
             }
 
             body.print-result .remarks-signatures {
-                gap: 8px !important;
-                margin: 6px 0 4px !important;
+                gap: 12px !important;
+                margin: 12px 0 10px !important;
             }
 
             body.print-result .performance-title {
-                font-size: 12px !important;
-                margin: 5px 0 4px !important;
+                font-size: 14px !important;
+                margin: 10px 0 8px !important;
             }
 
             body.print-result .performance-grid {
-                gap: 6px !important;
+                gap: 8px !important;
             }
 
             body.print-result .bottom-signatures {
                 gap: 12px !important;
-                margin-top: 4px !important;
+                margin-top: auto !important;
+                padding-top: 14mm !important;
                 page-break-inside: avoid !important;
             }
 
             body.print-result .signature-line {
-                padding-top: 4px !important;
+                padding-top: 10px !important;
                 break-inside: avoid !important;
                 page-break-inside: avoid !important;
             }
 
             body.print-result .signature-line strong {
-                padding-top: 2px !important;
-                margin-bottom: 1px !important;
+                padding-top: 4px !important;
+                margin-bottom: 2px !important;
             }
 
             body.print-result .signature-line span {
+                font-size: 10px !important;
+            }
+
+            body.print-result .result-card-sheet + .result-card-sheet {
+                break-before: page !important;
+                page-break-before: always !important;
+            }
+
+            body.print-result.result-print-compact .result-card-frame {
+                padding: 7mm 6mm 5mm !important;
+            }
+
+            body.print-result.result-print-compact .result-school-center h2 {
+                font-size: 16px !important;
+            }
+
+            body.print-result.result-print-compact .result-school-center p,
+            body.print-result.result-print-compact .result-marks-table th,
+            body.print-result.result-print-compact .result-marks-table td,
+            body.print-result.result-print-compact .behavior-table th,
+            body.print-result.result-print-compact .behavior-table td,
+            body.print-result.result-print-compact .grading-table td,
+            body.print-result.result-print-compact .meta-field,
+            body.print-result.result-print-compact .remarks-block,
+            body.print-result.result-print-compact .signature-block,
+            body.print-result.result-print-compact .position-label,
+            body.print-result.result-print-compact .position-value,
+            body.print-result.result-print-compact .signature-line span,
+            body.print-result.result-print-compact .signature-line strong {
+                font-size: 10px !important;
+                line-height: 1.12 !important;
+            }
+
+            body.print-result.result-print-compact .result-marks-table td,
+            body.print-result.result-print-compact .result-marks-table th,
+            body.print-result.result-print-compact .behavior-table td,
+            body.print-result.result-print-compact .behavior-table th,
+            body.print-result.result-print-compact .grading-table td {
+                padding: 2.5px 4px !important;
+            }
+
+            body.print-result.result-print-compact .bottom-signatures {
+                padding-top: 8mm !important;
+            }
+
+            body.print-result.result-print-dense .result-card-frame,
+            body.print-result.result-print-ultra .result-card-frame {
+                padding: 5mm 5mm 4mm !important;
+            }
+
+            body.print-result.result-print-dense .result-card-topbar,
+            body.print-result.result-print-ultra .result-card-topbar {
+                grid-template-columns: 48px 1fr !important;
+                gap: 6px !important;
+                padding: 5px 7px !important;
+            }
+
+            body.print-result.result-print-dense .result-logo-box,
+            body.print-result.result-print-ultra .result-logo-box {
+                height: 40px !important;
+            }
+
+            body.print-result.result-print-dense .result-school-center h2,
+            body.print-result.result-print-ultra .result-school-center h2 {
+                font-size: 14px !important;
+            }
+
+            body.print-result.result-print-dense .result-school-center p,
+            body.print-result.result-print-dense .result-marks-table th,
+            body.print-result.result-print-dense .result-marks-table td,
+            body.print-result.result-print-dense .behavior-table th,
+            body.print-result.result-print-dense .behavior-table td,
+            body.print-result.result-print-dense .grading-table td,
+            body.print-result.result-print-dense .meta-field,
+            body.print-result.result-print-dense .remarks-block,
+            body.print-result.result-print-dense .signature-block,
+            body.print-result.result-print-dense .position-label,
+            body.print-result.result-print-dense .position-value,
+            body.print-result.result-print-dense .signature-line span,
+            body.print-result.result-print-dense .signature-line strong,
+            body.print-result.result-print-ultra .result-school-center p,
+            body.print-result.result-print-ultra .result-marks-table th,
+            body.print-result.result-print-ultra .result-marks-table td,
+            body.print-result.result-print-ultra .behavior-table th,
+            body.print-result.result-print-ultra .behavior-table td,
+            body.print-result.result-print-ultra .grading-table td,
+            body.print-result.result-print-ultra .meta-field,
+            body.print-result.result-print-ultra .remarks-block,
+            body.print-result.result-print-ultra .signature-block,
+            body.print-result.result-print-ultra .position-label,
+            body.print-result.result-print-ultra .position-value,
+            body.print-result.result-print-ultra .signature-line span,
+            body.print-result.result-print-ultra .signature-line strong {
                 font-size: 9px !important;
+                line-height: 1.05 !important;
+            }
+
+            body.print-result.result-print-dense .result-term-title,
+            body.print-result.result-print-ultra .result-term-title {
+                margin: 5px auto 4px !important;
+                font-size: 12px !important;
+            }
+
+            body.print-result.result-print-dense .meta-field,
+            body.print-result.result-print-dense .remarks-block,
+            body.print-result.result-print-dense .signature-block,
+            body.print-result.result-print-ultra .meta-field,
+            body.print-result.result-print-ultra .remarks-block,
+            body.print-result.result-print-ultra .signature-block {
+                min-height: 16px !important;
+                padding-bottom: 1px !important;
+            }
+
+            body.print-result.result-print-dense .grade-chip,
+            body.print-result.result-print-ultra .grade-chip {
+                width: 115px !important;
+                padding: 2px 6px !important;
+                font-size: 9px !important;
+            }
+
+            body.print-result.result-print-dense .result-marks-table td,
+            body.print-result.result-print-dense .result-marks-table th,
+            body.print-result.result-print-dense .behavior-table td,
+            body.print-result.result-print-dense .behavior-table th,
+            body.print-result.result-print-dense .grading-table td,
+            body.print-result.result-print-ultra .result-marks-table td,
+            body.print-result.result-print-ultra .result-marks-table th,
+            body.print-result.result-print-ultra .behavior-table td,
+            body.print-result.result-print-ultra .behavior-table th,
+            body.print-result.result-print-ultra .grading-table td {
+                padding: 1.5px 3px !important;
+            }
+
+            body.print-result.result-print-dense .position-row,
+            body.print-result.result-print-ultra .position-row {
+                margin-top: 4px !important;
+            }
+
+            body.print-result.result-print-dense .position-label,
+            body.print-result.result-print-dense .position-value,
+            body.print-result.result-print-ultra .position-label,
+            body.print-result.result-print-ultra .position-value {
+                min-height: 22px !important;
+                padding: 2px 6px !important;
+            }
+
+            body.print-result.result-print-dense .remarks-signatures,
+            body.print-result.result-print-ultra .remarks-signatures {
+                gap: 8px !important;
+                margin: 6px 0 4px !important;
+            }
+
+            body.print-result.result-print-dense .performance-title,
+            body.print-result.result-print-ultra .performance-title {
+                font-size: 11px !important;
+                margin: 5px 0 4px !important;
+            }
+
+            body.print-result.result-print-dense .performance-grid,
+            body.print-result.result-print-ultra .performance-grid {
+                gap: 5px !important;
+            }
+
+            body.print-result.result-print-dense .bottom-signatures,
+            body.print-result.result-print-ultra .bottom-signatures {
+                padding-top: 3mm !important;
+            }
+
+            body.print-result.result-print-ultra .result-card-frame {
+                padding: 4mm !important;
+            }
+
+            body.print-result.result-print-ultra .result-card-topbar {
+                grid-template-columns: 42px 1fr !important;
+                padding: 4px 6px !important;
+            }
+
+            body.print-result.result-print-ultra .result-logo-box {
+                height: 34px !important;
+            }
+
+            body.print-result.result-print-ultra .result-marks-table td,
+            body.print-result.result-print-ultra .result-marks-table th,
+            body.print-result.result-print-ultra .behavior-table td,
+            body.print-result.result-print-ultra .behavior-table th,
+            body.print-result.result-print-ultra .grading-table td {
+                padding: 1px 2px !important;
             }
 
             body.print-schedule .date-sheet-frame {
@@ -1438,14 +1633,14 @@
         const STATIC_RESULT_LOGO = 'images/logo.jpeg';
 
         function isLegacyDemoDateSheetState(saved = {}) {
-            return saved.dateSheetSchoolName === 'My own Science school' &&
+            return (saved.dateSheetSchoolName === 'My own Science school' || saved.dateSheetSchoolName === 'Apexiums School') &&
                 saved.dateSheetExamTitle === 'Mid Term Examination 2026' &&
                 saved.dateSheetSession === '2025-26' &&
                 saved.dateSheetClassGroup === 'Grade 5 / Section A';
         }
 
         function isLegacyDemoResultState(saved = {}) {
-            return saved.schoolName === 'My own Science school' &&
+            return (saved.schoolName === 'My own Science school' || saved.schoolName === 'Apexiums School') &&
                 saved.studentName === 'Muhammad Ali' &&
                 saved.fatherName === 'Ahmed Ali' &&
                 saved.termTitle === '3rd Term 2025-26';
@@ -1581,7 +1776,7 @@
 
         function refreshDateSheetPreview() {
             const rows = readScheduleRows();
-            document.getElementById('previewDateSheetSchoolName').textContent = document.getElementById('dateSheetSchoolName').value || 'My own Science school';
+            document.getElementById('previewDateSheetSchoolName').textContent = document.getElementById('dateSheetSchoolName').value || 'Apexiums School';
             document.getElementById('previewDateSheetExamTitle').textContent = document.getElementById('dateSheetExamTitle').value || '';
             document.getElementById('previewDateSheetSession').textContent = document.getElementById('dateSheetSession').value || '';
             document.getElementById('previewDateSheetClassGroup').textContent = document.getElementById('dateSheetClassGroup').value || '';
@@ -1621,15 +1816,36 @@
             refreshDateSheetPreview();
         }
 
+        function applyResultPrintDensity() {
+            const subjectCount = document.querySelectorAll('#previewSubjectsBody tr').length;
+            const behaviorCount = document.querySelectorAll('#previewBehaviorBody tr').length;
+            document.body.classList.remove('result-print-compact', 'result-print-dense', 'result-print-ultra');
+
+            if (subjectCount > 16 || behaviorCount > 10) {
+                document.body.classList.add('result-print-ultra');
+                return;
+            }
+
+            if (subjectCount > 12 || behaviorCount > 8) {
+                document.body.classList.add('result-print-dense');
+                return;
+            }
+
+            if (subjectCount > 8 || behaviorCount > 7) {
+                document.body.classList.add('result-print-compact');
+            }
+        }
+
         function printSection(mode, colorMode = 'color') {
-            document.body.classList.remove('print-schedule', 'print-result', 'result-print-color', 'result-print-bw');
+            document.body.classList.remove('print-schedule', 'print-result', 'result-print-color', 'result-print-bw', 'result-print-compact', 'result-print-dense', 'result-print-ultra');
             document.body.classList.add(mode);
             if (mode === 'print-result') {
                 document.body.classList.add(colorMode === 'bw' ? 'result-print-bw' : 'result-print-color');
+                applyResultPrintDensity();
             }
             window.print();
             window.setTimeout(() => {
-                document.body.classList.remove('print-schedule', 'print-result', 'result-print-color', 'result-print-bw');
+                document.body.classList.remove('print-schedule', 'print-result', 'result-print-color', 'result-print-bw', 'result-print-compact', 'result-print-dense', 'result-print-ultra');
             }, 300);
         }
 
@@ -1946,7 +2162,7 @@
             const subjects = readSubjectRows();
             const behaviors = readBehaviorRows();
 
-            document.getElementById('previewSchoolName').textContent = document.getElementById('schoolName').value || 'My own Science school';
+            document.getElementById('previewSchoolName').textContent = document.getElementById('schoolName').value || 'Apexiums School';
             document.getElementById('previewCampusName').textContent = document.getElementById('campusName').value || '';
             document.getElementById('previewSchoolContact').textContent = document.getElementById('schoolContact').value || '';
             document.getElementById('previewTermTitle').textContent = document.getElementById('termTitle').value || '';
