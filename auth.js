@@ -117,6 +117,7 @@
         'staff.html': { moduleKey: 'staff', defaultHome: 'dashboard.html', label: 'Staff', icon: 'briefcase' },
         'classes.html': { moduleKey: 'classes', defaultHome: 'dashboard.html', label: 'Classes', icon: 'school' },
         'fees.html': { moduleKey: 'fees', defaultHome: 'dashboard.html', label: 'Fees', icon: 'credit-card' },
+        'set_fees.html': { moduleKey: 'fees', defaultHome: 'dashboard.html', label: 'Set Fees', icon: 'settings-2' },
         'fee_challan.html': { moduleKey: 'fee_challan', defaultHome: 'dashboard.html', label: 'Fee Challan', icon: 'file-text' },
         'teacher_salaries.html': { moduleKey: 'teacher_salaries', defaultHome: 'dashboard.html', label: 'Salaries', icon: 'wallet' },
         'student_attendance.html': { moduleKey: 'student_attendance', defaultHome: 'dashboard.html', label: 'Student Attendance', icon: 'calendar-check' },

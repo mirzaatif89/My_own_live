@@ -615,6 +615,189 @@
             display: flex;
             justify-content: flex-end;
         }
+
+        @media (max-width: 1400px) {
+            .main-content {
+                padding: 1.55rem 2rem !important;
+            }
+
+            .student-toolbar {
+                align-items: flex-end;
+                gap: 0.75rem;
+                flex-wrap: nowrap;
+            }
+
+            .student-toolbar-left {
+                flex: 1 1 auto;
+                gap: 0.75rem;
+                flex-wrap: nowrap;
+                min-width: 0;
+            }
+
+            .student-stat {
+                flex: 0 0 132px;
+                min-width: 132px;
+                font-size: 0.9rem;
+                white-space: nowrap;
+            }
+
+            .student-filter-group {
+                min-width: 0;
+                flex: 1 1 210px;
+            }
+
+            .student-filter-group input,
+            .student-filter-group select,
+            .student-filter-group .student-multifilter-trigger {
+                padding: 0.74rem 0.9rem;
+                border-radius: 0.62rem;
+            }
+
+            .student-print-btn {
+                flex: 0 0 152px;
+                min-width: 152px;
+                padding: 0.67rem 0.95rem;
+                white-space: nowrap;
+            }
+
+            .student-toolbar > .btn-primary {
+                flex: 0 0 176px;
+                min-width: 176px;
+                padding: 0.75rem 1rem;
+                white-space: nowrap;
+            }
+
+            #studentsTable {
+                table-layout: fixed !important;
+                width: 100% !important;
+                min-width: 100% !important;
+            }
+
+            #studentsTable th,
+            #studentsTable td {
+                min-width: 0 !important;
+                padding: 0.62rem 0.46rem !important;
+                font-size: 0.76rem !important;
+                overflow-wrap: normal !important;
+                word-break: normal !important;
+            }
+
+            #studentsTable th:nth-child(1),
+            #studentsTable td:nth-child(1) {
+                width: 10%;
+            }
+
+            #studentsTable th:nth-child(2),
+            #studentsTable td:nth-child(2) {
+                width: 8.5%;
+            }
+
+            #studentsTable th:nth-child(3),
+            #studentsTable td:nth-child(3) {
+                width: 15%;
+            }
+
+            #studentsTable th:nth-child(4),
+            #studentsTable td:nth-child(4) {
+                width: 14.5%;
+            }
+
+            #studentsTable th:nth-child(5),
+            #studentsTable td:nth-child(5) {
+                width: 8%;
+            }
+
+            #studentsTable th:nth-child(6),
+            #studentsTable td:nth-child(6) {
+                width: 9%;
+            }
+
+            #studentsTable th:nth-child(7),
+            #studentsTable td:nth-child(7) {
+                width: 9.5%;
+            }
+
+            #studentsTable th:nth-child(8),
+            #studentsTable td:nth-child(8) {
+                width: 7%;
+            }
+
+            #studentsTable th:nth-child(9),
+            #studentsTable td:nth-child(9) {
+                width: 9.5%;
+            }
+
+            #studentsTable th:nth-child(10),
+            #studentsTable td:nth-child(10) {
+                width: 9%;
+            }
+
+            .student-th-with-search {
+                display: grid;
+                grid-template-columns: minmax(0, auto) 18px;
+                align-items: center;
+                justify-content: start;
+                column-gap: 0.22rem;
+                white-space: normal;
+                line-height: 1.1;
+                max-width: 100%;
+            }
+
+            #studentsTable th:nth-child(9) .student-th-with-search,
+            #studentsTable th:nth-child(10) {
+                justify-content: center;
+            }
+
+            #studentsTable th:nth-child(1),
+            #studentsTable th:nth-child(2) {
+                font-size: 0.72rem !important;
+            }
+
+            .student-column-search-btn {
+                flex: 0 0 18px;
+            }
+
+            .student-name-cell {
+                min-width: 0;
+                gap: 0.45rem;
+            }
+
+            .student-avatar {
+                width: 28px;
+                height: 28px;
+            }
+
+            .table-action-select {
+                width: 76px;
+                padding: 0.38rem 0.42rem;
+                font-size: 0.72rem;
+            }
+
+            #studentsTable .status-badge {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                white-space: nowrap;
+                min-width: 68px;
+                padding: 0.28rem 0.5rem;
+                font-size: 0.72rem;
+            }
+
+            #studentsTable th:nth-child(9),
+            #studentsTable td:nth-child(9),
+            #studentsTable th:nth-child(10),
+            #studentsTable td:nth-child(10) {
+                text-align: center;
+                white-space: nowrap !important;
+            }
+        }
+
+        @media (max-width: 1180px) {
+            .student-toolbar,
+            .student-toolbar-left {
+                flex-wrap: wrap;
+            }
+        }
     </style>
 </head>
 

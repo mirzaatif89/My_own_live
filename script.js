@@ -12,6 +12,7 @@ const STORAGE_KEY_TEACHER_SALARIES = 'eduCore_teacher_salaries';
 const STORAGE_KEY_USERS = 'eduCore_users'; // New Key for student/teacher credentials
 const STORAGE_KEY_PROMOTION_HISTORY = 'eduCore_promotion_history';
 const STORAGE_KEY_SPECIAL_NOTICES = 'eduCore_special_notices';
+const STORAGE_KEY_CLASS_FEES = 'eduCore_class_fees';
 let teacherScheduleDraft = [];
 
 // === REAL-TIME SQL CONFIGURATION ===
@@ -47,6 +48,7 @@ const FALLBACK_ROUTE_TO_PAGE = {
     staff: 'staff.html',
     classes: 'classes.html',
     fees: 'fees.html',
+    set_fees: 'set_fees.html',
     fee_challan: 'fee_challan.html',
     teacher_salaries: 'teacher_salaries.html',
     student_attendance: 'student_attendance.html',
@@ -250,6 +252,11 @@ if (typeof io !== 'undefined') {
         if (isCurrentPage('staff.html')) renderStaff();
     });
 
+    socket.on('class_fees_update', (data) => {
+        localStorage.setItem(STORAGE_KEY_CLASS_FEES, JSON.stringify(normalizeClassFeeRecords(data)));
+        if (isCurrentPage('set_fees.html')) renderClassFeeSettings();
+    });
+
     socket.on('session_forced_logout', (payload) => {
         const targetSessionId = String(payload?.sessionId || '').trim();
         const currentSessionId = String(sessionStorage.getItem('eduCore_session_id') || '').trim();
@@ -354,6 +361,14 @@ async function initialSQLSync() {
                 await syncToSQL('staff', missingStaff);
             }
             if (typeof renderStaff === 'function') renderStaff();
+        }
+
+        const classFeesRes = await fetch(`${API_BASE_URL}/class-fees`, { headers: authHeaders });
+        if (classFeesRes.ok) {
+            const data = await classFeesRes.json();
+            localStorage.setItem(STORAGE_KEY_CLASS_FEES, JSON.stringify(normalizeClassFeeRecords(data)));
+            if (typeof renderClassFeeSettings === 'function') renderClassFeeSettings();
+            applySelectedClassFeeToStudentForm({ onlyIfEmpty: true });
         }
 
         await Promise.all([
@@ -464,6 +479,7 @@ document.addEventListener('DOMContentLoaded', () => {
         initialSQLSync();
     }
     ensureBranchRegistrationNav();
+    ensureSetFeesNav();
     ensureAttendanceNav();
     ensureNotificationsNav();
     ensureSpecialNoticesNav();
@@ -658,6 +674,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderStudents(); // Initial Load
         loadStudentQuickFilterBranchCampuses();
         studentForm.addEventListener('submit', handleStudentFormSubmit);
+        initializeStudentClassFeeAutofill();
         const studentSearch = document.getElementById('studentSearchInput');
         const quickFilter = document.getElementById('studentQuickFilter');
         const printMode = document.getElementById('studentPrintMode');
@@ -724,6 +741,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (cSearch) {
             cSearch.addEventListener('input', (e) => renderClasses(e.target.value.toLowerCase()));
         }
+    }
+
+    // === SET FEES PAGE ===
+    const classFeeForm = document.getElementById('classFeeForm');
+    if (classFeeForm) {
+        renderClassFeeSettings();
+        loadClassFeesFromServer().finally(() => renderClassFeeSettings());
+        classFeeForm.addEventListener('submit', handleClassFeeFormSubmit);
+        const classFeeSearch = document.getElementById('classFeeSearchInput');
+        if (classFeeSearch) classFeeSearch.addEventListener('input', () => renderClassFeeSettings());
     }
 
     // === SETTINGS PAGE ===
@@ -1076,6 +1103,237 @@ function saveData(key, data, options = {}) {
     if (key === STORAGE_KEY_STUDENTS) syncToSQL('students', data);
     if (key === STORAGE_KEY_TEACHERS) syncToSQL('teachers', data);
     if (key === STORAGE_KEY_STAFF) syncToSQL('staff', data);
+    if (key === STORAGE_KEY_CLASS_FEES) syncToSQL('class-fees', data);
+}
+
+function ensureSetFeesNav() {
+    const nav = document.querySelector('.nav-links');
+    if (!nav || nav.querySelector('a[href$="set_fees.html"], a[href$="/set_fees"]')) return;
+
+    const feesLink = Array.from(nav.querySelectorAll('a[href]'))
+        .find((link) => normalizeClientPageName(link.getAttribute('href')) === 'fees.html');
+    if (!feesLink) return;
+
+    const link = document.createElement('a');
+    link.href = toRoutePath('set_fees.html');
+    link.className = `nav-item ${isCurrentPage('set_fees.html') ? 'active' : ''}`;
+    if (feesLink.style.display === 'none') link.style.display = 'none';
+    link.innerHTML = '<i data-lucide="settings-2"></i><span>Set Fees</span>';
+    feesLink.insertAdjacentElement('afterend', link);
+}
+
+function normalizeClassFeeName(className = '') {
+    return String(className || '').trim().toLowerCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ');
+}
+
+function normalizeClassFeeRecords(records) {
+    const input = Array.isArray(records) ? records : [];
+    const byClass = new Map();
+
+    input.forEach((record) => {
+        const className = String(record?.className || record?.name || '').trim();
+        if (!className) return;
+        const monthlyFee = Number.parseInt(String(record?.monthlyFee ?? record?.amount ?? '0'), 10) || 0;
+        const feeFrequency = String(record?.feeFrequency || 'Monthly').trim() || 'Monthly';
+        const key = normalizeClassFeeName(className);
+        byClass.set(key, {
+            id: record?.id || key,
+            className,
+            monthlyFee,
+            feeFrequency,
+            updatedAtLabel: record?.updatedAtLabel || record?.updatedAt || ''
+        });
+    });
+
+    return Array.from(byClass.values()).sort((a, b) => compareStudentClassNames(a.className, b.className));
+}
+
+function getClassFeeSettings() {
+    return normalizeClassFeeRecords(getData(STORAGE_KEY_CLASS_FEES));
+}
+
+function findClassFeeSetting(className) {
+    const key = normalizeClassFeeName(className);
+    if (!key) return null;
+    return getClassFeeSettings().find((record) => normalizeClassFeeName(record.className) === key) || null;
+}
+
+async function loadClassFeesFromServer() {
+    try {
+        const token = sessionStorage.getItem('eduCore_token') || '';
+        const response = await fetch(`${API_BASE_URL}/class-fees`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        if (!response.ok) return [];
+        const data = await response.json();
+        const normalized = normalizeClassFeeRecords(data);
+        localStorage.setItem(STORAGE_KEY_CLASS_FEES, JSON.stringify(normalized));
+        return normalized;
+    } catch (error) {
+        return getClassFeeSettings();
+    }
+}
+
+function applySelectedClassFeeToStudentForm(options = {}) {
+    const { onlyIfEmpty = false } = options;
+    const classSelect = document.getElementById('classGrade');
+    const feeInput = document.getElementById('monthlyFee');
+    const frequencyInput = document.getElementById('feeFrequency');
+    if (!classSelect || !feeInput) return;
+
+    const setting = findClassFeeSetting(classSelect.value);
+    if (!setting) return;
+    if (onlyIfEmpty && String(feeInput.value || '').trim()) return;
+
+    feeInput.value = setting.monthlyFee || '';
+    if (frequencyInput) frequencyInput.value = setting.feeFrequency || 'Monthly';
+}
+
+function initializeStudentClassFeeAutofill() {
+    const classSelect = document.getElementById('classGrade');
+    if (!classSelect || classSelect.dataset.classFeeBound === '1') return;
+    classSelect.dataset.classFeeBound = '1';
+    classSelect.addEventListener('change', () => applySelectedClassFeeToStudentForm());
+    loadClassFeesFromServer().then(() => applySelectedClassFeeToStudentForm({ onlyIfEmpty: true }));
+}
+
+function getKnownClassNamesForFees() {
+    const names = new Map();
+    const add = (value) => {
+        const className = String(value || '').trim();
+        if (!className) return;
+        const key = normalizeClassFeeName(className);
+        if (!names.has(key)) names.set(key, className);
+    };
+
+    DEFAULT_STUDENT_CLASS_ORDER.forEach(add);
+    getData(STORAGE_KEY_CLASSES).forEach((item) => add(item?.section ? `${item.name} (${item.section})` : item?.name));
+    getData(STORAGE_KEY_STUDENTS).forEach((student) => add(student?.classGrade));
+    getClassFeeSettings().forEach((setting) => add(setting?.className));
+    return Array.from(names.values()).sort(compareStudentClassNames);
+}
+
+function populateClassFeeSelect() {
+    const select = document.getElementById('classFeeClassName');
+    if (!select) return;
+    const previous = select.value;
+    select.innerHTML = '<option value="">Select Class</option>';
+    getKnownClassNamesForFees().forEach((className) => {
+        const option = document.createElement('option');
+        option.value = className;
+        option.textContent = className;
+        select.appendChild(option);
+    });
+    select.value = previous;
+}
+
+function renderClassFeeSettings() {
+    const tbody = document.getElementById('classFeeTableBody');
+    if (!tbody) return;
+    populateClassFeeSelect();
+
+    const term = String(document.getElementById('classFeeSearchInput')?.value || '').trim().toLowerCase();
+    const settings = getClassFeeSettings().filter((setting) => !term || setting.className.toLowerCase().includes(term));
+    const empty = document.getElementById('classFeeEmptyState');
+
+    tbody.innerHTML = '';
+    if (!settings.length) {
+        if (empty) empty.style.display = 'block';
+        return;
+    }
+
+    if (empty) empty.style.display = 'none';
+    settings.forEach((setting) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><strong>${setting.className}</strong></td>
+            <td>PKR ${(Number(setting.monthlyFee || 0)).toLocaleString('en-PK')}</td>
+            <td>${setting.feeFrequency || 'Monthly'}</td>
+            <td>${setting.updatedAtLabel || '-'}</td>
+            <td>
+                <div class="fee-actions">
+                    <button class="fee-action-btn fee-action-edit" type="button" onclick="editClassFeeSetting('${encodeURIComponent(setting.className)}')" title="Edit fee">
+                        <i data-lucide="edit-2"></i>
+                        <span>Edit</span>
+                    </button>
+                    <button class="fee-action-btn fee-action-delete" type="button" onclick="deleteClassFeeSetting('${encodeURIComponent(setting.className)}')" title="Delete fee" aria-label="Delete fee">
+                        <i data-lucide="trash-2"></i>
+                    </button>
+                </div>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+    if (window.lucide) window.lucide.createIcons();
+}
+
+async function handleClassFeeFormSubmit(event) {
+    event.preventDefault();
+    const className = String(document.getElementById('classFeeClassName')?.value || '').trim();
+    const customClassName = String(document.getElementById('classFeeCustomClassName')?.value || '').trim();
+    const targetClassName = customClassName || className;
+    const monthlyFee = Number.parseInt(String(document.getElementById('classFeeMonthlyFee')?.value || '0'), 10) || 0;
+    const feeFrequency = String(document.getElementById('classFeeFrequency')?.value || 'Monthly').trim() || 'Monthly';
+
+    if (!targetClassName) {
+        alert('Please select or enter a class.');
+        return;
+    }
+    if (monthlyFee <= 0) {
+        alert('Please enter a valid monthly fee.');
+        return;
+    }
+
+    const settings = getClassFeeSettings();
+    const key = normalizeClassFeeName(targetClassName);
+    const nextRecord = {
+        id: key,
+        className: targetClassName,
+        monthlyFee,
+        feeFrequency,
+        updatedAtLabel: new Date().toLocaleString('en-GB')
+    };
+    const index = settings.findIndex((setting) => normalizeClassFeeName(setting.className) === key);
+    if (index >= 0) settings[index] = nextRecord;
+    else settings.push(nextRecord);
+
+    const normalized = normalizeClassFeeRecords(settings);
+    localStorage.setItem(STORAGE_KEY_CLASS_FEES, JSON.stringify(normalized));
+    renderClassFeeSettings();
+
+    const form = document.getElementById('classFeeForm');
+    if (form) form.reset();
+
+    const result = await syncToSQLDetailed('class-fees', normalized);
+    if (!result.success) {
+        alert(`Fee saved locally, but server sync failed: ${result.error}`);
+    } else {
+        alert('Class fee saved successfully.');
+    }
+}
+
+function editClassFeeSetting(encodedClassName) {
+    const className = decodeURIComponent(String(encodedClassName || ''));
+    const setting = findClassFeeSetting(className);
+    if (!setting) return;
+    populateClassFeeSelect();
+    const classSelect = document.getElementById('classFeeClassName');
+    const customInput = document.getElementById('classFeeCustomClassName');
+    if (classSelect) classSelect.value = setting.className;
+    if (customInput) customInput.value = '';
+    document.getElementById('classFeeMonthlyFee').value = setting.monthlyFee || '';
+    document.getElementById('classFeeFrequency').value = setting.feeFrequency || 'Monthly';
+}
+
+async function deleteClassFeeSetting(encodedClassName) {
+    const className = decodeURIComponent(String(encodedClassName || ''));
+    if (!(await showAppConfirm(`Delete fee setting for ${className}?`))) return;
+    const key = normalizeClassFeeName(className);
+    const settings = getClassFeeSettings().filter((setting) => normalizeClassFeeName(setting.className) !== key);
+    localStorage.setItem(STORAGE_KEY_CLASS_FEES, JSON.stringify(settings));
+    renderClassFeeSettings();
+    const result = await syncToSQLDetailed('class-fees', settings);
+    if (!result.success) alert(`Fee deleted locally, but server sync failed: ${result.error}`);
 }
 
 function getPromotionHistory() {
@@ -1808,6 +2066,7 @@ function clearLocalSystemData() {
         STORAGE_KEY_USERS,
         STORAGE_KEY_PROMOTION_HISTORY,
         STORAGE_KEY_SPECIAL_NOTICES,
+        STORAGE_KEY_CLASS_FEES,
         'eduCore_bills',
         'eduCore_monthly_fees'
     ]);
@@ -2785,6 +3044,7 @@ function toggleStudentForm(editMode = false) {
                 }
             });
         }
+        initializeStudentClassFeeAutofill();
         container.style.display = 'block';
         // Reset Panels
         document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));

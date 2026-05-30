@@ -110,6 +110,7 @@ const ALLOWED_HOME_PAGES = new Set([
     'staff.html',
     'classes.html',
     'fees.html',
+    'set_fees.html',
     'fee_challan.html',
     'teacher_salaries.html',
     'student_attendance.html',
@@ -1079,6 +1080,60 @@ app.get('/api/students', async (req, res) => {
     }
 });
 
+function normalizeClassFeeRecords(records = []) {
+    const input = Array.isArray(records) ? records : [];
+    const byClass = new Map();
+
+    input.forEach((record) => {
+        const className = String(record?.className || record?.name || '').trim();
+        if (!className) return;
+        const key = className.toLowerCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ');
+        byClass.set(key, {
+            id: record?.id || key,
+            className,
+            monthlyFee: Number(record?.monthlyFee || record?.amount || 0) || 0,
+            feeFrequency: String(record?.feeFrequency || 'Monthly').trim() || 'Monthly',
+            updatedAtLabel: record?.updatedAtLabel || new Date().toLocaleString('en-GB')
+        });
+    });
+
+    return Array.from(byClass.values());
+}
+
+app.get('/api/class-fees', async (req, res) => {
+    if (!sequelize) return res.status(503).json({ error: 'Database offline' });
+
+    try {
+        const rows = await sequelize.models.ClassFee.findAll({ order: [['className', 'ASC']] });
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/class-fees', authenticateToken, async (req, res) => {
+    if (!sequelize) return res.status(503).json({ success: false, message: 'Database offline' });
+
+    try {
+        const ok = await enforceActionPermission(req, res, 'fees', 'edit');
+        if (!ok) return;
+
+        const ClassFee = sequelize.models.ClassFee;
+        const records = normalizeClassFeeRecords(Array.isArray(req.body) ? req.body : [req.body]);
+
+        await ClassFee.destroy({ where: {} });
+        for (const record of records) {
+            await ClassFee.upsert(record);
+        }
+
+        const allRecords = await ClassFee.findAll({ order: [['className', 'ASC']] });
+        io.emit('class_fees_update', allRecords);
+        res.json({ success: true, classFees: allRecords });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
 function normalizeNoticeTargets(targetPortals) {
     const allowedTargets = new Set(['student', 'teacher', 'staff']);
     const targets = Array.isArray(targetPortals) ? targetPortals : [];
@@ -1204,6 +1259,7 @@ app.post('/api/reset-data', authenticateToken, async (req, res) => {
             'StudentAttendance',
             'TeacherAttendance',
             'SpecialNotice',
+            'ClassFee',
             'Student',
             'Teacher',
             'Staff',
@@ -2502,6 +2558,16 @@ function defineFeeDueBalanceModel(db) {
     });
 }
 
+function defineClassFeeModel(db) {
+    return db.define('ClassFee', {
+        id: { type: DataTypes.STRING, primaryKey: true },
+        className: { type: DataTypes.STRING, allowNull: false },
+        monthlyFee: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0 },
+        feeFrequency: { type: DataTypes.STRING, defaultValue: 'Monthly' },
+        updatedAtLabel: DataTypes.STRING
+    });
+}
+
 function defineStudentAttendanceModel(db) {
     return db.define('StudentAttendance', {
         id: { type: DataTypes.STRING, primaryKey: true },
@@ -2891,6 +2957,7 @@ async function startServer() {
         defineStaffModel(sequelize);
         defineFeePaymentModel(sequelize);
         defineFeeDueBalanceModel(sequelize);
+        defineClassFeeModel(sequelize);
         defineStudentAttendanceModel(sequelize);
         defineTeacherAttendanceModel(sequelize);
         defineSpecialNoticeModel(sequelize);
