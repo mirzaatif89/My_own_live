@@ -238,6 +238,10 @@
             margin-bottom: 0.05rem;
         }
 
+        .student-print-fields-group {
+            min-width: 210px;
+        }
+
         .student-name-cell {
             display: flex;
             align-items: center;
@@ -643,7 +647,11 @@
 
             .student-filter-group {
                 min-width: 0;
-                flex: 1 1 210px;
+                flex: 1 1 180px;
+            }
+
+            .student-print-fields-group {
+                flex: 0 1 190px;
             }
 
             .student-filter-group input,
@@ -931,6 +939,17 @@
                             <option value="school">School Student List</option>
                             <option value="outer">Outer Student List</option>
                         </select>
+                    </div>
+                    <div class="student-filter-group student-print-fields-group">
+                        <label for="studentPrintFieldsTrigger">Print Fields</label>
+                        <div class="student-multifilter" id="studentPrintFieldsMulti">
+                            <button class="student-multifilter-trigger" type="button" id="studentPrintFieldsTrigger"
+                                aria-haspopup="listbox" aria-expanded="false">
+                                Default Fields
+                            </button>
+                            <div class="student-multifilter-menu" id="studentPrintFieldsMenu" role="listbox"
+                                aria-multiselectable="true"></div>
+                        </div>
                     </div>
                     <button class="btn btn-outline student-print-btn" type="button" onclick="printStudentsList()">
                         <i data-lucide="printer"></i> Print Students

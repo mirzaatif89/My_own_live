@@ -13,6 +13,7 @@ const STORAGE_KEY_USERS = 'eduCore_users'; // New Key for student/teacher creden
 const STORAGE_KEY_PROMOTION_HISTORY = 'eduCore_promotion_history';
 const STORAGE_KEY_SPECIAL_NOTICES = 'eduCore_special_notices';
 const STORAGE_KEY_CLASS_FEES = 'eduCore_class_fees';
+const STORAGE_KEY_STUDENT_PRINT_FIELDS = 'eduCore_student_print_fields';
 let teacherScheduleDraft = [];
 
 // === REAL-TIME SQL CONFIGURATION ===
@@ -679,6 +680,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const quickFilter = document.getElementById('studentQuickFilter');
         const printMode = document.getElementById('studentPrintMode');
         bindStudentQuickFilterMultiSelect();
+        initializeStudentPrintFieldsControl();
         if (studentSearch) {
             studentSearch.addEventListener('input', () => {
                 studentColumnSearchFilter = null;
@@ -2067,6 +2069,7 @@ function clearLocalSystemData() {
         STORAGE_KEY_PROMOTION_HISTORY,
         STORAGE_KEY_SPECIAL_NOTICES,
         STORAGE_KEY_CLASS_FEES,
+        STORAGE_KEY_STUDENT_PRINT_FIELDS,
         'eduCore_bills',
         'eduCore_monthly_fees'
     ]);
@@ -3858,6 +3861,134 @@ function renderStudents(term = '') {
     }
 }
 
+function getStudentPrintFieldDefinitions() {
+    return [
+        { key: 'studentCode', label: 'Student ID', value: (s) => s.studentCode || '-' },
+        { key: 'rollNo', label: 'Roll No', value: (s) => s.rollNo || '-' },
+        { key: 'fullName', label: 'Student Name', value: (s) => s.fullName || '-' },
+        { key: 'fatherName', label: 'Father Name', value: (s) => s.fatherName || '-' },
+        { key: 'parentPhone', label: 'Contact No', value: (s) => s.parentPhone || '-' },
+        { key: 'dob', label: 'DOB', value: (s) => formatDateForDisplay(s.dob) },
+        { key: 'admissionDate', label: 'Admission Date', value: (s) => formatDateForDisplay(s.admissionDate) },
+        { key: 'classGrade', label: 'Class', value: (s) => s.classGrade || '-' },
+        { key: 'campusName', label: 'Campus', value: (s) => s.campusName || 'Main Campus' },
+        { key: 'gender', label: 'Gender', value: (s) => s.gender || '-' },
+        { key: 'email', label: 'Email', value: (s) => s.email || '-' },
+        { key: 'formB', label: 'Form B', value: (s) => s.formB || '-' },
+        { key: 'monthlyFee', label: 'Monthly Fee', value: (s) => s.monthlyFee || '-' },
+        { key: 'feesStatus', label: 'Fee Status', value: (s) => isStudentTerminated(s) ? 'Terminated' : (s.feesStatus || '-') }
+    ];
+}
+
+function getDefaultStudentPrintFieldKeys(printMode = 'school') {
+    if (printMode === 'outer') {
+        return ['fullName', 'fatherName', 'parentPhone', 'rollNo'];
+    }
+    return getStudentPrintFieldDefinitions().map((field) => field.key);
+}
+
+function normalizeStudentPrintFieldKeys(keys, printMode = 'school') {
+    const allowed = new Set(getStudentPrintFieldDefinitions().map((field) => field.key));
+    const normalized = Array.from(new Set((Array.isArray(keys) ? keys : [])
+        .map((key) => String(key || '').trim())
+        .filter((key) => allowed.has(key))));
+    return normalized.length ? normalized : getDefaultStudentPrintFieldKeys(printMode);
+}
+
+function getSelectedStudentPrintFieldKeys(printMode = 'school') {
+    try {
+        const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY_STUDENT_PRINT_FIELDS) || '[]');
+        return normalizeStudentPrintFieldKeys(parsed, printMode);
+    } catch (error) {
+        return getDefaultStudentPrintFieldKeys(printMode);
+    }
+}
+
+function saveSelectedStudentPrintFieldKeys(keys, printMode = 'school') {
+    const normalized = normalizeStudentPrintFieldKeys(keys, printMode);
+    localStorage.setItem(STORAGE_KEY_STUDENT_PRINT_FIELDS, JSON.stringify(normalized));
+    updateStudentPrintFieldsTrigger(normalized);
+}
+
+function updateStudentPrintFieldsTrigger(keys = null) {
+    const trigger = document.getElementById('studentPrintFieldsTrigger');
+    if (!trigger) return;
+    const selectedKeys = keys || getSelectedStudentPrintFieldKeys(document.getElementById('studentPrintMode')?.value || 'school');
+    const fields = getStudentPrintFieldDefinitions().filter((field) => selectedKeys.includes(field.key));
+    if (!fields.length) {
+        trigger.textContent = 'Default Fields';
+    } else if (fields.length <= 2) {
+        trigger.textContent = fields.map((field) => field.label).join(', ');
+    } else {
+        trigger.textContent = `${fields.slice(0, 2).map((field) => field.label).join(', ')} +${fields.length - 2}`;
+    }
+}
+
+function renderStudentPrintFieldsMenu() {
+    const menu = document.getElementById('studentPrintFieldsMenu');
+    if (!menu) return;
+    const printMode = document.getElementById('studentPrintMode')?.value || 'school';
+    const selectedSet = new Set(getSelectedStudentPrintFieldKeys(printMode));
+
+    menu.innerHTML = '';
+    getStudentPrintFieldDefinitions().forEach((field) => {
+        const label = document.createElement('label');
+        label.className = 'student-multifilter-item';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.value = field.key;
+        checkbox.checked = selectedSet.has(field.key);
+        checkbox.addEventListener('change', () => {
+            const checkedKeys = Array.from(menu.querySelectorAll('input[type="checkbox"]:checked'))
+                .map((input) => input.value);
+            saveSelectedStudentPrintFieldKeys(checkedKeys, printMode);
+        });
+
+        const text = document.createElement('span');
+        text.textContent = field.label;
+
+        label.appendChild(checkbox);
+        label.appendChild(text);
+        menu.appendChild(label);
+    });
+    updateStudentPrintFieldsTrigger(Array.from(selectedSet));
+}
+
+function initializeStudentPrintFieldsControl() {
+    const container = document.getElementById('studentPrintFieldsMulti');
+    const trigger = document.getElementById('studentPrintFieldsTrigger');
+    const menu = document.getElementById('studentPrintFieldsMenu');
+    const printMode = document.getElementById('studentPrintMode');
+    if (!container || !trigger || !menu || container.dataset.bound === '1') return;
+
+    container.dataset.bound = '1';
+    renderStudentPrintFieldsMenu();
+
+    trigger.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const isOpen = container.classList.toggle('open');
+        trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    });
+
+    menu.addEventListener('click', (event) => event.stopPropagation());
+
+    document.addEventListener('click', () => {
+        container.classList.remove('open');
+        trigger.setAttribute('aria-expanded', 'false');
+    });
+
+    if (printMode) {
+        printMode.addEventListener('change', () => {
+            const mode = printMode.value || 'school';
+            if (!localStorage.getItem(STORAGE_KEY_STUDENT_PRINT_FIELDS)) {
+                saveSelectedStudentPrintFieldKeys(getDefaultStudentPrintFieldKeys(mode), mode);
+            }
+            renderStudentPrintFieldsMenu();
+        });
+    }
+}
+
 function printStudentsList() {
     if (!isCurrentPage('students.html')) {
         window.print();
@@ -3925,6 +4056,9 @@ function printStudentsList() {
     const schoolName = settings.schoolName || 'Student List';
     const printedAt = new Date().toLocaleString();
     const modeLabel = printMode === 'outer' ? 'Outer Student List' : 'School Student List';
+    const selectedFieldKeys = getSelectedStudentPrintFieldKeys(printMode);
+    const selectedFields = getStudentPrintFieldDefinitions()
+        .filter((field) => selectedFieldKeys.includes(field.key));
 
     const formatDateSafe = (value) => {
         try {
@@ -3935,40 +4069,20 @@ function printStudentsList() {
     };
 
     const rowsMarkup = filtered.length
-        ? filtered.map((s, idx) => {
-            if (printMode === 'outer') {
-                return `
-                    <tr>
-                        <td class="num">${idx + 1}</td>
-                        <td>${escapeHtml(s.fullName || '-')}</td>
-                        <td>${escapeHtml(s.fatherName || '-')}</td>
-                        <td>${escapeHtml(s.parentPhone || '-')}</td>
-                        <td>${escapeHtml(s.rollNo || '-')}</td>
-                    </tr>
-                `;
-            }
-
-            return `
+        ? filtered.map((s, idx) => `
                 <tr>
                     <td class="num">${idx + 1}</td>
-                    <td>${escapeHtml(s.studentCode || '-')}</td>
-                    <td>${escapeHtml(s.rollNo || '-')}</td>
-                    <td>${escapeHtml(s.fullName || '-')}</td>
-                    <td>${escapeHtml(s.fatherName || '-')}</td>
-                    <td>${escapeHtml(s.parentPhone || '-')}</td>
-                    <td>${formatDateSafe(s.dob)}</td>
-                    <td>${formatDateSafe(s.admissionDate)}</td>
-                    <td>${escapeHtml(s.classGrade || '-')}</td>
-                    <td>${escapeHtml(s.campusName || 'Main Campus')}</td>
-                    <td>${escapeHtml(s.gender || '-')}</td>
-                    <td>${escapeHtml(s.email || '-')}</td>
-                    <td>${escapeHtml(s.formB || '-')}</td>
-                    <td>${escapeHtml(s.monthlyFee || '-')}</td>
-                    <td>${escapeHtml(isStudentTerminated(s) ? 'Terminated' : (s.feesStatus || '-'))}</td>
+                    ${selectedFields.map((field) => `<td>${escapeHtml(field.value(s))}</td>`).join('')}
                 </tr>
-            `;
-        }).join('')
-        : `<tr><td colspan="${printMode === 'outer' ? 5 : 15}" class="empty">No students match the current filter.</td></tr>`;
+            `).join('')
+        : `<tr><td colspan="${selectedFields.length + 1}" class="empty">No students match the current filter.</td></tr>`;
+
+    const headerMarkup = `
+        <tr>
+            <th style="width:30px;">#</th>
+            ${selectedFields.map((field) => `<th>${escapeHtml(field.label)}</th>`).join('')}
+        </tr>
+    `;
 
     const html = `
         <!doctype html>
@@ -4002,35 +4116,7 @@ function printStudentsList() {
             </div>
             <table>
                 <thead>
-                    ${printMode === 'outer'
-        ? `
-                        <tr>
-                            <th style="width:30px;">#</th>
-                            <th>Student Name</th>
-                            <th>Father Name</th>
-                            <th>Contact No</th>
-                            <th style="width:70px;">Roll No</th>
-                        </tr>
-                    `
-        : `
-                        <tr>
-                            <th style="width:30px;">#</th>
-                            <th class="nowrap">Student ID</th>
-                            <th class="nowrap">Roll No</th>
-                            <th>Student Name</th>
-                            <th>Father Name</th>
-                            <th class="nowrap">Contact No</th>
-                            <th class="nowrap">DOB</th>
-                            <th class="nowrap">Admission Date</th>
-                            <th>Class</th>
-                            <th>Campus</th>
-                            <th>Gender</th>
-                            <th>Email</th>
-                            <th class="nowrap">Form B</th>
-                            <th class="nowrap">Monthly Fee</th>
-                            <th class="nowrap">Fee Status</th>
-                        </tr>
-                    `}
+                    ${headerMarkup}
                 </thead>
                 <tbody>
                     ${rowsMarkup}

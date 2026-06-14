@@ -527,6 +527,12 @@
                             </select>
                         </div>
                         <div class="bulk-fee-field">
+                            <label for="bulkFeeCampusFilter">Campus</label>
+                            <select id="bulkFeeCampusFilter">
+                                <option value="all">All Campuses</option>
+                            </select>
+                        </div>
+                        <div class="bulk-fee-field">
                             <label for="bulkFeeStatusFilter">Status</label>
                             <select id="bulkFeeStatusFilter">
                                 <option value="all">Full Status</option>
@@ -950,6 +956,25 @@
             return cls ? cls.name : 'Selected Class';
         }
 
+        function normalizeFeeCampus(value) {
+            return String(value || 'Main Campus').trim() || 'Main Campus';
+        }
+
+        function getSelectedFeeCampus() {
+            return document.getElementById('bulkFeeCampusFilter')?.value || 'all';
+        }
+
+        function studentMatchesFeeCampus(student, campusName = getSelectedFeeCampus()) {
+            const selectedCampus = String(campusName || 'all').trim();
+            if (!selectedCampus || selectedCampus === 'all') return true;
+            return normalizeFeeCampus(student?.campusName).toLowerCase() === selectedCampus.toLowerCase();
+        }
+
+        function getFeeCampusLabel(campusName = getSelectedFeeCampus()) {
+            const selectedCampus = String(campusName || 'all').trim();
+            return selectedCampus && selectedCampus !== 'all' ? selectedCampus : 'All Campuses';
+        }
+
         function getApplicableFeeMonths(student) {
             let admissionMonthIndex = 0;
             let admissionYear = new Date().getFullYear();
@@ -1013,7 +1038,7 @@
             }, { pendingMonths: [], pendingAmount: 0, paidAmount: 0 });
         }
 
-        function getFeesStudentsForClass(classId, term = '') {
+        function getFeesStudentsForClass(classId, term = '', campusName = getSelectedFeeCampus()) {
             const students = (getData(STORAGE_KEY_STUDENTS) || []).filter((s) => !isStudentTerminated(s));
             let filteredStudents = [];
 
@@ -1022,6 +1047,8 @@
             } else {
                 filteredStudents = students.filter(s => studentMatchesFeeClass(s, classId));
             }
+
+            filteredStudents = filteredStudents.filter((student) => studentMatchesFeeCampus(student, campusName));
 
             const normalizedTerm = String(term || '').toLowerCase().trim();
             if (!normalizedTerm) return filteredStudents;
@@ -1033,8 +1060,8 @@
             );
         }
 
-        function getBulkFeeReportRows(classId, statusFilter) {
-            return getFeesStudentsForClass(classId).map((student) => {
+        function getBulkFeeReportRows(classId, statusFilter, campusName = getSelectedFeeCampus()) {
+            return getFeesStudentsForClass(classId, '', campusName).map((student) => {
                 const summary = getStudentFeeSummary(student);
                 const pendingDetails = getStudentPendingFeeDetails(student);
                 const isPaid = summary.pendingAmount <= 0 && summary.totalAmount > 0;
@@ -1055,25 +1082,68 @@
 
         function initializeBulkFeeFilters() {
             const classSelect = document.getElementById('bulkFeeClassFilter');
+            const campusSelect = document.getElementById('bulkFeeCampusFilter');
             const statusSelect = document.getElementById('bulkFeeStatusFilter');
-            if (!classSelect || !statusSelect) return;
+            if (!classSelect || !campusSelect || !statusSelect) return;
 
             classSelect.innerHTML = '<option value="all">All Classes</option>' + feeClasses.map((cls) => (
                 `<option value="${escapeFeeHtml(cls.id)}">${escapeFeeHtml(cls.name)}</option>`
             )).join('');
 
-            classSelect.addEventListener('change', updateBulkFeeSummary);
+            populateFeeCampusFilter();
+
+            classSelect.addEventListener('change', handleFeeFilterChange);
+            campusSelect.addEventListener('change', handleFeeFilterChange);
             statusSelect.addEventListener('change', updateBulkFeeSummary);
             updateBulkFeeSummary();
+        }
+
+        function populateFeeCampusFilter() {
+            const campusSelect = document.getElementById('bulkFeeCampusFilter');
+            if (!campusSelect) return;
+
+            const previousValue = campusSelect.value || 'all';
+            const campuses = Array.from(new Set((getData(STORAGE_KEY_STUDENTS) || [])
+                .map((student) => normalizeFeeCampus(student?.campusName))
+                .filter(Boolean)))
+                .sort((a, b) => a.localeCompare(b));
+
+            campusSelect.innerHTML = '<option value="all">All Campuses</option>' + campuses
+                .map((campus) => `<option value="${escapeFeeHtml(campus)}">${escapeFeeHtml(campus)}</option>`)
+                .join('');
+
+            campusSelect.value = campuses.includes(previousValue) ? previousValue : 'all';
+        }
+
+        function handleFeeFilterChange() {
+            updateBulkFeeSummary();
+
+            const tableView = document.getElementById('feesTableView');
+            const recordView = document.getElementById('studentFeeRecordView');
+            const gridView = document.getElementById('feesGridView');
+
+            if (recordView?.classList.contains('active')) {
+                backToStudentList();
+                return;
+            }
+
+            if (tableView?.classList.contains('active')) {
+                const classId = tableView.dataset.classId || 'all';
+                renderClassStudentList(classId, document.getElementById('feeSearchInput')?.value.toLowerCase() || '');
+                return;
+            }
+
+            if (gridView) renderFeesClassGrid();
         }
 
         function updateBulkFeeSummary() {
             const summaryEl = document.getElementById('bulkFeeSummary');
             const classId = document.getElementById('bulkFeeClassFilter')?.value || 'all';
+            const campusName = getSelectedFeeCampus();
             const statusFilter = document.getElementById('bulkFeeStatusFilter')?.value || 'all';
             if (!summaryEl) return;
 
-            const rows = getBulkFeeReportRows(classId, statusFilter);
+            const rows = getBulkFeeReportRows(classId, statusFilter, campusName);
             const paidTotal = rows.reduce((sum, row) => sum + row.summary.paidAmount, 0);
             const pendingTotal = rows.reduce((sum, row) => sum + row.summary.pendingAmount, 0);
             const paidStudents = rows.filter((row) => row.status === 'Paid').length;
@@ -1081,6 +1151,7 @@
 
             summaryEl.innerHTML = `
                 <span>Selected: <strong>${escapeFeeHtml(getFeeClassLabel(classId))}</strong></span>
+                <span>Campus: <strong>${escapeFeeHtml(getFeeCampusLabel(campusName))}</strong></span>
                 <span>Students: <strong>${rows.length}</strong></span>
                 <span>Paid Students: <strong>${paidStudents}</strong></span>
                 <span>Pending Students: <strong>${pendingStudents}</strong></span>
@@ -1091,14 +1162,16 @@
 
         function printBulkFeeStatusReport() {
             const classId = document.getElementById('bulkFeeClassFilter')?.value || 'all';
+            const campusName = getSelectedFeeCampus();
             const statusFilter = document.getElementById('bulkFeeStatusFilter')?.value || 'all';
             const classLabel = getFeeClassLabel(classId);
+            const campusLabel = getFeeCampusLabel(campusName);
             const statusLabel = statusFilter === 'paid' ? 'Paid Fees' : statusFilter === 'pending' ? 'Pending Fees' : 'Full Fee Status';
             const reportDate = new Date().toLocaleDateString('en-GB');
-            const rows = getBulkFeeReportRows(classId, statusFilter);
+            const rows = getBulkFeeReportRows(classId, statusFilter, campusName);
 
             if (!rows.length) {
-                alert('No fee records found for the selected class and status.');
+                alert('No fee records found for the selected class, campus, and status.');
                 return;
             }
 
@@ -1169,7 +1242,7 @@
                     <div class="report-header">
                         <div>
                             <h1>${escapeFeeHtml(statusLabel)}</h1>
-                            <div class="meta">Class: ${escapeFeeHtml(classLabel)}</div>
+                            <div class="meta">Class: ${escapeFeeHtml(classLabel)} | Campus: ${escapeFeeHtml(campusLabel)}</div>
                         </div>
                         <div class="meta">
                             Apexiums School System<br>
@@ -1227,6 +1300,7 @@
             const classTitle = document.getElementById('selectedClassTitle').innerText || 'Students';
             const reportDate = new Date().toLocaleDateString('en-GB');
 
+            const campusLabel = getFeeCampusLabel();
             const unpaidStudents = getFeesStudentsForClass(classId, term)
                 .map((student) => ({
                     student,
@@ -1292,7 +1366,7 @@
                     <div class="report-header">
                         <div>
                             <h1>Unpaid Fee List</h1>
-                            <div class="meta">${escapeFeeHtml(classTitle)}${term ? ` | Search: ${escapeFeeHtml(term)}` : ''}</div>
+                            <div class="meta">${escapeFeeHtml(classTitle)} | Campus: ${escapeFeeHtml(campusLabel)}${term ? ` | Search: ${escapeFeeHtml(term)}` : ''}</div>
                         </div>
                         <div class="meta">
                             Apexiums School System<br>
@@ -1337,7 +1411,10 @@
 
         function renderFeesClassGrid() {
             const grid = document.getElementById('feesClassGrid');
-            const students = (getData(STORAGE_KEY_STUDENTS) || []).filter((s) => !isStudentTerminated(s));
+            populateFeeCampusFilter();
+            const students = (getData(STORAGE_KEY_STUDENTS) || [])
+                .filter((s) => !isStudentTerminated(s))
+                .filter((s) => studentMatchesFeeCampus(s));
             grid.innerHTML = '';
 
             const allCard = document.createElement('div');
