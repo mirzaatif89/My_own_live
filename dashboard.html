@@ -4,8 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - My own Science school</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Dashboard - Myownschool</title>
+    <link rel="icon" type="image/png" href="images/logo.jpeg">
+    <link rel="stylesheet" href="style.css?v=20260627-welcome-logo">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
@@ -105,6 +106,142 @@
             padding: 0.45rem 0.7rem;
             font-size: 0.78rem;
         }
+
+        .dashboard-email-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.45rem;
+            border: none;
+            border-radius: 8px;
+            background: var(--primary-color);
+            color: #fff;
+            min-height: 34px;
+            padding: 0.38rem 0.75rem;
+            font-weight: 750;
+            font-size: 0.8rem;
+            cursor: pointer;
+            box-shadow: var(--shadow-sm);
+            white-space: nowrap;
+            width: min(100%, 200px);
+        }
+
+        .dashboard-email-btn:hover {
+            background: var(--primary-dark);
+        }
+
+        .dashboard-email-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        .dashboard-header {
+            align-items: center;
+            margin-bottom: 1.15rem;
+        }
+
+        .dashboard-header-actions {
+            display: grid;
+            grid-template-columns: minmax(150px, 200px) minmax(150px, 200px) 34px;
+            align-items: center;
+            justify-content: end;
+            gap: 0.55rem;
+            margin-left: auto;
+        }
+
+        .dashboard-campus-select {
+            width: min(100%, 200px);
+            min-height: 34px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: #fff;
+            color: var(--text-primary);
+            padding: 0.38rem 0.65rem;
+            font-size: 0.82rem;
+            font-weight: 650;
+        }
+
+        .dashboard-header-actions .notification-bell {
+            margin-top: 0 !important;
+            width: 34px;
+            height: 34px;
+            justify-content: center;
+        }
+
+        #dashboardStatsGrid {
+            grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+            gap: 0.85rem;
+            align-items: stretch;
+            max-width: 1068px;
+        }
+
+        #dashboardStatsGrid .card {
+            display: flex;
+            flex-direction: column;
+            min-height: 104px;
+            height: 126px;
+            padding: 0.95rem 1rem;
+            border-radius: 8px;
+        }
+
+        #dashboardStatsGrid .card-title {
+            font-size: 0.76rem;
+            margin-bottom: 0.42rem;
+            padding-right: 2.4rem;
+        }
+
+        #dashboardStatsGrid .card-value {
+            font-size: 1.35rem;
+            line-height: 2.1;
+            margin-bottom: 0.3rem;
+        }
+
+        #dashboardStatsGrid .card-trend {
+            font-size: 0.76rem;
+            line-height: 1.2;
+            margin-top: auto;
+        }
+
+        #dashboardStatsGrid .card-icon {
+            width: 34px;
+            height: 34px;
+            right: 0.75rem;
+            top: 0.75rem;
+        }
+
+        .dashboard-revenue-card .card-value {
+            font-size: 1.35rem;
+            line-height: 1.15;
+            overflow-wrap: anywhere;
+        }
+
+        .dashboard-revenue-card .card-trend {
+            flex-wrap: wrap;
+            line-height: 1.35;
+        }
+
+        @media (max-width: 980px) {
+            .dashboard-header-actions {
+                width: 100%;
+                grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+            }
+
+            .dashboard-email-btn,
+            .dashboard-campus-select {
+                width: 100% !important;
+                max-width: none !important;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .dashboard-header-actions {
+                grid-template-columns: 1fr;
+            }
+
+            .dashboard-header-actions .notification-bell {
+                justify-self: start;
+            }
+        }
     </style>
 </head>
 
@@ -113,11 +250,7 @@
     <div class="dashboard-container">
         <aside class="sidebar">
             <div class="logo-section">
-                <i data-lucide="graduation-cap" style="font-size: 2.5rem; margin-bottom: 0.5rem;"></i>
-                <div style="display: flex; flex-direction: column; align-items: center; gap: 0;">
-                    <span style="font-size: 1rem; line-height: 1.2;">Apexiums School</span>
-                    <span style="font-size: 1rem; line-height: 1.2;">System</span>
-                </div>
+                <img class="sidebar-logo-img" src="images/logo.jpeg" alt="Myownschool logo">
             </div>
 
             <nav class="nav-links">
@@ -190,13 +323,16 @@
 
         <!-- Main Content -->
         <main class="main-content">
-            <header class="header">
+            <header class="header dashboard-header">
                 <h1>Overview</h1>
-                <div class="header-actions">
-                    <div class="search-bar" style="width: 100%; max-width: 300px;">
-                        <i data-lucide="search" size="18" style="color: var(--text-secondary);"></i>
-                        <input type="text" id="dashSearch" placeholder="Search students...">
-                    </div>
+                <div class="header-actions dashboard-header-actions">
+                    <button type="button" class="dashboard-email-btn" id="dashboardExecuteEmailsBtn" onclick="executeAllDashboardEmails()">
+                        <i data-lucide="mail-check" size="18"></i>
+                        Execute All Emails
+                    </button>
+                    <select id="dashboardCampusFilter" class="dashboard-campus-select" aria-label="Select campus">
+                        <option value="all">All Campuses</option>
+                    </select>
                     <div class="notification-bell" id="notificationBell" style="position: relative; margin-top: 1rem;">
                         <i data-lucide="bell" size="24"></i>
                         <span class="notification-badge" id="notifBadge" style="background-color: #ef4444; color: white; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: bold;">0</span>
@@ -249,11 +385,11 @@
                     </div>
                 </a>
 
-                <a href="revenue.html" class="card" data-dashboard-card>
+                <a href="revenue.html" class="card dashboard-revenue-card" data-dashboard-card>
                     <div class="card-title">Total Revenue</div>
                     <div class="card-value" id="dashRevenue">...</div>
-                    <div class="card-trend trend-up">
-                        <i data-lucide="dollar-sign" size="16"></i> Collected Fees
+                    <div class="card-trend trend-up" id="dashRevenueDetail">
+                        Loading fee payments
                     </div>
                     <div class="card-icon">
                         <i data-lucide="trending-up"></i>
@@ -271,6 +407,27 @@
                     </div>
                 </div>
 
+                <a href="complain_box.html" class="card" data-dashboard-card>
+                    <div class="card-title">Total Complaints</div>
+                    <div class="card-value" id="dashComplaintCount">...</div>
+                    <div class="card-trend trend-up" id="dashComplaintDetail">
+                        <i data-lucide="message-square" size="16"></i> Complaints received
+                    </div>
+                    <div class="card-icon">
+                        <i data-lucide="message-square"></i>
+                    </div>
+                </a>
+
+                <a href="banners.html" class="card" data-dashboard-card>
+                    <div class="card-title">Live Banners</div>
+                    <div class="card-value" id="dashLiveBannerCount">...</div>
+                    <div class="card-trend trend-up" id="dashLiveBannerDetail">
+                        <i data-lucide="image" size="16"></i> Active now
+                    </div>
+                    <div class="card-icon">
+                        <i data-lucide="image"></i>
+                    </div>
+                </a>
 
             </div>
 
@@ -307,9 +464,53 @@
         </div>
     </div>
 
-    <script src="auth.js"></script>
-    <script src="script.js"></script>
+    <script src="auth.js?v=20260627-welcome-logo"></script>
+    <script src="script.js?v=20260705-global-campus-filter"></script>
     <script>
+        async function executeAllDashboardEmails() {
+            const button = document.getElementById('dashboardExecuteEmailsBtn');
+            const previousHtml = button ? button.innerHTML : '';
+            if (button) {
+                button.disabled = true;
+                button.innerHTML = '<i data-lucide="loader-circle" size="18"></i> Executing...';
+                if (window.lucide) lucide.createIcons();
+            }
+
+            try {
+                const token = sessionStorage.getItem('eduCore_token') || '';
+                const response = await fetch(`${API_BASE_URL}/email/execute-all`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(token ? { Authorization: `Bearer ${token}` } : {})
+                    },
+                    body: JSON.stringify({ force: true })
+                });
+                const result = await parseJsonResponse(response, 'All emails could not be executed.');
+                if (!response.ok || result?.success === false) {
+                    throw new Error(result?.message || 'All emails could not be executed.');
+                }
+
+                const details = result.result || {};
+                const message = [
+                    `Total sent: ${result.totalSent || 0}`,
+                    `Failed: ${result.totalFailed || 0}`,
+                    `Pending fee: ${details.pendingFees?.sent || 0}`,
+                    `Birthday: ${details.birthdays?.sent || 0}`,
+                    `Special notices: ${details.specialNotices?.sent || 0}`
+                ].join('\n');
+                alert(message);
+            } catch (error) {
+                alert(`Email execution failed: ${error.message || error}`);
+            } finally {
+                if (button) {
+                    button.disabled = false;
+                    button.innerHTML = previousHtml;
+                    if (window.lucide) lucide.createIcons();
+                }
+            }
+        }
+
         lucide.createIcons();
     </script>
 </body>

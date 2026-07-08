@@ -34,7 +34,8 @@ function resolvePageFileByRoute(routeName = '') {
     const normalized = String(routeName || '').trim().toLowerCase();
     if (!normalized) return '';
     if (RESERVED_ROUTE_NAMES.has(normalized)) return '';
-    if (normalized === 'login' || normalized === 'index') return 'index.html';
+    if (normalized === 'login') return 'login.html';
+    if (normalized === 'index' || normalized === 'website') return 'index.html';
     if (!/^[a-z0-9_-]+$/i.test(normalized)) return '';
 
     const candidate = `${normalized}.html`;
@@ -43,18 +44,18 @@ function resolvePageFileByRoute(routeName = '') {
 }
 
 app.get('/', (_req, res) => {
-    res.redirect(302, '/login');
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 app.get('/:pageName([a-zA-Z0-9_-]+).html', (req, res, next) => {
     const pageName = String(req.params.pageName || '').toLowerCase();
     if (RESERVED_ROUTE_NAMES.has(pageName)) return next();
 
-    const targetRoute = pageName === 'index' ? 'login' : pageName;
+    const targetRoute = pageName === 'index' || pageName === 'website' ? '' : pageName;
     const targetFile = resolvePageFileByRoute(targetRoute);
-    if (!targetFile) return next();
+    if (!targetFile && targetRoute) return next();
 
-    return res.redirect(302, `/${targetRoute}`);
+    return res.redirect(302, targetRoute ? `/${targetRoute}` : '/');
 });
 
 app.get('/:routeName([a-zA-Z0-9_-]+)', (req, res, next) => {

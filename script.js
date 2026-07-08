@@ -8,12 +8,14 @@ const STORAGE_KEY_AUTH = 'eduCore_auth';
 const STORAGE_KEY_TEACHER_ATTENDANCE = 'eduCore_teacher_attendance';
 const STORAGE_KEY_STUDENT_ATTENDANCE_CACHE = 'eduCore_student_attendance';
 const STORAGE_KEY_STAFF = 'eduCore_staff';
+const STORAGE_KEY_FAMILIES = 'eduCore_families';
 const STORAGE_KEY_TEACHER_SALARIES = 'eduCore_teacher_salaries';
 const STORAGE_KEY_USERS = 'eduCore_users'; // New Key for student/teacher credentials
 const STORAGE_KEY_PROMOTION_HISTORY = 'eduCore_promotion_history';
 const STORAGE_KEY_SPECIAL_NOTICES = 'eduCore_special_notices';
-const STORAGE_KEY_CLASS_FEES = 'eduCore_class_fees';
-const STORAGE_KEY_STUDENT_PRINT_FIELDS = 'eduCore_student_print_fields';
+const STORAGE_KEY_ALUMNI = 'eduCore_alumni';
+const STORAGE_KEY_COMPLAINTS = 'eduCore_complaints';
+const SIDEBAR_SCROLL_KEY = 'eduCore_sidebar_scroll_position';
 let teacherScheduleDraft = [];
 
 // === REAL-TIME SQL CONFIGURATION ===
@@ -26,13 +28,17 @@ const isLocalhost = window.location.hostname === 'localhost' ||
     window.location.protocol === 'file:';
 
 const BACKEND_URL = isLocalhost
-    ? (window.location.protocol === 'file:' ? 'http://localhost:3000' : `${window.location.protocol}//${window.location.hostname}:3000`)
+    ? (window.location.protocol === 'file:' ? 'http://localhost:3000' : window.location.origin)
     : (window.ENV_BACKEND_URL || window.location.origin);
 
 const API_BASE_URL = `${BACKEND_URL}/api`;
 let socket;
 let activePortalSessionsCache = [];
-const DEFAULT_CAMPUS_NAMES = ['Main Campus', 'Ali campus', 'Fatima Campus'];
+let dashboardActiveSessionsInterval = null;
+let activeSessionsModalEventsBound = false;
+const DASHBOARD_CAMPUS_FILTER_KEY = 'eduCore_dashboard_campus_filter';
+const GLOBAL_CAMPUS_FILTER_KEY = DASHBOARD_CAMPUS_FILTER_KEY;
+const DEFAULT_CAMPUS_NAMES = ['Main Campus'];
 const DEFAULT_STUDENT_CLASS_ORDER = [
     'Play Group', 'Nursery', 'Prep',
     'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5',
@@ -40,17 +46,49 @@ const DEFAULT_STUDENT_CLASS_ORDER = [
 ];
 let studentQuickFilterBranchCampuses = [];
 let studentColumnSearchFilter = null;
+let classFeeDefaults = {};
+let classFeeHistory = [];
+let classFeeEditingHistoryId = '';
+const STORAGE_KEY_CLASS_FEES = 'eduCore_class_fees';
+const STORAGE_KEY_CLASS_FEE_HISTORY = 'eduCore_class_fee_history';
+let branchRecordsCache = [];
 const FALLBACK_ROUTE_TO_PAGE = {
-    login: 'index.html',
+    login: 'login.html',
     index: 'index.html',
+    home: 'index.html',
     dashboard: 'dashboard.html',
     students: 'students.html',
+    families: 'families.html',
+    student_scheduling: 'student_scheduling.html',
+    assignments: 'assignments.html',
+    assignment_uploading: 'assignment_uploading.html',
+    student_timetable: 'student_timetable.html',
+    student_diary: 'student_diary.html',
+    student_leave_requests: 'student_leave_requests.html',
+    student_courses: 'student_courses.html',
+    quiz_uploading: 'quiz_uploading.html',
+    lecture_uploading: 'lecture_uploading.html',
+    banners: 'banners.html',
     teachers: 'teachers.html',
+    stuck_off: 'stuck_off.html',
+    teacher_scheduling: 'teacher_scheduling.html',
+    teacher_timetable: 'teacher_timetable.html',
+    teacher_assigned_classes: 'teacher_assigned_classes.html',
+    teacher_leave_requests: 'teacher_leave_requests.html',
     staff: 'staff.html',
     classes: 'classes.html',
+    set_fee: 'set_fee.html',
     fees: 'fees.html',
-    set_fees: 'set_fees.html',
     fee_challan: 'fee_challan.html',
+    remaining_charges: 'remaining_charges.html',
+    payment_history: 'payment_history.html',
+    fee_logos: 'fee_logos.html',
+    bills: 'bills.html',
+    certificate: 'certificate.html',
+    complain_box: 'complain_box.html',
+    diary: 'diary.html',
+    visitor_books: 'visitor_books.html',
+    annual_charges: 'annual_charges.html',
     teacher_salaries: 'teacher_salaries.html',
     student_attendance: 'student_attendance.html',
     teacher_attendance: 'teacher_attendance.html',
@@ -59,12 +97,16 @@ const FALLBACK_ROUTE_TO_PAGE = {
     notifications: 'notifications.html',
     special_notices: 'special_notices.html',
     exams: 'exams.html',
+    exam_schedule: 'exam_schedule.html',
+    exam_result: 'exam_result.html',
+    exam_result_history: 'exam_result_history.html',
     revenue: 'revenue.html',
     settings: 'settings.html',
     permissions: 'permissions.html',
     branch_registration: 'branch_registration.html',
     aboutme: 'aboutme.html',
-    student_portal: 'student_portal.html'
+    student_portal: 'student_portal.html',
+    teacher_portal: 'teacher_portal.html'
 };
 
 function normalizeClientPageName(pageValue = '') {
@@ -101,8 +143,9 @@ function toRoutePath(pageName = '') {
         return window.eduCoreAuth.toRoutePath(pageName);
     }
     const normalizedPage = normalizeClientPageName(pageName);
-    if (normalizedPage === 'index.html') return '/login';
-    return `/${normalizedPage.replace(/\.html$/i, '')}`;
+    if (normalizedPage === 'index.html') return '/';
+    if (normalizedPage === 'login.html') return '/login';
+    return normalizedPage;
 }
 
 (function installAppPopups() {
@@ -239,23 +282,32 @@ if (typeof io !== 'undefined') {
 
     // Listen for Real-Time SQL Updates
     socket.on('students_update', (data) => {
-        localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(mergeStudentRecords(data)));
+        const serverStudents = Array.isArray(data) ? mergeStudentRecords(data, { preserveLocalOnly: false }) : [];
+        localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(getCurrentUserScopedRecords(serverStudents)));
         if (isCurrentPage('students.html')) renderStudents();
+        if (isCurrentPage('stuck_off.html')) renderStuckOffPage();
+        if (isCurrentPage('dashboard.html')) updateDashboardStats();
     });
 
     socket.on('teachers_update', (data) => {
-        localStorage.setItem(STORAGE_KEY_TEACHERS, JSON.stringify(mergeTeacherRecords(data)));
+        localStorage.setItem(STORAGE_KEY_TEACHERS, JSON.stringify(getCurrentUserScopedRecords(mergeTeacherRecords(data))));
         if (isCurrentPage('teachers.html')) renderTeachers();
+        if (isCurrentPage('stuck_off.html')) renderStuckOffPage();
+        if (isCurrentPage('dashboard.html')) updateDashboardStats();
     });
 
     socket.on('staff_update', (data) => {
-        localStorage.setItem(STORAGE_KEY_STAFF, JSON.stringify(mergeStaffRecords(data)));
+        localStorage.setItem(STORAGE_KEY_STAFF, JSON.stringify(getCurrentUserScopedRecords(mergeStaffRecords(data))));
         if (isCurrentPage('staff.html')) renderStaff();
+        if (isCurrentPage('dashboard.html')) updateDashboardStats();
     });
 
-    socket.on('class_fees_update', (data) => {
-        localStorage.setItem(STORAGE_KEY_CLASS_FEES, JSON.stringify(normalizeClassFeeRecords(data)));
-        if (isCurrentPage('set_fees.html')) renderClassFeeSettings();
+    socket.on('banners_update', (data) => {
+        if (isCurrentPage('dashboard.html')) updateDashboardBannerStats(data);
+    });
+
+    socket.on('fee_payment_update', () => {
+        if (isCurrentPage('dashboard.html')) updateDashboardRevenueStats();
     });
 
     socket.on('session_forced_logout', (payload) => {
@@ -293,6 +345,8 @@ async function syncToSQL(endpoint, data) {
 async function syncToSQLDetailed(endpoint, data) {
     try {
         const token = sessionStorage.getItem('eduCore_token') || '';
+        console.log(`Syncing ${endpoint}: Sending ${Array.isArray(data) ? data.length : 1} items`);
+
         const response = await fetch(`${API_BASE_URL}/${endpoint}`, {
             method: 'POST',
             headers: {
@@ -302,15 +356,20 @@ async function syncToSQLDetailed(endpoint, data) {
             body: JSON.stringify(data)
         });
 
+        console.log(`API response status for ${endpoint}: ${response.status}`);
+
         const result = await parseJsonResponse(response, 'Server sync failed.');
 
         if (!response.ok || result?.success === false) {
-            throw new Error(result?.message || result?.error || 'Server sync failed.');
+            const errorMsg = result?.message || result?.error || 'Server sync failed.';
+            console.error(`Sync failed for ${endpoint}:`, errorMsg);
+            throw new Error(errorMsg);
         }
 
+        console.log(`Sync successful for ${endpoint}:`, result);
         return { success: true, result };
     } catch (e) {
-        console.warn(`SQL sync failed for ${endpoint}: ${e.message}`);
+        console.error(`SQL sync failed for ${endpoint}: ${e.message}`);
         return { success: false, error: e.message };
     }
 }
@@ -327,59 +386,114 @@ async function initialSQLSync() {
     try {
         const token = sessionStorage.getItem('eduCore_token') || '';
         const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+        const isBranchUser = getLoggedInUser()?.role === 'Branch';
 
         const sRes = await fetch(`${API_BASE_URL}/students`, { headers: authHeaders });
         if (sRes.ok) {
             const data = await sRes.json();
-            const mergedStudents = mergeStudentRecords(data);
+            const mergedStudents = isBranchUser ? getCurrentUserScopedRecords(data) : mergeStudentRecords(data, { preserveLocalOnly: false });
             localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(mergedStudents));
-            const missingStudents = getMissingRecords(mergedStudents, data);
-            if (missingStudents.length) {
-                await syncToSQL('students', missingStudents);
-            }
             if (typeof renderStudents === 'function') renderStudents();
+            if (typeof renderStuckOffPage === 'function') renderStuckOffPage();
+            if (typeof updateDashboardStats === 'function' && isCurrentPage('dashboard.html')) updateDashboardStats();
         }
 
         const tRes = await fetch(`${API_BASE_URL}/teachers`, { headers: authHeaders });
         if (tRes.ok) {
             const data = await tRes.json();
-            const mergedTeachers = mergeTeacherRecords(data);
+            const mergedTeachers = isBranchUser ? getCurrentUserScopedRecords(data) : mergeTeacherRecords(data);
             localStorage.setItem(STORAGE_KEY_TEACHERS, JSON.stringify(mergedTeachers));
-            const missingTeachers = getMissingRecords(mergedTeachers, data);
+            const missingTeachers = isBranchUser ? [] : getMissingRecords(mergedTeachers, data);
             if (missingTeachers.length) {
                 await syncToSQL('teachers', missingTeachers);
             }
             if (typeof renderTeachers === 'function') renderTeachers();
+            if (typeof renderStuckOffPage === 'function') renderStuckOffPage();
+            if (typeof updateDashboardStats === 'function' && isCurrentPage('dashboard.html')) updateDashboardStats();
         }
 
         const staffRes = await fetch(`${API_BASE_URL}/staff`, { headers: authHeaders });
         if (staffRes.ok) {
             const data = await staffRes.json();
-            const mergedStaff = mergeStaffRecords(data);
+            const mergedStaff = isBranchUser ? getCurrentUserScopedRecords(data) : mergeStaffRecords(data);
             localStorage.setItem(STORAGE_KEY_STAFF, JSON.stringify(mergedStaff));
-            const missingStaff = getMissingRecords(mergedStaff, data);
+            const missingStaff = isBranchUser ? [] : getMissingRecords(mergedStaff, data);
             if (missingStaff.length) {
                 await syncToSQL('staff', missingStaff);
             }
             if (typeof renderStaff === 'function') renderStaff();
-        }
-
-        const classFeesRes = await fetch(`${API_BASE_URL}/class-fees`, { headers: authHeaders });
-        if (classFeesRes.ok) {
-            const data = await classFeesRes.json();
-            localStorage.setItem(STORAGE_KEY_CLASS_FEES, JSON.stringify(normalizeClassFeeRecords(data)));
-            if (typeof renderClassFeeSettings === 'function') renderClassFeeSettings();
-            applySelectedClassFeeToStudentForm({ onlyIfEmpty: true });
+            if (typeof updateDashboardStats === 'function' && isCurrentPage('dashboard.html')) updateDashboardStats();
         }
 
         await Promise.all([
             loadStudentAttendanceFromSQL(),
-            loadTeacherAttendanceFromSQL()
+            loadTeacherAttendanceFromSQL(),
+            loadTeacherSalariesFromSQL()
         ]);
     } catch (e) {
         console.warn("SQL Server Connection Failed: Ensure 'node server.js' is running and MySQL is active.");
         console.log("SQL Initial Sync skipped (server offline). Using LocalStorage fallback.");
+        if (typeof updateDashboardStats === 'function' && isCurrentPage('dashboard.html')) updateDashboardStats();
     }
+}
+
+async function refreshStudentsFromSQL() {
+    const token = sessionStorage.getItem('eduCore_token') || '';
+    console.log('Fetching students from SQL API...');
+
+    const response = await fetch(`${API_BASE_URL}/students`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
+
+    console.log(`API response status: ${response.status}`);
+
+    const result = await parseJsonResponse(response, 'Students could not be loaded.');
+
+    if (!response.ok || !Array.isArray(result)) {
+        throw new Error(result?.message || result?.error || 'Students could not be loaded.');
+    }
+
+    console.log(`API returned ${Array.isArray(result) ? result.length : 0} students`);
+
+    const mergedStudents = getLoggedInUser()?.role === 'Branch'
+        ? getCurrentUserScopedRecords(result)
+        : mergeStudentRecords(result, { preserveLocalOnly: false });
+    console.log(`After merge: ${mergedStudents.length} students total`);
+
+    localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(mergedStudents));
+    return mergedStudents;
+}
+
+async function refreshTeachersFromSQL() {
+    const token = sessionStorage.getItem('eduCore_token') || '';
+    const response = await fetch(`${API_BASE_URL}/teachers`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
+    const result = await parseJsonResponse(response, 'Teachers could not be loaded.');
+    if (!response.ok || !Array.isArray(result)) {
+        throw new Error(result?.message || result?.error || 'Teachers could not be loaded.');
+    }
+    const mergedTeachers = getLoggedInUser()?.role === 'Branch'
+        ? getCurrentUserScopedRecords(result)
+        : mergeTeacherRecords(result);
+    localStorage.setItem(STORAGE_KEY_TEACHERS, JSON.stringify(mergedTeachers));
+    return mergedTeachers;
+}
+
+async function refreshStaffFromSQL() {
+    const token = sessionStorage.getItem('eduCore_token') || '';
+    const response = await fetch(`${API_BASE_URL}/staff`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
+    const result = await parseJsonResponse(response, 'Staff could not be loaded.');
+    if (!response.ok || !Array.isArray(result)) {
+        throw new Error(result?.message || result?.error || 'Staff could not be loaded.');
+    }
+    const mergedStaff = getLoggedInUser()?.role === 'Branch'
+        ? getCurrentUserScopedRecords(result)
+        : mergeStaffRecords(result);
+    localStorage.setItem(STORAGE_KEY_STAFF, JSON.stringify(mergedStaff));
+    return mergedStaff;
 }
 
 function normalizeAttendanceStatus(status) {
@@ -445,9 +559,14 @@ async function saveStudentAttendanceToSQLRecord(studentId, date, status) {
     const normalizedStatus = normalizeAttendanceStatus(status);
     const result = await syncToSQLDetailed('student-attendance', [{ studentId, date, status: normalizedStatus }]);
     if (result.success && result.result?.attendance) {
+        const attendance = normalizeStudentAttendanceStore(result.result.attendance);
+        const records = Array.isArray(attendance[studentId]) ? attendance[studentId] : [];
+        attendance[studentId] = records
+            .filter(item => item.date !== date)
+            .concat({ date, status: normalizedStatus });
         localStorage.setItem(
             STORAGE_KEY_STUDENT_ATTENDANCE_CACHE,
-            JSON.stringify(normalizeStudentAttendanceStore(result.result.attendance))
+            JSON.stringify(attendance)
         );
     }
     return result;
@@ -465,25 +584,159 @@ async function saveTeacherAttendanceToSQLRecord(teacherId, date, status) {
     return result;
 }
 
-// === FORCE RESET AUTH TO REQUESTED CREDENTIALS ===
+function isDateInLeaveRange(dateKey = '', fromDate = '', toDate = '') {
+    if (!dateKey || !fromDate) return false;
+    const target = new Date(`${dateKey}T00:00:00`);
+    const start = new Date(`${fromDate}T00:00:00`);
+    const end = new Date(`${toDate || fromDate}T00:00:00`);
+    if (Number.isNaN(target.getTime()) || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
+    return target >= start && target <= end;
+}
+
+async function approveMatchingLeaveRequestFromAttendance(applicantRole, applicantId, dateKey) {
+    const role = String(applicantRole || '').trim();
+    const id = String(applicantId || '').trim();
+    if (!role || !id || !dateKey || !['Student', 'Teacher'].includes(role)) return null;
+
+    const token = sessionStorage.getItem('eduCore_token') || '';
+    try {
+        const response = await fetch(`${API_BASE_URL}/leave-requests?role=${encodeURIComponent(role)}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        const result = await parseJsonResponse(response, 'Leave requests could not be loaded.');
+        if (!response.ok || !result?.success || !Array.isArray(result.leaveRequests)) {
+            throw new Error(result?.message || 'Leave requests could not be loaded.');
+        }
+
+        const request = result.leaveRequests.find((item) => (
+            String(item.applicantId || '') === id &&
+            String(item.status || 'Pending').toLowerCase() === 'pending' &&
+            isDateInLeaveRange(dateKey, item.fromDate, item.toDate)
+        ));
+        if (!request?.id) return null;
+
+        const reviewResponse = await fetch(`${API_BASE_URL}/leave-requests/${encodeURIComponent(request.id)}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            body: JSON.stringify({ status: 'Approved', reviewReason: '' })
+        });
+        const reviewResult = await parseJsonResponse(reviewResponse, 'Leave status could not be updated.');
+        if (!reviewResponse.ok || !reviewResult?.success) {
+            throw new Error(reviewResult?.message || 'Leave status could not be updated.');
+        }
+
+        const cacheKey = role === 'Student' ? 'eduCore_student_leave_requests' : 'eduCore_teacher_leave_requests';
+        const cached = getArrayData(cacheKey);
+        if (cached.length) {
+            const updated = cached.map((item) => String(item.id) === String(request.id) ? reviewResult.leaveRequest : item);
+            localStorage.setItem(cacheKey, JSON.stringify(updated));
+        }
+        return reviewResult.leaveRequest || request;
+    } catch (error) {
+        console.warn(`Matching ${role.toLowerCase()} leave approval failed: ${error.message}`);
+        return null;
+    }
+}
+
+// === LEGACY LOCAL AUTH CLEANUP ===
 (function forceResetAuth() {
-    const creds = { email: 'apexiumstechnologies@gmail.com', password: 'myownschool1122' };
-    localStorage.setItem(STORAGE_KEY_AUTH, JSON.stringify(creds));
-    // Clear any previous login failure states in session if they exist
+    let existing = {};
+    try {
+        existing = JSON.parse(localStorage.getItem(STORAGE_KEY_AUTH) || '{}') || {};
+    } catch (_error) {
+        existing = {};
+    }
+    localStorage.setItem(STORAGE_KEY_AUTH, JSON.stringify({ ...existing, email: existing.email || 'admin' }));
     sessionStorage.removeItem('login_attempts');
 })();
 
+function refreshPasswordToggleIcon(toggleBtn, isVisible) {
+    if (!toggleBtn) return;
+    toggleBtn.setAttribute('aria-label', isVisible ? 'Hide password' : 'Show password');
+    toggleBtn.setAttribute('aria-pressed', isVisible ? 'true' : 'false');
+    toggleBtn.setAttribute('title', isVisible ? 'Hide password' : 'Show password');
+    toggleBtn.innerHTML = `<i data-lucide="${isVisible ? 'eye-off' : 'eye'}"></i>`;
+    if (window.lucide && typeof window.lucide.createIcons === 'function') {
+        window.lucide.createIcons({
+            attrs: {
+                width: 18,
+                height: 18
+            }
+        });
+    }
+}
+
+function togglePasswordVisibility(targetId, toggleBtn) {
+    const passwordInput = document.getElementById(targetId);
+    if (!passwordInput) return false;
+    const shouldShowPassword = passwordInput.getAttribute('type') === 'password';
+    passwordInput.setAttribute('type', shouldShowPassword ? 'text' : 'password');
+    refreshPasswordToggleIcon(toggleBtn || document.querySelector(`[data-toggle-password="${targetId}"]`), shouldShowPassword);
+    passwordInput.focus({ preventScroll: true });
+    return false;
+}
+
+window.togglePasswordVisibility = togglePasswordVisibility;
+
+function bindPasswordToggles() {
+    document.querySelectorAll('[data-toggle-password]').forEach((toggleBtn) => {
+        const targetId = toggleBtn.getAttribute('data-toggle-password');
+        const passwordInput = document.getElementById(targetId);
+        if (!passwordInput) return;
+        refreshPasswordToggleIcon(toggleBtn, passwordInput.getAttribute('type') === 'text');
+    });
+
+    if (document.body?.dataset.passwordToggleBound === '1') return;
+    document.body.dataset.passwordToggleBound = '1';
+    document.addEventListener('click', (event) => {
+        const toggleBtn = event.target.closest('[data-toggle-password]');
+        if (!toggleBtn) return;
+        const targetId = toggleBtn.getAttribute('data-toggle-password');
+        event.preventDefault();
+        togglePasswordVisibility(targetId, toggleBtn);
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    applyGlobalBranding();
+    initializeDashboardHome();
 
     // Perform initial sync from SQL Server
     if (sessionStorage.getItem('eduCore_token')) {
         initialSQLSync();
     }
-    ensureBranchRegistrationNav();
-    ensureSetFeesNav();
-    ensureAttendanceNav();
-    ensureNotificationsNav();
-    ensureSpecialNoticesNav();
+    populateCampusDropdowns();
+    [
+        ensureBranchRegistrationNav,
+        ensureBannersNav,
+        ensureSchedulingNav,
+        ensureAdminRecordsNav,
+        ensureFacilityNav,
+        ensureAdminSidebarCompleteness,
+        ensureAttendanceNav,
+        ensureNotificationsNav,
+        ensureSpecialNoticesNav
+    ].forEach((initializer) => {
+        try {
+            initializer();
+        } catch (error) {
+            console.warn('Sidebar initializer skipped:', error);
+        }
+    });
+    renderAdminSidebarSequence();
+    applyGlobalBranding();
+    window.setTimeout(() => {
+        renderAdminSidebarSequence();
+        applyGlobalBranding();
+    }, 0);
+    window.setTimeout(() => {
+        renderAdminSidebarSequence();
+        applyGlobalBranding();
+    }, 250);
+    initializeSidebarScrollMemory();
     applyBranchScopedStudentsView();
     if (sessionStorage.getItem('eduCore_token')) {
         loadDesignationPermissionsForCurrentUser()
@@ -544,35 +797,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const loginForm = document.getElementById('loginForm');
 
     // === PASSWORD TOGGLE ===
-    document.querySelectorAll('[data-toggle-password]').forEach((toggleBtn) => {
-        const targetId = toggleBtn.getAttribute('data-toggle-password');
-        const passwordInput = document.getElementById(targetId);
-
-        if (!passwordInput) return;
-
-        toggleBtn.addEventListener('click', () => {
-            const shouldShowPassword = passwordInput.getAttribute('type') === 'password';
-            passwordInput.setAttribute('type', shouldShowPassword ? 'text' : 'password');
-            toggleBtn.setAttribute('aria-label', shouldShowPassword ? 'Hide password' : 'Show password');
-            toggleBtn.setAttribute('aria-pressed', shouldShowPassword ? 'true' : 'false');
-            toggleBtn.innerHTML = `<i data-lucide="${shouldShowPassword ? 'eye-off' : 'eye'}"></i>`;
-            if (window.lucide && window.lucide.createIcons) {
-                window.lucide.createIcons({
-                    attrs: {
-                        width: 18,
-                        height: 18
-                    }
-                });
-            }
-        });
-    });
+    bindPasswordToggles();
 
     if (loginForm) {
+        bindAdminForgotPassword();
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const username = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value.trim();
-            const btn = loginForm.querySelector('button');
+            const btn = loginForm.querySelector('button[type="submit"]');
             const originalBtnText = btn.innerText;
 
             btn.innerText = 'Verifying...';
@@ -615,21 +848,24 @@ document.addEventListener('DOMContentLoaded', () => {
                     loginTracking.count += 1;
                     loginTracking.lastLogin = new Date().toISOString();
                      localStorage.setItem('EDUCORE_LOGIN_TRACKING', JSON.stringify(loginTracking));
- 
+
                      pushNotification('System Access', `${result.user.role} logged in: ${result.user.fullName}`, 'login');
                     queueWelcomeAnimationForNextPage(result.user);
- 
+
                      btn.innerText = 'Redirecting...';
 
                     const getDefaultRoleHome = () => {
                         if (result.user.role === 'Admin') return 'dashboard.html';
                         if (result.user.role === 'Branch') return 'students.html';
                         if (result.user.role === 'Student') return 'student_portal.html';
+                        if (result.user.role === 'Teacher') return 'teacher_portal.html';
                         return 'dashboard.html';
                     };
 
                     const getPermissionHome = () => {
                         if (!result.permissions) return '';
+                        if (result.user.role === 'Student') return 'student_portal.html';
+                        if (result.user.role === 'Teacher') return 'teacher_portal.html';
                         const groupKey = result.user.groupKey || result.permissions.roleGroups?.[result.user.role];
                         const group = result.permissions.groups?.[groupKey];
                         const pageRegistry = window.eduCoreAuth?.pageRegistry || {};
@@ -667,25 +903,54 @@ document.addEventListener('DOMContentLoaded', () => {
     // === STUDENT PAGE ===
     const studentForm = document.getElementById('studentForm');
     if (studentForm) {
-        const existingStudents = getData(STORAGE_KEY_STUDENTS);
+        const existingStudents = getArrayData(STORAGE_KEY_STUDENTS);
         const normalizedStudents = mergeStudentRecords(existingStudents);
         if (JSON.stringify(existingStudents) !== JSON.stringify(normalizedStudents)) {
             localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(normalizedStudents));
         }
         renderStudents(); // Initial Load
+        refreshStudentsFromSQL()
+            .then(() => renderStudents())
+            .catch((error) => {
+                console.warn('Students could not be refreshed from database:', error.message);
+                renderStudents();
+            });
         loadStudentQuickFilterBranchCampuses();
-        studentForm.addEventListener('submit', handleStudentFormSubmit);
-        initializeStudentClassFeeAutofill();
+        loadClassFeeDefaults().then(() => {
+            bindStudentClassFeeAutoFill();
+            applyClassFeeDefaultToStudentForm();
+        }).catch(() => {
+            bindStudentClassFeeAutoFill();
+        });
+        bindStudentFormSubmit();
         const studentSearch = document.getElementById('studentSearchInput');
         const quickFilter = document.getElementById('studentQuickFilter');
         const printMode = document.getElementById('studentPrintMode');
+        const studentProfileImage = document.getElementById('studentProfileImage');
+        const studentNameInput = document.getElementById('fullName');
+        populateStudentFamilyOptions();
         bindStudentQuickFilterMultiSelect();
-        initializeStudentPrintFieldsControl();
+        if (studentProfileImage) {
+            studentProfileImage.addEventListener('change', handleStudentPhotoSelection);
+        }
+        if (studentNameInput) {
+            studentNameInput.addEventListener('input', () => {
+                const currentImage = document.querySelector('#studentPhotoPreview img')?.getAttribute('src') || '';
+                setStudentPhotoPreview(currentImage, studentNameInput.value);
+            });
+        }
         if (studentSearch) {
             studentSearch.addEventListener('input', () => {
                 studentColumnSearchFilter = null;
-                studentSearch.placeholder = 'Search by name, roll no, or student ID';
+                studentSearch.placeholder = 'Search';
                 renderStudents();
+            });
+            studentSearch.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    studentColumnSearchFilter = null;
+                    renderStudents();
+                }
             });
         }
         if (quickFilter) {
@@ -704,15 +969,39 @@ document.addEventListener('DOMContentLoaded', () => {
     const teacherForm = document.getElementById('teacherForm');
     if (teacherForm) {
         renderTeachers(); // Initial Load
-        teacherForm.addEventListener('submit', handleTeacherFormSubmit);
+        refreshTeachersFromSQL()
+            .then(() => renderTeachers())
+            .catch((error) => {
+                console.warn('Teachers could not be refreshed from database:', error.message);
+                renderTeachers();
+            });
+        bindTeacherFormSubmit();
         const tSearch = document.getElementById('teacherSearchInput');
         const tCampusFilter = document.getElementById('teacherCampusFilter');
         const tGenderFilter = document.getElementById('teacherGenderFilter');
+        const teacherProfileImage = document.getElementById('tProfileImage');
+        const teacherNameInput = document.getElementById('tFullName');
+        if (teacherProfileImage) {
+            teacherProfileImage.addEventListener('change', handleTeacherPhotoSelection);
+        }
+        if (teacherNameInput) {
+            teacherNameInput.addEventListener('input', () => {
+                const currentImage = document.querySelector('#teacherPhotoPreview img')?.getAttribute('src') || '';
+                setTeacherPhotoPreview(currentImage, teacherNameInput.value);
+            });
+        }
         if (tSearch) {
             tSearch.addEventListener('input', (e) => renderTeachers(e.target.value.toLowerCase()));
+            tSearch.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    renderTeachers(tSearch.value.toLowerCase());
+                }
+            });
         }
         if (tCampusFilter) {
             tCampusFilter.addEventListener('change', () => {
+                setSavedGlobalCampusFilter(tCampusFilter.value || 'all');
                 renderTeachers((tSearch?.value || '').toLowerCase());
             });
         }
@@ -727,10 +1016,33 @@ document.addEventListener('DOMContentLoaded', () => {
     const staffForm = document.getElementById('staffForm');
     if (staffForm) {
         renderStaff(); // Initial Load
-        staffForm.addEventListener('submit', handleStaffFormSubmit);
+        refreshStaffFromSQL()
+            .then(() => renderStaff())
+            .catch((error) => {
+                console.warn('Staff could not be refreshed from database:', error.message);
+                renderStaff();
+        });
+        bindStaffFormSubmit();
         const sSearch = document.getElementById('staffSearchInput');
+        const staffProfileImage = document.getElementById('sProfileImage');
+        const staffNameInput = document.getElementById('sFullName');
+        if (staffProfileImage) {
+            staffProfileImage.addEventListener('change', handleStaffPhotoSelection);
+        }
+        if (staffNameInput) {
+            staffNameInput.addEventListener('input', () => {
+                const currentImage = document.querySelector('#staffPhotoPreview img')?.getAttribute('src') || '';
+                setStaffPhotoPreview(currentImage, staffNameInput.value);
+            });
+        }
         if (sSearch) {
             sSearch.addEventListener('input', (e) => renderStaff(e.target.value.toLowerCase()));
+            sSearch.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    renderStaff(sSearch.value.toLowerCase());
+                }
+            });
         }
     }
 
@@ -742,17 +1054,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const cSearch = document.getElementById('classSearchInput');
         if (cSearch) {
             cSearch.addEventListener('input', (e) => renderClasses(e.target.value.toLowerCase()));
+            cSearch.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    renderClasses(cSearch.value.toLowerCase());
+                }
+            });
         }
-    }
-
-    // === SET FEES PAGE ===
-    const classFeeForm = document.getElementById('classFeeForm');
-    if (classFeeForm) {
-        renderClassFeeSettings();
-        loadClassFeesFromServer().finally(() => renderClassFeeSettings());
-        classFeeForm.addEventListener('submit', handleClassFeeFormSubmit);
-        const classFeeSearch = document.getElementById('classFeeSearchInput');
-        if (classFeeSearch) classFeeSearch.addEventListener('input', () => renderClassFeeSettings());
     }
 
     // === SETTINGS PAGE ===
@@ -760,6 +1068,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (settingsForm) {
         loadSettings();
         settingsForm.addEventListener('submit', handleSettingsSubmit);
+        document.getElementById('sSchoolLogo')?.addEventListener('change', handleBrandingLogoSelection);
+        document.getElementById('clearBrandingLogoBtn')?.addEventListener('click', clearBrandingLogo);
     }
 
     const branchRegistrationForm = document.getElementById('branchRegistrationForm');
@@ -768,20 +1078,15 @@ document.addEventListener('DOMContentLoaded', () => {
         branchRegistrationForm.addEventListener('submit', handleBranchRegistrationSubmit);
     }
 
-    // === DASHBOARD HOME LOGIC ===
-    const dashStudentCount = document.getElementById('dashStudentCount');
-    if (dashStudentCount) {
-        // We are on the dashboard
-        updateDashboardStats();
-        window.setInterval(updateActivePortalLogins, 30000);
-        bindActiveSessionsModalEvents();
-        // renderDashboardTable(); // Table removed by user request
-
-        const dSearch = document.getElementById('dashSearch');
-        if (dSearch) {
-            dSearch.addEventListener('input', (e) => { }); // renderDashboardTable(e.target.value.toLowerCase())
-        }
+    const stuckOffTable = document.getElementById('stuckOffRecordsBody');
+    if (stuckOffTable) {
+        renderStuckOffPage();
+        document.getElementById('stuckOffTypeFilter')?.addEventListener('change', renderStuckOffPage);
+        document.getElementById('stuckOffSearchInput')?.addEventListener('input', renderStuckOffPage);
     }
+
+    // === DASHBOARD HOME LOGIC ===
+    initializeDashboardHome();
 
     // === FINANCE PAGE ===
     const financeTable = document.getElementById('financeTable');
@@ -802,7 +1107,200 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function getData(key) {
     const data = localStorage.getItem(key);
-    return data ? JSON.parse(data) : [];
+    if (!data) return [];
+    try {
+        return JSON.parse(data);
+    } catch (error) {
+        console.warn(`Invalid local data for ${key}: ${error.message}`);
+        return [];
+    }
+}
+
+function getArrayData(key) {
+    const value = getData(key);
+    return Array.isArray(value) ? value : [];
+}
+
+function getUniqueCampusNames(extraCampuses = []) {
+    const campusMap = new Map();
+    const addCampus = (campusName) => {
+        const normalized = String(campusName || '').trim();
+        if (!normalized) return;
+        const key = normalized.toLowerCase();
+        if (!campusMap.has(key)) campusMap.set(key, normalized);
+    };
+
+    DEFAULT_CAMPUS_NAMES.forEach(addCampus);
+    extraCampuses.forEach(addCampus);
+    getArrayData(STORAGE_KEY_STUDENTS).forEach((student) => addCampus(student.campusName));
+    getArrayData(STORAGE_KEY_TEACHERS).forEach((teacher) => addCampus(teacher.campusName || teacher.bankBranch));
+    getData(STORAGE_KEY_STAFF).forEach((staff) => addCampus(staff.campusName || staff.bankBranch));
+
+    return Array.from(campusMap.values()).sort((a, b) => a.localeCompare(b));
+}
+
+function populateCampusSelect(selectId, campuses, placeholder, selectedValue = '') {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+
+    const previousValue = selectedValue || select.value || '';
+    select.innerHTML = `<option value="">${placeholder}</option>`;
+
+    campuses.forEach((campusName) => {
+        const option = document.createElement('option');
+        option.value = campusName;
+        option.textContent = campusName;
+        select.appendChild(option);
+    });
+
+    if (previousValue && !campuses.some((campusName) => campusName.toLowerCase() === previousValue.toLowerCase())) {
+        const option = document.createElement('option');
+        option.value = previousValue;
+        option.textContent = previousValue;
+        select.appendChild(option);
+    }
+
+    select.value = previousValue;
+
+    if (!select.value && (selectId === 'campusName' || selectId === 'tCampusName') && campuses.length === 1) {
+        select.value = campuses[0];
+    }
+}
+
+async function loadRegisteredCampusNames() {
+    try {
+        const token = sessionStorage.getItem('eduCore_token') || '';
+        const response = await fetch(`${API_BASE_URL}/branches`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        const result = await parseJsonResponse(response, 'Branches could not be loaded.');
+        if (!response.ok || !Array.isArray(result)) {
+            throw new Error('Branches could not be loaded.');
+        }
+        return getUniqueCampusNames(result.map((branch) => branch.campusName));
+    } catch (error) {
+        return getUniqueCampusNames();
+    }
+}
+
+async function populateCampusDropdowns() {
+    const campuses = await loadRegisteredCampusNames();
+    const selectedGlobalCampus = getSavedGlobalCampusFilter();
+    populateCampusSelect('campusName', campuses, campuses.length ? 'Select Campus' : 'Add campus in Branch Registration first');
+    populateCampusSelect('tCampusName', campuses, campuses.length ? 'Select Campus' : 'Add campus in Branch Registration first');
+    populateCampusSelect('teacherCampusFilter', campuses, 'All Campuses', selectedGlobalCampus === 'all' ? '' : selectedGlobalCampus);
+    populateCampusSelect('tBankBranch', campuses, campuses.length ? 'Select Branch' : 'Add campus in Branch Registration first');
+    populateCampusSelect('sBankBranch', campuses, campuses.length ? 'Select Branch' : 'Add campus in Branch Registration first');
+}
+
+function ensureStudentCampusDefault() {
+    const campusSelect = document.getElementById('campusName');
+    if (!campusSelect) return;
+
+    const campuses = getUniqueCampusNames();
+    const defaultCampus = campuses[0] || DEFAULT_CAMPUS_NAMES[0] || 'Main Campus';
+    if (![...campusSelect.options].some((option) => option.value === defaultCampus)) {
+        const option = document.createElement('option');
+        option.value = defaultCampus;
+        option.textContent = defaultCampus;
+        campusSelect.appendChild(option);
+    }
+    if (!campusSelect.value) campusSelect.value = defaultCampus;
+}
+
+function getStudentCodePrefixForCampus(campusName = '') {
+    return 'STU';
+}
+
+function isGeneratedStudentCode(value = '') {
+    return /^stu-\d{1,5}$/i.test(String(value || '').trim());
+}
+
+function getCurrentStudentCampusName() {
+    return String(document.getElementById('campusName')?.value || '').trim();
+}
+
+function updateStudentCodeForSelectedCampus(force = false) {
+    const studentCodeField = document.getElementById('studentCode');
+    if (!studentCodeField) return;
+    const currentValue = String(studentCodeField.value || '').trim();
+    if (!force && currentValue && !isGeneratedStudentCode(currentValue)) return;
+    studentCodeField.value = generateStudentCode();
+}
+
+function bindStudentCampusCodeSync() {
+    const campusSelect = document.getElementById('campusName');
+    if (!campusSelect || campusSelect.dataset.studentCodeSyncBound === '1') return;
+    campusSelect.dataset.studentCodeSyncBound = '1';
+    campusSelect.addEventListener('change', () => {
+        ensureStudentCampusDefault();
+    });
+}
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    }[char]));
+}
+
+function getBrandingSettings() {
+    const fallback = {
+        schoolName: 'Myownschool',
+        schoolTitle: 'Myownschool',
+        session: '',
+        phone: '',
+        address: '',
+        schoolAddress: '',
+        logoDataUrl: ''
+    };
+    try {
+        return { ...fallback, ...(JSON.parse(localStorage.getItem(STORAGE_KEY_SETTINGS) || '{}') || {}) };
+    } catch (_error) {
+        return fallback;
+    }
+}
+
+function saveBrandingSettings(patch = {}) {
+    const next = { ...getBrandingSettings(), ...patch };
+    if (next.address && !next.schoolAddress) next.schoolAddress = next.address;
+    if (next.schoolAddress && !next.address) next.address = next.schoolAddress;
+    localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(next));
+    applyGlobalBranding(next);
+    window.dispatchEvent(new CustomEvent('eduCoreBrandingUpdated', { detail: next }));
+    return next;
+}
+
+function getBrandingLogoSrc() {
+    const branding = getBrandingSettings();
+    return branding.logoDataUrl || 'images/logo.jpeg';
+}
+
+function getBrandingLogoMarkup(className = 'print-logo', alt = 'School logo') {
+    return `<img class="${escapeHtml(className)}" src="${escapeHtml(getBrandingLogoSrc())}" alt="${escapeHtml(alt)}">`;
+}
+
+function applyGlobalBranding(branding = getBrandingSettings()) {
+    const logoSrc = branding.logoDataUrl || 'images/logo.jpeg';
+    const schoolName = branding.schoolName || branding.schoolTitle || 'School';
+    document.querySelectorAll('.portal-logo, img[data-branding-logo]').forEach((img) => {
+        if (!img || img.getAttribute('src') === logoSrc) return;
+        img.setAttribute('src', logoSrc);
+        img.setAttribute('alt', `${schoolName} logo`);
+    });
+
+    document.querySelectorAll('[data-branding-school-name]').forEach((node) => {
+        node.textContent = schoolName;
+    });
+    document.querySelectorAll('[data-branding-phone]').forEach((node) => {
+        node.textContent = branding.phone || '';
+    });
+    document.querySelectorAll('[data-branding-address]').forEach((node) => {
+        node.textContent = branding.address || branding.schoolAddress || '';
+    });
 }
 
 function isHashedPassword(value) {
@@ -827,13 +1325,14 @@ function formatScheduleTime(startTime = '', endTime = '') {
     return `${startTime || '-'} - ${endTime || '-'}`;
 }
 
-function mergeStudentRecords(incomingStudents) {
-    const existingStudents = getData(STORAGE_KEY_STUDENTS);
+function mergeStudentRecords(incomingStudents, options = {}) {
+    const existingStudents = getArrayData(STORAGE_KEY_STUDENTS);
     const incomingList = Array.isArray(incomingStudents) ? incomingStudents : [];
+    const preserveLocalOnly = options.preserveLocalOnly === true;
     let nextStudentCodeNumber = 1;
 
     existingStudents.forEach(student => {
-        const match = String(student.studentCode || '').match(/(\d+)$/);
+        const match = String(student.studentCode || '').trim().match(/^STU-(\d{1,5})$/i);
         if (match) {
             const parsed = parseInt(match[1], 10);
             if (!Number.isNaN(parsed) && parsed >= nextStudentCodeNumber) {
@@ -847,7 +1346,7 @@ function mergeStudentRecords(incomingStudents) {
         let studentCode = student.studentCode || localStudent.studentCode || '';
 
         if (!studentCode) {
-            studentCode = `STD-${String(nextStudentCodeNumber).padStart(4, '0')}`;
+            studentCode = `STU-${String(nextStudentCodeNumber).padStart(3, '0')}`;
             nextStudentCodeNumber += 1;
         }
 
@@ -857,7 +1356,12 @@ function mergeStudentRecords(incomingStudents) {
             profileImage: student.profileImage || localStudent.profileImage || '',
             admissionDate: student.admissionDate || localStudent.admissionDate || '',
             gender: student.gender || localStudent.gender || '',
-        campusName: student.campusName || localStudent.campusName || 'Main Campus',
+            campusName: student.campusName || localStudent.campusName || '',
+            familyId: student.familyId || localStudent.familyId || '',
+            familyName: student.familyName || localStudent.familyName || '',
+            familyNo: student.familyNo || localStudent.familyNo || '',
+            familyContact: student.familyContact || localStudent.familyContact || '',
+            familyAddedAt: student.familyAddedAt || localStudent.familyAddedAt || '',
             enrollmentStatus: student.enrollmentStatus || localStudent.enrollmentStatus || (student.isTerminated ? 'Terminated' : 'Active'),
             terminatedAt: student.terminatedAt || localStudent.terminatedAt || '',
             terminationNote: student.terminationNote || localStudent.terminationNote || '',
@@ -866,17 +1370,17 @@ function mergeStudentRecords(incomingStudents) {
         };
     });
 
-    existingStudents.forEach((student) => {
-        if (!mergedStudents.some(item => item.id === student.id)) {
-            mergedStudents.push(student);
-        }
-    });
+    if (!preserveLocalOnly) return mergedStudents;
 
-    return mergedStudents;
+    const incomingIds = new Set(incomingList.map((student) => student?.id).filter(Boolean));
+    return [
+        ...mergedStudents,
+        ...existingStudents.filter((student) => student?.id && !incomingIds.has(student.id))
+    ];
 }
 
 function mergeTeacherRecords(incomingTeachers) {
-    const existingTeachers = getData(STORAGE_KEY_TEACHERS);
+    const existingTeachers = getArrayData(STORAGE_KEY_TEACHERS);
     const incomingList = Array.isArray(incomingTeachers) ? incomingTeachers : [];
     const mergedTeachers = incomingList.map((teacher) => {
         const localTeacher = existingTeachers.find(item => item.id === teacher.id) || {};
@@ -891,6 +1395,9 @@ function mergeTeacherRecords(incomingTeachers) {
             designation: normalizedDesignation.designation,
             groupKey: normalizedDesignation.groupKey,
             profileImage: teacher.profileImage || localTeacher.profileImage || '',
+            employmentStatus: teacher.employmentStatus || localTeacher.employmentStatus || 'Active',
+            stuckOffAt: teacher.stuckOffAt || localTeacher.stuckOffAt || '',
+            stuckOffNote: teacher.stuckOffNote || localTeacher.stuckOffNote || '',
             schedule: normalizeTeacherSchedule(teacher.schedule || localTeacher.schedule),
             plainPassword: teacher.plainPassword || localTeacher.plainPassword ||
                 (localTeacher.password && !isHashedPassword(localTeacher.password) ? localTeacher.password : '')
@@ -908,13 +1415,59 @@ function mergeTeacherRecords(incomingTeachers) {
 
 function isStudentTerminated(student) {
     const enrollmentStatus = String(student?.enrollmentStatus || '').trim().toLowerCase();
-    if (enrollmentStatus === 'terminated' || enrollmentStatus === 'left' || enrollmentStatus === 'inactive') return true;
+    if (enrollmentStatus === 'terminated' || enrollmentStatus === 'left' || enrollmentStatus === 'inactive' || enrollmentStatus === 'stuck off' || enrollmentStatus === 'stuck-off' || enrollmentStatus === 'stuckoff') return true;
     if (student?.isTerminated === true) return true; // legacy
     return String(student?.feesStatus || '').trim().toLowerCase() === 'terminated';
 }
 
+function isStudentStuckOff(student) {
+    const enrollmentStatus = String(student?.enrollmentStatus || '').trim().toLowerCase();
+    return enrollmentStatus === 'stuck off' || enrollmentStatus === 'stuck-off' || enrollmentStatus === 'stuckoff';
+}
+
+function isTeacherStuckOff(teacher) {
+    const status = String(teacher?.employmentStatus || '').trim().toLowerCase();
+    return status === 'stuck off' || status === 'stuck-off' || status === 'stuckoff';
+}
+
+function stuckOffStudent(studentId) {
+    const students = getArrayData(STORAGE_KEY_STUDENTS);
+    const index = students.findIndex((s) => String(s?.id || '') === String(studentId || ''));
+    if (index === -1) return;
+
+    const student = students[index];
+    if (isStudentStuckOff(student)) {
+        showAppAlert('Student is already marked as stuck off.', 'No Changes');
+        return;
+    }
+
+    const confirmText = `Mark "${student.fullName || 'Student'}" as stuck off?\n\nThis student will be removed from the active student list and shown in Stuck Off records.`;
+    const ok = typeof showAppConfirm === 'function' ? showAppConfirm(confirmText) : Promise.resolve(window.confirm(confirmText));
+
+    Promise.resolve(ok).then((confirmed) => {
+        if (!confirmed) return;
+
+        const today = new Date().toISOString().split('T')[0];
+        const updatedStudent = {
+            ...student,
+            enrollmentStatus: 'Stuck Off',
+            stuckOffAt: today,
+            terminatedAt: today,
+            terminationNote: student.terminationNote || ''
+        };
+
+        students[index] = updatedStudent;
+        saveData(STORAGE_KEY_STUDENTS, students, { skipSync: true });
+        syncToSQLDetailed('students', [updatedStudent]).catch(() => {});
+        pushNotification('Student Updated', `"${updatedStudent.fullName || 'Student'}" marked as stuck off.`, 'info');
+        renderStudents();
+        renderAdminRecordPanels();
+        renderStuckOffPage();
+    }).catch(() => {});
+}
+
 function terminateStudent(studentId) {
-    const students = getData(STORAGE_KEY_STUDENTS);
+    const students = getArrayData(STORAGE_KEY_STUDENTS);
     const index = students.findIndex((s) => String(s?.id || '') === String(studentId || ''));
     if (index === -1) return;
 
@@ -943,11 +1496,12 @@ function terminateStudent(studentId) {
         syncToSQLDetailed('students', [updatedStudent]).catch(() => {});
         pushNotification('Student Updated', `"${updatedStudent.fullName || 'Student'}" marked as terminated.`, 'info');
         renderStudents();
+        renderAdminRecordPanels();
     }).catch(() => {});
 }
 
 function reactivateStudent(studentId) {
-    const students = getData(STORAGE_KEY_STUDENTS);
+    const students = getArrayData(STORAGE_KEY_STUDENTS);
     const index = students.findIndex((s) => String(s?.id || '') === String(studentId || ''));
     if (index === -1) return;
 
@@ -966,6 +1520,7 @@ function reactivateStudent(studentId) {
         const updatedStudent = {
             ...student,
             enrollmentStatus: 'Active',
+            stuckOffAt: '',
             terminatedAt: '',
             terminationNote: ''
         };
@@ -975,6 +1530,8 @@ function reactivateStudent(studentId) {
         syncToSQLDetailed('students', [updatedStudent]).catch(() => {});
         pushNotification('Student Updated', `"${updatedStudent.fullName || 'Student'}" reactivated.`, 'success');
         renderStudents();
+        renderAdminRecordPanels();
+        renderStuckOffPage();
     }).catch(() => {});
 }
 
@@ -1007,11 +1564,22 @@ function getStudentInitial(name) {
     return (String(name || 'S').trim().charAt(0) || 'S').toUpperCase();
 }
 
+function getTeacherInitial(name) {
+    return (String(name || 'T').trim().charAt(0) || 'T').toUpperCase();
+}
+
 function buildStudentAvatarMarkup(student) {
     if (student.profileImage) {
         return `<img src="${student.profileImage}" alt="${student.fullName || 'Student'}">`;
     }
     return getStudentInitial(student.fullName);
+}
+
+function buildTeacherAvatarMarkup(teacher) {
+    if (teacher.profileImage) {
+        return `<img src="${teacher.profileImage}" alt="${teacher.fullName || 'Teacher'}">`;
+    }
+    return getTeacherInitial(teacher.fullName);
 }
 
 function setStudentPhotoPreview(imageSrc = '', fullName = '') {
@@ -1023,7 +1591,36 @@ function setStudentPhotoPreview(imageSrc = '', fullName = '') {
         return;
     }
 
-    preview.textContent = getStudentInitial(fullName);
+    preview.innerHTML = '';
+}
+
+function setTeacherPhotoPreview(imageSrc = '', fullName = '') {
+    const preview = document.getElementById('teacherPhotoPreview');
+    if (!preview) return;
+
+    if (imageSrc) {
+        preview.innerHTML = `<img src="${imageSrc}" alt="${fullName || 'Teacher'}">`;
+        return;
+    }
+
+    preview.innerHTML = '';
+}
+
+function getStaffInitial(fullName = '') {
+    const value = String(fullName || '').trim();
+    return value ? value.charAt(0).toUpperCase() : 'S';
+}
+
+function setStaffPhotoPreview(imageSrc = '', fullName = '') {
+    const preview = document.getElementById('staffPhotoPreview');
+    if (!preview) return;
+
+    if (imageSrc) {
+        preview.innerHTML = `<img src="${imageSrc}" alt="${fullName || 'Staff'}">`;
+        return;
+    }
+
+    preview.textContent = getStaffInitial(fullName);
 }
 
 function readFileAsDataUrl(file) {
@@ -1033,6 +1630,19 @@ function readFileAsDataUrl(file) {
         reader.onerror = () => reject(new Error('There was a problem reading the image.'));
         reader.readAsDataURL(file);
     });
+}
+
+async function readImageInputDataUrl(inputId, existingImage = '') {
+    const input = document.getElementById(inputId);
+    const file = input?.files?.[0];
+    if (!file) return existingImage || '';
+
+    if (!file.type.startsWith('image/')) {
+        if (input) input.value = '';
+        throw new Error('Please upload an image file only.');
+    }
+
+    return readFileAsDataUrl(file);
 }
 
 async function handleStudentPhotoSelection(event) {
@@ -1054,6 +1664,30 @@ async function handleStudentPhotoSelection(event) {
     try {
         const imageSrc = await readFileAsDataUrl(file);
         setStudentPhotoPreview(imageSrc, fullName);
+    } catch (error) {
+        alert(error.message);
+    }
+}
+
+async function handleTeacherPhotoSelection(event) {
+    const file = event.target?.files?.[0];
+    const fullName = document.getElementById('tFullName')?.value || '';
+
+    if (!file) {
+        setTeacherPhotoPreview('', fullName);
+        return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+        alert('Please upload an image file only.');
+        event.target.value = '';
+        setTeacherPhotoPreview('', fullName);
+        return;
+    }
+
+    try {
+        const imageSrc = await readFileAsDataUrl(file);
+        setTeacherPhotoPreview(imageSrc, fullName);
     } catch (error) {
         alert(error.message);
     }
@@ -1105,237 +1739,6 @@ function saveData(key, data, options = {}) {
     if (key === STORAGE_KEY_STUDENTS) syncToSQL('students', data);
     if (key === STORAGE_KEY_TEACHERS) syncToSQL('teachers', data);
     if (key === STORAGE_KEY_STAFF) syncToSQL('staff', data);
-    if (key === STORAGE_KEY_CLASS_FEES) syncToSQL('class-fees', data);
-}
-
-function ensureSetFeesNav() {
-    const nav = document.querySelector('.nav-links');
-    if (!nav || nav.querySelector('a[href$="set_fees.html"], a[href$="/set_fees"]')) return;
-
-    const feesLink = Array.from(nav.querySelectorAll('a[href]'))
-        .find((link) => normalizeClientPageName(link.getAttribute('href')) === 'fees.html');
-    if (!feesLink) return;
-
-    const link = document.createElement('a');
-    link.href = toRoutePath('set_fees.html');
-    link.className = `nav-item ${isCurrentPage('set_fees.html') ? 'active' : ''}`;
-    if (feesLink.style.display === 'none') link.style.display = 'none';
-    link.innerHTML = '<i data-lucide="settings-2"></i><span>Set Fees</span>';
-    feesLink.insertAdjacentElement('afterend', link);
-}
-
-function normalizeClassFeeName(className = '') {
-    return String(className || '').trim().toLowerCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ');
-}
-
-function normalizeClassFeeRecords(records) {
-    const input = Array.isArray(records) ? records : [];
-    const byClass = new Map();
-
-    input.forEach((record) => {
-        const className = String(record?.className || record?.name || '').trim();
-        if (!className) return;
-        const monthlyFee = Number.parseInt(String(record?.monthlyFee ?? record?.amount ?? '0'), 10) || 0;
-        const feeFrequency = String(record?.feeFrequency || 'Monthly').trim() || 'Monthly';
-        const key = normalizeClassFeeName(className);
-        byClass.set(key, {
-            id: record?.id || key,
-            className,
-            monthlyFee,
-            feeFrequency,
-            updatedAtLabel: record?.updatedAtLabel || record?.updatedAt || ''
-        });
-    });
-
-    return Array.from(byClass.values()).sort((a, b) => compareStudentClassNames(a.className, b.className));
-}
-
-function getClassFeeSettings() {
-    return normalizeClassFeeRecords(getData(STORAGE_KEY_CLASS_FEES));
-}
-
-function findClassFeeSetting(className) {
-    const key = normalizeClassFeeName(className);
-    if (!key) return null;
-    return getClassFeeSettings().find((record) => normalizeClassFeeName(record.className) === key) || null;
-}
-
-async function loadClassFeesFromServer() {
-    try {
-        const token = sessionStorage.getItem('eduCore_token') || '';
-        const response = await fetch(`${API_BASE_URL}/class-fees`, {
-            headers: token ? { Authorization: `Bearer ${token}` } : {}
-        });
-        if (!response.ok) return [];
-        const data = await response.json();
-        const normalized = normalizeClassFeeRecords(data);
-        localStorage.setItem(STORAGE_KEY_CLASS_FEES, JSON.stringify(normalized));
-        return normalized;
-    } catch (error) {
-        return getClassFeeSettings();
-    }
-}
-
-function applySelectedClassFeeToStudentForm(options = {}) {
-    const { onlyIfEmpty = false } = options;
-    const classSelect = document.getElementById('classGrade');
-    const feeInput = document.getElementById('monthlyFee');
-    const frequencyInput = document.getElementById('feeFrequency');
-    if (!classSelect || !feeInput) return;
-
-    const setting = findClassFeeSetting(classSelect.value);
-    if (!setting) return;
-    if (onlyIfEmpty && String(feeInput.value || '').trim()) return;
-
-    feeInput.value = setting.monthlyFee || '';
-    if (frequencyInput) frequencyInput.value = setting.feeFrequency || 'Monthly';
-}
-
-function initializeStudentClassFeeAutofill() {
-    const classSelect = document.getElementById('classGrade');
-    if (!classSelect || classSelect.dataset.classFeeBound === '1') return;
-    classSelect.dataset.classFeeBound = '1';
-    classSelect.addEventListener('change', () => applySelectedClassFeeToStudentForm());
-    loadClassFeesFromServer().then(() => applySelectedClassFeeToStudentForm({ onlyIfEmpty: true }));
-}
-
-function getKnownClassNamesForFees() {
-    const names = new Map();
-    const add = (value) => {
-        const className = String(value || '').trim();
-        if (!className) return;
-        const key = normalizeClassFeeName(className);
-        if (!names.has(key)) names.set(key, className);
-    };
-
-    DEFAULT_STUDENT_CLASS_ORDER.forEach(add);
-    getData(STORAGE_KEY_CLASSES).forEach((item) => add(item?.section ? `${item.name} (${item.section})` : item?.name));
-    getData(STORAGE_KEY_STUDENTS).forEach((student) => add(student?.classGrade));
-    getClassFeeSettings().forEach((setting) => add(setting?.className));
-    return Array.from(names.values()).sort(compareStudentClassNames);
-}
-
-function populateClassFeeSelect() {
-    const select = document.getElementById('classFeeClassName');
-    if (!select) return;
-    const previous = select.value;
-    select.innerHTML = '<option value="">Select Class</option>';
-    getKnownClassNamesForFees().forEach((className) => {
-        const option = document.createElement('option');
-        option.value = className;
-        option.textContent = className;
-        select.appendChild(option);
-    });
-    select.value = previous;
-}
-
-function renderClassFeeSettings() {
-    const tbody = document.getElementById('classFeeTableBody');
-    if (!tbody) return;
-    populateClassFeeSelect();
-
-    const term = String(document.getElementById('classFeeSearchInput')?.value || '').trim().toLowerCase();
-    const settings = getClassFeeSettings().filter((setting) => !term || setting.className.toLowerCase().includes(term));
-    const empty = document.getElementById('classFeeEmptyState');
-
-    tbody.innerHTML = '';
-    if (!settings.length) {
-        if (empty) empty.style.display = 'block';
-        return;
-    }
-
-    if (empty) empty.style.display = 'none';
-    settings.forEach((setting) => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td><strong>${setting.className}</strong></td>
-            <td>PKR ${(Number(setting.monthlyFee || 0)).toLocaleString('en-PK')}</td>
-            <td>${setting.feeFrequency || 'Monthly'}</td>
-            <td>${setting.updatedAtLabel || '-'}</td>
-            <td>
-                <div class="fee-actions">
-                    <button class="fee-action-btn fee-action-edit" type="button" onclick="editClassFeeSetting('${encodeURIComponent(setting.className)}')" title="Edit fee">
-                        <i data-lucide="edit-2"></i>
-                        <span>Edit</span>
-                    </button>
-                    <button class="fee-action-btn fee-action-delete" type="button" onclick="deleteClassFeeSetting('${encodeURIComponent(setting.className)}')" title="Delete fee" aria-label="Delete fee">
-                        <i data-lucide="trash-2"></i>
-                    </button>
-                </div>
-            </td>
-        `;
-        tbody.appendChild(tr);
-    });
-    if (window.lucide) window.lucide.createIcons();
-}
-
-async function handleClassFeeFormSubmit(event) {
-    event.preventDefault();
-    const className = String(document.getElementById('classFeeClassName')?.value || '').trim();
-    const customClassName = String(document.getElementById('classFeeCustomClassName')?.value || '').trim();
-    const targetClassName = customClassName || className;
-    const monthlyFee = Number.parseInt(String(document.getElementById('classFeeMonthlyFee')?.value || '0'), 10) || 0;
-    const feeFrequency = String(document.getElementById('classFeeFrequency')?.value || 'Monthly').trim() || 'Monthly';
-
-    if (!targetClassName) {
-        alert('Please select or enter a class.');
-        return;
-    }
-    if (monthlyFee <= 0) {
-        alert('Please enter a valid monthly fee.');
-        return;
-    }
-
-    const settings = getClassFeeSettings();
-    const key = normalizeClassFeeName(targetClassName);
-    const nextRecord = {
-        id: key,
-        className: targetClassName,
-        monthlyFee,
-        feeFrequency,
-        updatedAtLabel: new Date().toLocaleString('en-GB')
-    };
-    const index = settings.findIndex((setting) => normalizeClassFeeName(setting.className) === key);
-    if (index >= 0) settings[index] = nextRecord;
-    else settings.push(nextRecord);
-
-    const normalized = normalizeClassFeeRecords(settings);
-    localStorage.setItem(STORAGE_KEY_CLASS_FEES, JSON.stringify(normalized));
-    renderClassFeeSettings();
-
-    const form = document.getElementById('classFeeForm');
-    if (form) form.reset();
-
-    const result = await syncToSQLDetailed('class-fees', normalized);
-    if (!result.success) {
-        alert(`Fee saved locally, but server sync failed: ${result.error}`);
-    } else {
-        alert('Class fee saved successfully.');
-    }
-}
-
-function editClassFeeSetting(encodedClassName) {
-    const className = decodeURIComponent(String(encodedClassName || ''));
-    const setting = findClassFeeSetting(className);
-    if (!setting) return;
-    populateClassFeeSelect();
-    const classSelect = document.getElementById('classFeeClassName');
-    const customInput = document.getElementById('classFeeCustomClassName');
-    if (classSelect) classSelect.value = setting.className;
-    if (customInput) customInput.value = '';
-    document.getElementById('classFeeMonthlyFee').value = setting.monthlyFee || '';
-    document.getElementById('classFeeFrequency').value = setting.feeFrequency || 'Monthly';
-}
-
-async function deleteClassFeeSetting(encodedClassName) {
-    const className = decodeURIComponent(String(encodedClassName || ''));
-    if (!(await showAppConfirm(`Delete fee setting for ${className}?`))) return;
-    const key = normalizeClassFeeName(className);
-    const settings = getClassFeeSettings().filter((setting) => normalizeClassFeeName(setting.className) !== key);
-    localStorage.setItem(STORAGE_KEY_CLASS_FEES, JSON.stringify(settings));
-    renderClassFeeSettings();
-    const result = await syncToSQLDetailed('class-fees', settings);
-    if (!result.success) alert(`Fee deleted locally, but server sync failed: ${result.error}`);
 }
 
 function getPromotionHistory() {
@@ -1361,9 +1764,9 @@ function normalizeOptionalIdentityValue(value, mode = 'text') {
 }
 
 function validateTeacherIdentityInputs({ teacherId = '', username = '', email = '' }) {
-    const teachers = getData(STORAGE_KEY_TEACHERS);
-    const students = getData(STORAGE_KEY_STUDENTS);
-    const staffMembers = getData(STORAGE_KEY_STAFF);
+    let teachers = getArrayData(STORAGE_KEY_TEACHERS);
+    const students = getArrayData(STORAGE_KEY_STUDENTS);
+    const staffMembers = getArrayData(STORAGE_KEY_STAFF);
     const normalizedUsername = normalizeOptionalIdentityValue(username);
     const normalizedEmail = normalizeOptionalIdentityValue(email, 'email');
 
@@ -1460,10 +1863,24 @@ function setDesignationSelectValue(selectId, value, fallbackGroupKey) {
     select.value = normalized;
 }
 
-function validateStudentIdentityInputs({ studentId = '', username = '', email = '' }) {
-    const students = getData(STORAGE_KEY_STUDENTS);
+function validateStudentIdentityInputs({ studentId = '', studentCode = '', username = '', email = '' }) {
+    const students = getArrayData(STORAGE_KEY_STUDENTS);
+    let teachers = getArrayData(STORAGE_KEY_TEACHERS);
+    const staffMembers = getArrayData(STORAGE_KEY_STAFF);
+    const normalizedStudentCode = normalizeOptionalIdentityValue(studentCode);
     const normalizedUsername = normalizeOptionalIdentityValue(username);
     const normalizedEmail = normalizeOptionalIdentityValue(email, 'email');
+
+    if (normalizedStudentCode) {
+        const studentCodeConflict = students.find(student =>
+            student.id !== studentId &&
+            normalizeOptionalIdentityValue(student.studentCode) === normalizedStudentCode
+        );
+
+        if (studentCodeConflict) {
+            return 'This Student ID is already assigned to another student.';
+        }
+    }
 
     if (normalizedUsername) {
         const usernameConflict = students.find(student =>
@@ -1474,6 +1891,19 @@ function validateStudentIdentityInputs({ studentId = '', username = '', email = 
         if (usernameConflict) {
             return 'This student username is already assigned to another student.';
         }
+
+        const crossRoleUsernameConflict = [...teachers, ...staffMembers].find(account =>
+            normalizeOptionalIdentityValue(account.username) === normalizedUsername
+        );
+
+        if (crossRoleUsernameConflict) {
+            return 'This username is already used by another account.';
+        }
+    }
+
+    const classFeeForm = document.getElementById('classFeeForm');
+    if (classFeeForm) {
+        setupClassFeeSettings();
     }
 
     if (normalizedEmail) {
@@ -1484,6 +1914,14 @@ function validateStudentIdentityInputs({ studentId = '', username = '', email = 
 
         if (emailConflict) {
             return 'This student email is already assigned to another student.';
+        }
+
+        const crossRoleEmailConflict = [...teachers, ...staffMembers].find(account =>
+            normalizeOptionalIdentityValue(account.email, 'email') === normalizedEmail
+        );
+
+        if (crossRoleEmailConflict) {
+            return 'This email is already used by another account.';
         }
     }
 
@@ -1564,6 +2002,29 @@ function triggerDownloadFromDataUrl(dataUrl, fileName) {
     link.remove();
 }
 
+function triggerDownloadFromBlob(blob, fileName) {
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = sanitizeDownloadFileName(fileName);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
+
+function dataUrlToBytes(dataUrl) {
+    const encodedData = String(dataUrl || '').split(',')[1] || '';
+    const binaryData = atob(encodedData);
+    const bytes = new Uint8Array(binaryData.length);
+
+    for (let index = 0; index < binaryData.length; index += 1) {
+        bytes[index] = binaryData.charCodeAt(index);
+    }
+
+    return bytes;
+}
+
 function loadImageFromDataUrl(dataUrl) {
     return new Promise((resolve, reject) => {
         const img = new Image();
@@ -1629,6 +2090,102 @@ async function downloadStoredDocumentAsPdf(entityType, recordId, fieldName, fall
     }
 }
 
+async function getPdfCompatibleImageData(payload) {
+    const fileType = String(payload.type || '').toLowerCase();
+
+    if (fileType.includes('png')) {
+        return { bytes: dataUrlToBytes(payload.dataUrl), format: 'png' };
+    }
+
+    if (fileType.includes('jpg') || fileType.includes('jpeg')) {
+        return { bytes: dataUrlToBytes(payload.dataUrl), format: 'jpg' };
+    }
+
+    const image = await loadImageFromDataUrl(payload.dataUrl);
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth || image.width;
+    canvas.height = image.naturalHeight || image.height;
+    canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    return { bytes: dataUrlToBytes(canvas.toDataURL('image/png')), format: 'png' };
+}
+
+async function addImagePayloadToPdf(pdfDocument, payload) {
+    const imageData = await getPdfCompatibleImageData(payload);
+    const pdfImage = imageData.format === 'png'
+        ? await pdfDocument.embedPng(imageData.bytes)
+        : await pdfDocument.embedJpg(imageData.bytes);
+    const page = pdfDocument.addPage([595.28, 841.89]);
+    const pageWidth = page.getWidth();
+    const pageHeight = page.getHeight();
+    const margin = 28;
+    const scale = Math.min(
+        (pageWidth - margin * 2) / pdfImage.width,
+        (pageHeight - margin * 2) / pdfImage.height,
+        1
+    );
+    const renderWidth = pdfImage.width * scale;
+    const renderHeight = pdfImage.height * scale;
+
+    page.drawImage(pdfImage, {
+        x: (pageWidth - renderWidth) / 2,
+        y: (pageHeight - renderHeight) / 2,
+        width: renderWidth,
+        height: renderHeight
+    });
+}
+
+async function addStoredPayloadToPdf(pdfDocument, payload) {
+    const fileType = String(payload.type || '').toLowerCase();
+    const originalName = String(payload.name || '').toLowerCase();
+
+    if (fileType.includes('pdf') || originalName.endsWith('.pdf')) {
+        const sourcePdf = await window.PDFLib.PDFDocument.load(dataUrlToBytes(payload.dataUrl));
+        const pages = await pdfDocument.copyPages(sourcePdf, sourcePdf.getPageIndices());
+        pages.forEach((page) => pdfDocument.addPage(page));
+        return;
+    }
+
+    if (fileType.startsWith('image/')) {
+        await addImagePayloadToPdf(pdfDocument, payload);
+        return;
+    }
+
+    throw new Error('Only PDF and image files can be combined.');
+}
+
+async function downloadTeacherDocumentsAsPdf(recordId) {
+    const teacher = getData(STORAGE_KEY_TEACHERS)
+        .find((item) => String(item.id) === String(recordId));
+    const documents = ['idCardFront', 'idCardBack', 'cvFile']
+        .map((fieldName) => parseStoredFilePayload(teacher?.[fieldName]))
+        .filter((payload) => payload?.dataUrl);
+
+    if (!documents.length) {
+        alert('No teacher documents found for download.');
+        return;
+    }
+
+    if (!window.PDFLib?.PDFDocument) {
+        alert('PDF combiner is still loading. Try Download PDFs again.');
+        return;
+    }
+
+    try {
+        const combinedPdf = await window.PDFLib.PDFDocument.create();
+
+        for (const payload of documents) {
+            await addStoredPayloadToPdf(combinedPdf, payload);
+        }
+
+        const fileName = `teacher-documents-${teacher?.employeeCode || teacher?.fullName || recordId}.pdf`;
+        const pdfBytes = await combinedPdf.save();
+        triggerDownloadFromBlob(new Blob([pdfBytes], { type: 'application/pdf' }), fileName);
+    } catch (error) {
+        alert('Combined PDF could not be created. Upload CV as PDF or image to include it with the ID documents.');
+    }
+}
+
 function toggleStepPanel(panelId) {
     const panel = document.getElementById(panelId);
     const btnId = panelId === 'feePanel' ? 'btnSetFee' : (panelId === 'salaryPanel' ? 'btnSetSalary' : 'btnCreateCreds');
@@ -1668,9 +2225,16 @@ function queueWelcomeAnimationForNextPage(user) {
     try {
         const displayName = user?.fullName || user?.username || user?.role || 'User';
         const role = user?.role || 'User';
+        let schoolName = 'Myownschool';
+        try {
+            const settings = JSON.parse(localStorage.getItem('eduCore_settings') || '{}') || {};
+            schoolName = String(settings.schoolName || settings.schoolTitle || schoolName).trim() || schoolName;
+        } catch (_error) {
+            schoolName = 'Myownschool';
+        }
         sessionStorage.setItem(
             EDUCORE_WELCOME_SESSION_KEY,
-            JSON.stringify({ displayName, role, at: Date.now() })
+            JSON.stringify({ displayName, role, schoolName, logoSrc: 'images/logo.jpeg', at: Date.now() })
         );
     } catch (error) {
         // Ignore
@@ -1709,15 +2273,24 @@ function showWelcomeAnimationIfNeeded() {
     overlay.setAttribute('aria-modal', 'true');
 
     const safeName = String(payload.displayName || 'User').trim() || 'User';
-    const safeRole = String(payload.role || 'User').trim() || 'User';
+    const schoolName = String(payload.schoolName || (() => {
+        try {
+            const settings = JSON.parse(localStorage.getItem('eduCore_settings') || '{}') || {};
+            return settings.schoolName || settings.schoolTitle || 'Myownschool';
+        } catch (_error) {
+            return 'Myownschool';
+        }
+    })()).trim() || 'Myownschool';
     const escape = typeof escapeSessionText === 'function' ? escapeSessionText : (value) => String(value ?? '');
 
     overlay.innerHTML = `
         <div class="edu-welcome-card">
             <div class="edu-welcome-glow" aria-hidden="true"></div>
-            <div class="edu-welcome-icon"><i data-lucide="hand" width="28" height="28"></i></div>
-            <h2 class="edu-welcome-title">Welcome, ${escape(safeName)}!</h2>
-            <p class="edu-welcome-subtitle">${escape(safeRole)} dashboard is ready.</p>
+            <div class="edu-welcome-icon edu-welcome-logo-wrap">
+                <img class="edu-welcome-logo" src="images/logo.jpeg" alt="${escape(schoolName)} logo">
+            </div>
+            <h2 class="edu-welcome-title">Welcome, ${escape(safeName)}</h2>
+            <p class="edu-welcome-subtitle">Welcome ${escape(safeName)} in ${escape(schoolName)}.</p>
             <div class="edu-welcome-divider" aria-hidden="true"></div>
             <button type="button" class="edu-welcome-skip">Get Started</button>
         </div>
@@ -1745,7 +2318,7 @@ function showWelcomeAnimationIfNeeded() {
         window.lucide.createIcons();
     }
 
-    window.setTimeout(close, 1800);
+    window.setTimeout(close, 2400);
 }
 
 function closeSuccessModal() {
@@ -1759,6 +2332,54 @@ function getLoggedInUser() {
     } catch (error) {
         return null;
     }
+}
+
+function getCurrentUserScopedRecords(records = []) {
+    const user = getLoggedInUser();
+    if (user?.role !== 'Branch' || !user.campusName) {
+        return Array.isArray(records) ? records : [];
+    }
+
+    const campusKey = String(user.campusName || '').trim().toLowerCase();
+    return (Array.isArray(records) ? records : []).filter((record) => {
+        const recordCampus = String(record?.campusName || record?.branchName || record?.campus || '').trim().toLowerCase();
+        return recordCampus === campusKey;
+    });
+}
+
+function normalizeCampusFilterValue(value = '') {
+    return String(value || '').trim().toLowerCase();
+}
+
+function getSavedGlobalCampusFilter() {
+    const value = String(localStorage.getItem(GLOBAL_CAMPUS_FILTER_KEY) || sessionStorage.getItem(GLOBAL_CAMPUS_FILTER_KEY) || 'all').trim();
+    return value && value !== 'all' ? value : 'all';
+}
+
+function setSavedGlobalCampusFilter(value = 'all') {
+    const nextValue = String(value || 'all').trim() || 'all';
+    localStorage.setItem(GLOBAL_CAMPUS_FILTER_KEY, nextValue);
+    sessionStorage.setItem(GLOBAL_CAMPUS_FILTER_KEY, nextValue);
+}
+
+function getGlobalCampusFilterForCurrentUser() {
+    const user = getLoggedInUser();
+    if (user?.role === 'Branch' && user.campusName) return String(user.campusName || '').trim();
+    return getSavedGlobalCampusFilter();
+}
+
+function getRecordCampusName(record = {}) {
+    return String(record?.campusName || record?.branchName || record?.campus || record?.bankBranch || 'Main Campus').trim();
+}
+
+function recordMatchesGlobalCampus(record = {}) {
+    const selectedCampus = getGlobalCampusFilterForCurrentUser();
+    if (!selectedCampus || selectedCampus === 'all') return true;
+    return normalizeCampusFilterValue(getRecordCampusName(record)) === normalizeCampusFilterValue(selectedCampus);
+}
+
+function getGlobalCampusFilteredRecords(records = []) {
+    return (Array.isArray(records) ? records : []).filter(recordMatchesGlobalCampus);
 }
 
 function normalizeDesignationKey(value) {
@@ -1838,12 +2459,193 @@ function canCurrentUserPerformAction(moduleKey, actionKey) {
     return false;
 }
 
+function getSidebarScrollElement() {
+    return document.querySelector('.sidebar .nav-links');
+}
+
+function getActiveSidebarItem(navLinks) {
+    if (!navLinks) return null;
+    const currentPage = getCurrentPageName();
+    let activeItem = navLinks.querySelector('.nav-item.active, .nav-subitem.active');
+    if (activeItem) return activeItem;
+
+    activeItem = Array.from(navLinks.querySelectorAll('a[href]')).find((link) => (
+        normalizeClientPageName(link.getAttribute('href') || '') === currentPage
+    ));
+    if (activeItem) activeItem.classList.add(activeItem.classList.contains('nav-subitem') ? 'active' : 'active');
+    return activeItem || null;
+}
+
+function isSidebarItemVisible(navLinks, item) {
+    if (!navLinks || !item) return true;
+    const navRect = navLinks.getBoundingClientRect();
+    const itemRect = item.getBoundingClientRect();
+    return itemRect.top >= navRect.top && itemRect.bottom <= navRect.bottom &&
+        itemRect.left >= navRect.left && itemRect.right <= navRect.right;
+}
+
+function keepActiveSidebarItemVisible(navLinks) {
+    const activeItem = getActiveSidebarItem(navLinks);
+    if (!activeItem || isSidebarItemVisible(navLinks, activeItem)) return;
+    activeItem.scrollIntoView({ block: 'center', inline: 'nearest' });
+}
+
+let sidebarScrollRestoreUntil = 0;
+
+function saveSidebarScrollPosition(extra = {}) {
+    const navLinks = getSidebarScrollElement();
+    if (!navLinks) return;
+
+    const payload = JSON.stringify({
+        top: navLinks.scrollTop || 0,
+        left: navLinks.scrollLeft || 0,
+        path: window.location.pathname,
+        savedAt: Date.now(),
+        ...extra
+    });
+    sessionStorage.setItem(SIDEBAR_SCROLL_KEY, payload);
+    localStorage.setItem(SIDEBAR_SCROLL_KEY, payload);
+}
+
+function saveSidebarLinkPosition(link) {
+    const navLinks = getSidebarScrollElement();
+    if (!navLinks || !link) return;
+
+    const navRect = navLinks.getBoundingClientRect();
+    const linkRect = link.getBoundingClientRect();
+    saveSidebarScrollPosition({
+        targetHref: link.getAttribute('href') || '',
+        itemTop: linkRect.top - navRect.top
+    });
+}
+
+function readSidebarScrollPosition() {
+    try {
+        return JSON.parse(sessionStorage.getItem(SIDEBAR_SCROLL_KEY) || localStorage.getItem(SIDEBAR_SCROLL_KEY) || 'null');
+    } catch (_error) {
+        return null;
+    }
+}
+
+async function handleStaffPhotoSelection(event) {
+    const file = event.target?.files?.[0];
+    const fullName = document.getElementById('sFullName')?.value || '';
+
+    if (!file) {
+        setStaffPhotoPreview('', fullName);
+        return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+        alert('Please upload an image file only.');
+        event.target.value = '';
+        setStaffPhotoPreview('', fullName);
+        return;
+    }
+
+    try {
+        const imageSrc = await readFileAsDataUrl(file);
+        setStaffPhotoPreview(imageSrc, fullName);
+    } catch (error) {
+        alert(error.message);
+    }
+}
+
+function restoreSidebarScrollPosition(savedPosition = readSidebarScrollPosition()) {
+    const navLinks = getSidebarScrollElement();
+    if (!navLinks) return;
+    if (!savedPosition) return;
+
+    window.requestAnimationFrame(() => {
+        sidebarScrollRestoreUntil = Date.now() + 900;
+        const targetHref = String(savedPosition.targetHref || '').trim();
+        const targetPage = normalizeClientPageName(targetHref || window.location.pathname);
+        const targetLink = Array.from(navLinks.querySelectorAll('a[href]')).find((link) => (
+            normalizeClientPageName(link.getAttribute('href') || '') === targetPage
+        ));
+
+        if (targetLink && Number.isFinite(Number(savedPosition.itemTop))) {
+            navLinks.scrollTop += targetLink.getBoundingClientRect().top -
+                navLinks.getBoundingClientRect().top -
+                Number(savedPosition.itemTop);
+            navLinks.scrollLeft = Number(savedPosition.left) || 0;
+            return;
+        }
+
+        if (Number.isFinite(Number(savedPosition.top))) {
+            navLinks.scrollTop = Number(savedPosition.top) || 0;
+            navLinks.scrollLeft = Number(savedPosition.left) || 0;
+        }
+    });
+}
+
+function initializeSidebarScrollMemory() {
+    const navLinks = getSidebarScrollElement();
+    if (!navLinks || navLinks.dataset.scrollMemoryBound === 'true') return;
+    navLinks.dataset.scrollMemoryBound = 'true';
+
+    const initialSavedPosition = readSidebarScrollPosition();
+    const restoreInitialPosition = () => restoreSidebarScrollPosition(initialSavedPosition);
+    [0, 50, 120, 250, 500, 900, 1400, 2200, 3200].forEach((delay) => {
+        window.setTimeout(restoreInitialPosition, delay);
+    });
+
+    const restoreObserver = new MutationObserver(() => {
+        if (Date.now() < sidebarScrollRestoreUntil || Date.now() - Number(initialSavedPosition?.savedAt || 0) < 6000) {
+            restoreSidebarScrollPosition(initialSavedPosition);
+        }
+    });
+    restoreObserver.observe(navLinks, {
+        attributes: true,
+        childList: true,
+        subtree: true,
+        attributeFilter: ['class', 'style']
+    });
+    window.setTimeout(() => restoreObserver.disconnect(), 6500);
+
+    let pendingFrame = 0;
+    navLinks.addEventListener('scroll', () => {
+        if (Date.now() < sidebarScrollRestoreUntil) return;
+        if (pendingFrame) return;
+        pendingFrame = window.requestAnimationFrame(() => {
+            pendingFrame = 0;
+            saveSidebarScrollPosition();
+        });
+    }, { passive: true });
+
+    const saveLinkEventPosition = (event) => {
+        const link = event.target.closest('a[href]');
+        if (link) saveSidebarLinkPosition(link);
+    };
+
+    navLinks.addEventListener('pointerdown', saveLinkEventPosition, { capture: true });
+    navLinks.addEventListener('mousedown', saveLinkEventPosition, { capture: true });
+    navLinks.addEventListener('touchstart', saveLinkEventPosition, { capture: true, passive: true });
+    navLinks.addEventListener('click', saveLinkEventPosition, { capture: true });
+
+    document.addEventListener('click', (event) => {
+        const link = event.target.closest('a[href]');
+        if (!link) return;
+        const href = String(link.getAttribute('href') || '').trim();
+        if (!href || href === '#' || href.startsWith('javascript:') || link.target === '_blank') return;
+        saveSidebarScrollPosition({ targetHref: href });
+    }, { capture: true });
+
+    window.addEventListener('beforeunload', saveSidebarScrollPosition);
+    window.addEventListener('pagehide', saveSidebarScrollPosition);
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') saveSidebarScrollPosition();
+    });
+}
+
 function ensureDesignationPermissionsNav() {
     const navLinks = document.querySelector('.nav-links');
     const loggedInUser = getLoggedInUser();
     if (!navLinks || !loggedInUser || loggedInUser.role !== 'Admin') return;
     if (navLinks.querySelector('[data-designation-permissions-link]')) return;
 
+    const visitorBooksLink = Array.from(navLinks.querySelectorAll('a[href]'))
+        .find((link) => normalizeClientPageName(link.getAttribute('href') || '') === 'visitor_books.html');
     const permissionsLink = Array.from(navLinks.querySelectorAll('a[href]'))
         .find((link) => normalizeClientPageName(link.getAttribute('href') || '') === 'permissions.html');
 
@@ -1868,18 +2670,55 @@ function ensureBranchRegistrationNav() {
     if (!navLinks || !loggedInUser || loggedInUser.role !== 'Admin') return;
     if (navLinks.querySelector('[data-branch-registration-link]')) return;
 
-    const permissionsLink = Array.from(navLinks.querySelectorAll('a[href]'))
-        .find((link) => normalizeClientPageName(link.getAttribute('href') || '') === 'permissions.html');
+    const teachersLink = Array.from(navLinks.querySelectorAll('a[href]'))
+        .find((link) => normalizeClientPageName(link.getAttribute('href') || '') === 'teachers.html');
     const branchLink = document.createElement('a');
     branchLink.href = toRoutePath('branch_registration.html');
     branchLink.className = 'nav-item';
     branchLink.dataset.branchRegistrationLink = 'true';
     branchLink.innerHTML = '<i data-lucide="building-2"></i><span>Branch Registration</span>';
 
-    if (permissionsLink) {
-        permissionsLink.insertAdjacentElement('beforebegin', branchLink);
+    if (teachersLink) {
+        teachersLink.insertAdjacentElement('afterend', branchLink);
     } else {
         navLinks.appendChild(branchLink);
+    }
+
+    if (window.lucide) window.lucide.createIcons();
+}
+
+function ensureAdminRecordsNav() {
+    const navLinks = document.querySelector('.nav-links');
+    const loggedInUser = getLoggedInUser();
+    if (!navLinks || !loggedInUser || loggedInUser.role !== 'Admin') return;
+    if (navLinks.querySelector('[data-admin-records-link]')) return;
+
+    const currentPage = getCurrentPageName();
+    const adminRecordLinks = [
+        { page: 'certificate.html', label: 'Certificate', icon: 'award' },
+        { page: 'complain_box.html', label: 'Complain Box', icon: 'message-square' },
+        { page: 'visitor_books.html', label: 'Visitor Books', icon: 'clipboard-list' }
+    ];
+    const fragment = document.createDocumentFragment();
+
+    adminRecordLinks.forEach((item) => {
+        const link = document.createElement('a');
+        link.href = toRoutePath(item.page);
+        link.className = `nav-item${currentPage === item.page ? ' active' : ''}`;
+        link.dataset.adminRecordsLink = 'true';
+        link.innerHTML = `<i data-lucide="${item.icon}"></i><span>${item.label}</span>`;
+        fragment.appendChild(link);
+    });
+
+    const branchRegistrationLink = navLinks.querySelector('[data-branch-registration-link]');
+    const teachersLink = Array.from(navLinks.querySelectorAll('a[href]'))
+        .find((link) => normalizeClientPageName(link.getAttribute('href') || '') === 'teachers.html');
+    const insertAfter = branchRegistrationLink || teachersLink;
+
+    if (insertAfter) {
+        insertAfter.parentNode.insertBefore(fragment, insertAfter.nextSibling);
+    } else {
+        navLinks.appendChild(fragment);
     }
 
     if (window.lucide) window.lucide.createIcons();
@@ -1922,9 +2761,13 @@ function ensureAttendanceNav() {
             <i data-lucide="users"></i>
             <span>Student Attendance</span>
         </a>
-        <a href="${toRoutePath('teacher_attendance.html')}" class="nav-subitem${currentPage === 'teacher_attendance.html' ? ' active' : ''}">
+        <a href="${toRoutePath('teacher_attendance.html')}#teacher" class="nav-subitem${currentPage === 'teacher_attendance.html' && window.location.hash !== '#staff' ? ' active' : ''}">
             <i data-lucide="user-check"></i>
             <span>Teacher Attendance</span>
+        </a>
+        <a href="${toRoutePath('teacher_attendance.html')}#staff" class="nav-subitem${currentPage === 'teacher_attendance.html' && window.location.hash === '#staff' ? ' active' : ''}">
+            <i data-lucide="briefcase-business"></i>
+            <span>Staff Attendance</span>
         </a>
         <a href="${toRoutePath('student_attendance_report.html')}" class="nav-subitem${currentPage === 'student_attendance_report.html' ? ' active' : ''}">
             <i data-lucide="file-bar-chart-2"></i>
@@ -1939,7 +2782,9 @@ function ensureAttendanceNav() {
     wrapper.appendChild(toggle);
     wrapper.appendChild(submenu);
 
-    if (permissionsLink) {
+    if (visitorBooksLink) {
+        visitorBooksLink.insertAdjacentElement('afterend', wrapper);
+    } else if (permissionsLink) {
         permissionsLink.insertAdjacentElement('beforebegin', wrapper);
     } else {
         navLinks.appendChild(wrapper);
@@ -1968,6 +2813,7 @@ function ensureNotificationsNav() {
     if (!canAccessNotifications) return;
 
     const currentPage = getCurrentPageName();
+    const attendanceNav = navLinks.querySelector('[data-attendance-nav]');
     const revenueLink = Array.from(navLinks.querySelectorAll('a[href]'))
         .find((link) => normalizeClientPageName(link.getAttribute('href') || '') === 'revenue.html');
     const permissionsLink = Array.from(navLinks.querySelectorAll('a[href]'))
@@ -1978,7 +2824,9 @@ function ensureNotificationsNav() {
     notificationLink.dataset.notificationsLink = 'true';
     notificationLink.innerHTML = '<i data-lucide="bell-ring"></i><span>Notifications</span>';
 
-    if (revenueLink) {
+    if (attendanceNav) {
+        attendanceNav.insertAdjacentElement('afterend', notificationLink);
+    } else if (revenueLink) {
         revenueLink.insertAdjacentElement('afterend', notificationLink);
     } else if (permissionsLink) {
         permissionsLink.insertAdjacentElement('beforebegin', notificationLink);
@@ -2068,8 +2916,6 @@ function clearLocalSystemData() {
         STORAGE_KEY_USERS,
         STORAGE_KEY_PROMOTION_HISTORY,
         STORAGE_KEY_SPECIAL_NOTICES,
-        STORAGE_KEY_CLASS_FEES,
-        STORAGE_KEY_STUDENT_PRINT_FIELDS,
         'eduCore_bills',
         'eduCore_monthly_fees'
     ]);
@@ -2119,7 +2965,7 @@ async function resetSystemData(event) {
 
         clearLocalSystemData();
         await showAppAlert('System data has been reset successfully. Please sign in again.', 'Reset Complete');
-        window.location.href = toRoutePath('index.html');
+        window.location.href = '/login';
     } catch (error) {
         await showAppAlert(error.message || 'System data could not be reset.', 'Reset Failed');
     }
@@ -2157,6 +3003,417 @@ function applyBranchScopedStudentsView() {
     }
 }
 
+function ensureBannersNav() {
+    const navLinks = document.querySelector('.nav-links');
+    const loggedInUser = getLoggedInUser();
+    if (!navLinks || !loggedInUser) return;
+    if (navLinks.querySelector('[data-banners-link]')) return;
+
+    const permissions = (() => {
+        try {
+            return JSON.parse(sessionStorage.getItem('eduCore_permissions_config') || '{}');
+        } catch (error) {
+            return {};
+        }
+    })();
+    const canAccessBanners = loggedInUser.role === 'Admin' ||
+        loggedInUser.role === 'Principal' ||
+        (window.eduCoreAuth && window.eduCoreAuth.canAccessPage(loggedInUser, permissions, 'banners.html'));
+
+    if (!canAccessBanners) return;
+
+    const currentPage = getCurrentPageName();
+    const studentsLink = Array.from(navLinks.querySelectorAll('a[href]'))
+        .find((link) => normalizeClientPageName(link.getAttribute('href') || '') === 'students.html');
+    const bannersLink = document.createElement('a');
+    bannersLink.href = toRoutePath('banners.html');
+    bannersLink.className = `nav-item${currentPage === 'banners.html' ? ' active' : ''}`;
+    bannersLink.dataset.bannersLink = 'true';
+    bannersLink.innerHTML = '<i data-lucide="image"></i><span>Banners</span>';
+
+    if (studentsLink) {
+        studentsLink.insertAdjacentElement('afterend', bannersLink);
+    } else {
+        navLinks.appendChild(bannersLink);
+    }
+
+    if (window.lucide) window.lucide.createIcons();
+}
+
+function ensureStudentRecordsNav() {
+    const navLinks = document.querySelector('.nav-links');
+    const loggedInUser = getLoggedInUser();
+    if (!navLinks || !loggedInUser || loggedInUser.role !== 'Admin') return;
+    if (navLinks.querySelector('[data-student-records-nav]')) return;
+
+    const studentsLink = Array.from(navLinks.querySelectorAll('a[href]'))
+        .find((link) => normalizeClientPageName(link.getAttribute('href') || '') === 'students.html');
+    if (!studentsLink) return;
+
+    const currentPage = getCurrentPageName();
+    const currentHash = String(window.location.hash || '').replace('#', '');
+    const recordKeys = ['stuckoff', 'resigned', 'alumni'];
+    const isRecordsActive = currentPage === 'students.html' && recordKeys.includes(currentHash);
+
+    const wrapper = document.createElement('div');
+    wrapper.className = `nav-dropdown${isRecordsActive ? ' open' : ''}`;
+    wrapper.dataset.studentRecordsNav = 'true';
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = `nav-item nav-dropdown-toggle${isRecordsActive ? ' active' : ''}`;
+    toggle.innerHTML = `
+        <span class="nav-item-main">
+            <i data-lucide="folder-open"></i>
+            <span>Student Records</span>
+        </span>
+        <i data-lucide="chevron-down" class="dropdown-chevron"></i>
+    `;
+    toggle.addEventListener('click', () => {
+        wrapper.classList.toggle('open');
+    });
+
+    const submenu = document.createElement('div');
+    submenu.className = 'nav-submenu';
+    submenu.innerHTML = `
+        <a href="${toRoutePath('students.html')}#stuckoff" class="nav-subitem${currentHash === 'stuckoff' ? ' active' : ''}">
+            <i data-lucide="user-x"></i>
+            <span>Stuck Off Students</span>
+        </a>
+        <a href="${toRoutePath('students.html')}#resigned" class="nav-subitem${currentHash === 'resigned' ? ' active' : ''}">
+            <i data-lucide="user-minus"></i>
+            <span>Resigned Teachers</span>
+        </a>
+        <a href="${toRoutePath('students.html')}#alumni" class="nav-subitem${currentHash === 'alumni' ? ' active' : ''}">
+            <i data-lucide="award"></i>
+            <span>Alumni</span>
+        </a>
+    `;
+
+    wrapper.appendChild(toggle);
+    wrapper.appendChild(submenu);
+    studentsLink.insertAdjacentElement('afterend', wrapper);
+
+    if (window.lucide) window.lucide.createIcons();
+}
+
+function ensureFacilityNav() {
+    const navLinks = document.querySelector('.nav-links');
+    if (!navLinks) return;
+    if (navLinks.querySelector('[data-facility-nav-link]')) return;
+
+    const currentPage = getCurrentPageName();
+    const facilityLinks = [
+        { page: 'library.html', label: 'Library', icon: 'library' },
+        { page: 'cafe.html', label: 'Cafe', icon: 'coffee' },
+        { page: 'transport.html', label: 'Transport', icon: 'bus' }
+    ];
+    const fragment = document.createDocumentFragment();
+
+    facilityLinks.forEach((item) => {
+        if (Array.from(navLinks.querySelectorAll('a[href]'))
+            .some((link) => normalizeClientPageName(link.getAttribute('href') || '') === item.page)) {
+            return;
+        }
+        const link = document.createElement('a');
+        link.href = toRoutePath(item.page);
+        link.className = `nav-item${currentPage === item.page ? ' active' : ''}`;
+        link.dataset.facilityNavLink = 'true';
+        link.innerHTML = `<i data-lucide="${item.icon}"></i><span>${item.label}</span>`;
+        fragment.appendChild(link);
+    });
+
+    const feeChallanLink = Array.from(navLinks.querySelectorAll('a[href]'))
+        .find((link) => normalizeClientPageName(link.getAttribute('href') || '') === 'fee_challan.html');
+    const feesLink = Array.from(navLinks.querySelectorAll('a[href]'))
+        .find((link) => normalizeClientPageName(link.getAttribute('href') || '') === 'fees.html');
+    const insertAfter = feeChallanLink || feesLink;
+
+    if (insertAfter) {
+        insertAfter.parentNode.insertBefore(fragment, insertAfter.nextSibling);
+    } else {
+        navLinks.appendChild(fragment);
+    }
+
+    if (window.lucide) window.lucide.createIcons();
+}
+
+function ensureAdminSidebarCompleteness() {
+    const navLinks = document.querySelector('.nav-links');
+    const loggedInUser = getLoggedInUser();
+    if (!navLinks || !loggedInUser || loggedInUser.role !== 'Admin') return;
+    if (navLinks.dataset.adminSidebarComplete === 'true') return;
+    navLinks.dataset.adminSidebarComplete = 'true';
+
+    const currentPage = getCurrentPageName();
+    const completeLinks = [
+        { page: 'dashboard.html', label: 'Dashboard', icon: 'layout-dashboard' },
+        { page: 'banners.html', label: 'Banners', icon: 'image' },
+        { page: 'classes.html', label: 'Classes', icon: 'school' },
+        { page: 'students.html', label: 'Students', icon: 'users' },
+        { page: 'student_scheduling.html', label: 'Students Scheduling', icon: 'calendar-clock' },
+        { page: 'families.html', label: 'Families', icon: 'home' },
+        { page: 'teachers.html', label: 'Teachers', icon: 'book-open' },
+        { page: 'teacher_scheduling.html', label: 'Teachers Scheduling', icon: 'calendar-days' },
+        { page: 'staff.html', label: 'Staff', icon: 'briefcase' },
+        { page: 'set_fee.html', label: 'Set Fees', icon: 'badge-dollar-sign' },
+        { page: 'fees.html', label: 'Fees', icon: 'credit-card' },
+        { page: 'fee_challan.html', label: 'Fee Challan', icon: 'file-text' },
+        { page: 'remaining_charges.html', label: 'Remaining Charges', icon: 'circle-dollar-sign' },
+        { page: 'payment_history.html', label: 'Payment Statement', icon: 'receipt-text' },
+        { page: 'annual_charges.html', label: 'Annual Charges', icon: 'receipt' },
+        { page: 'exam_result.html', label: 'Results', icon: 'file-badge' },
+        { page: 'exam_result_history.html', label: 'Result History', icon: 'history' },
+        { page: 'exams.html', label: 'Result Cards', icon: 'badge-check' },
+        { page: 'revenue.html', label: 'Revenue', icon: 'trending-up' },
+        { page: 'teacher_salaries.html', label: 'Salaries', icon: 'wallet' },
+        { page: 'bills.html', label: 'Bills', icon: 'receipt' },
+        { page: 'notifications.html', label: 'Notifications', icon: 'bell-ring' },
+        { page: 'permissions.html', label: 'Permissions', icon: 'shield' },
+        { page: 'designation-permissions.html', label: 'Designation Permissions', icon: 'shield-check' },
+        { page: 'library.html', label: 'Library', icon: 'library' },
+        { page: 'complain_box.html', label: 'Complain Box', icon: 'message-square' },
+        { page: 'branch_registration.html', label: 'Branch Registration', icon: 'building-2' },
+        { page: 'visitor_books.html', label: 'Visitor Records', icon: 'clipboard-list' },
+        { page: 'certificate.html', label: 'Certificates', icon: 'award' },
+        { page: 'cafe.html', label: 'Cafe Records', icon: 'coffee' },
+        { page: 'transport.html', label: 'Transport', icon: 'bus' },
+        { page: 'aboutme.html', label: 'About', icon: 'info' }
+    ];
+
+    const existingPages = () => new Set(Array.from(navLinks.querySelectorAll('a[href]'))
+        .map((link) => normalizeClientPageName(link.getAttribute('href') || '')));
+
+    const logoutLink = Array.from(navLinks.querySelectorAll('a[href="#"]'))
+        .find((link) => /logout/i.test(link.textContent || ''));
+    let existing = existingPages();
+
+    completeLinks.forEach((item) => {
+        if (existing.has(item.page)) return;
+        const link = document.createElement('a');
+        link.href = toRoutePath(item.page);
+        link.className = `nav-item${currentPage === item.page ? ' active' : ''}`;
+        link.dataset.adminCompleteLink = 'true';
+        link.innerHTML = `<i data-lucide="${item.icon}"></i><span>${item.label}</span>`;
+        if (logoutLink) {
+            navLinks.insertBefore(link, logoutLink);
+        } else {
+            navLinks.appendChild(link);
+        }
+        existing = existingPages();
+    });
+
+    if (window.lucide) window.lucide.createIcons();
+}
+
+function renderAdminSidebarSequence() {
+    const navLinks = document.querySelector('.nav-links');
+    const loggedInUser = getLoggedInUser();
+    if (!navLinks) return;
+    if (loggedInUser && (loggedInUser.role === 'Student' || loggedInUser.role === 'Teacher')) return;
+    if (navLinks.dataset.adminSidebarSequenced === 'true') return;
+
+    const currentPage = getCurrentPageName();
+    const schedulingNavPages = {
+        'student_scheduling.html': new Set([
+            'student_scheduling.html',
+            'assignments.html',
+            'assignment_uploading.html',
+            'student_timetable.html',
+            'student_diary.html',
+            'student_leave_requests.html',
+            'student_courses.html',
+            'quiz_uploading.html',
+            'lecture_uploading.html',
+            'exam_schedule.html',
+            'stuck_off.html'
+        ]),
+        'teacher_scheduling.html': new Set([
+            'teacher_scheduling.html',
+            'teacher_timetable.html',
+            'teacher_assigned_classes.html',
+            'teacher_leave_requests.html'
+        ])
+    };
+    const isActivePage = (page, hash = '') => {
+        const normalizedPage = normalizeClientPageName(page);
+        const activePages = schedulingNavPages[normalizedPage];
+        if (activePages ? !activePages.has(currentPage) : normalizedPage !== currentPage) return false;
+        return !hash || window.location.hash === hash;
+    };
+    const hasActiveChild = (children = []) => children.some((child) => (
+        child.type === 'dropdown' ? hasActiveChild(child.children) : isActivePage(child.page, child.hash)
+    ));
+
+    const navItems = [
+        { type: 'link', page: 'dashboard.html', label: 'Dashboard', icon: 'layout-dashboard' },
+        { type: 'link', page: 'banners.html', label: 'Banners', icon: 'image' },
+        { type: 'link', page: 'classes.html', label: 'Classes', icon: 'school' },
+        { type: 'link', page: 'students.html', label: 'Students', icon: 'users' },
+        { type: 'link', page: 'student_scheduling.html', label: 'Students Scheduling', icon: 'calendar-clock' },
+        { type: 'link', page: 'families.html', label: 'Families', icon: 'home' },
+        { type: 'link', page: 'teachers.html', label: 'Teachers', icon: 'book-open' },
+        { type: 'link', page: 'teacher_scheduling.html', label: 'Teachers Scheduling', icon: 'calendar-days' },
+        { type: 'link', page: 'staff.html', label: 'Staff', icon: 'briefcase' },
+        {
+            type: 'dropdown',
+            label: 'Attendance',
+            icon: 'clipboard-check',
+            children: [
+                { page: 'student_attendance.html', label: 'Student Attendance', icon: 'users' },
+                { page: 'teacher_attendance.html', hash: '#teacher', label: 'Teacher Attendance', icon: 'user-check' },
+                { page: 'teacher_attendance.html', hash: '#staff', label: 'Staff Attendance', icon: 'briefcase-business' }
+            ]
+        },
+        {
+            type: 'dropdown',
+            label: 'Fee Structure',
+            icon: 'credit-card',
+            children: [
+                { page: 'set_fee.html', label: 'Set Fees', icon: 'badge-dollar-sign' },
+                { page: 'fees.html', label: 'Fees', icon: 'credit-card' },
+                { page: 'fee_challan.html', label: 'Fee Challan', icon: 'file-text' },
+                { page: 'remaining_charges.html', label: 'Remaining Charges', icon: 'circle-dollar-sign' },
+                { page: 'payment_history.html', label: 'Payment Statement', icon: 'receipt-text' },
+                { page: 'annual_charges.html', label: 'Annual Charges', icon: 'receipt' }
+            ]
+        },
+        {
+            type: 'dropdown',
+            label: 'Examination',
+            icon: 'clipboard-list',
+            children: [
+                { page: 'exam_result.html', label: 'Results', icon: 'file-badge' },
+                { page: 'exam_result_history.html', label: 'Result History', icon: 'history' },
+                { page: 'exams.html', label: 'Result Cards', icon: 'badge-check' }
+            ]
+        },
+        {
+            type: 'dropdown',
+            label: 'Finance',
+            icon: 'landmark',
+            children: [
+                { page: 'revenue.html', label: 'Revenue', icon: 'trending-up' },
+                { page: 'teacher_salaries.html', label: 'Salaries', icon: 'wallet' },
+                { page: 'bills.html', label: 'Bills', icon: 'receipt' }
+            ]
+        },
+        { type: 'link', page: 'notifications.html', label: 'Notifications', icon: 'bell-ring' },
+        {
+            type: 'dropdown',
+            label: 'Permissions',
+            icon: 'shield',
+            children: [
+                { page: 'permissions.html', label: 'Permissions', icon: 'shield' },
+                { page: 'designation-permissions.html', label: 'Designation Permissions', icon: 'shield-check' }
+            ]
+        },
+        { type: 'link', page: 'library.html', label: 'Library', icon: 'library' },
+        { type: 'link', page: 'complain_box.html', label: 'Complain Box', icon: 'message-square' },
+        { type: 'link', page: 'branch_registration.html', label: 'Branch Registration', icon: 'building-2' },
+        { type: 'link', page: 'visitor_books.html', label: 'Visitor Records', icon: 'clipboard-list' },
+        { type: 'link', page: 'certificate.html', label: 'Certificates', icon: 'award' },
+        { type: 'link', page: 'cafe.html', label: 'Cafe Records', icon: 'coffee' },
+        { type: 'link', page: 'transport.html', label: 'Transport', icon: 'bus' },
+        { type: 'link', page: 'aboutme.html', label: 'About', icon: 'info' },
+        { type: 'logout', label: 'Logout', icon: 'log-out' }
+    ];
+
+    const buildLink = (item, className = 'nav-item') => `
+        <a href="${toRoutePath(item.page)}${item.hash || ''}" class="${className}${isActivePage(item.page, item.hash) ? ' active' : ''}">
+            <i data-lucide="${item.icon}"></i>
+            <span>${item.label}</span>
+        </a>
+    `;
+
+    const buildDropdown = (item, nested = false) => {
+        const open = hasActiveChild(item.children);
+        const toggleClass = nested ? 'nav-subitem nav-dropdown-toggle' : 'nav-item nav-dropdown-toggle';
+        return `
+            <div class="nav-dropdown${open ? ' open' : ''}" data-sequenced-sidebar-dropdown="true">
+                <button type="button" class="${toggleClass}${open ? ' active' : ''}">
+                    <span class="nav-item-main">
+                        <i data-lucide="${item.icon}"></i>
+                        <span>${item.label}</span>
+                    </span>
+                    <i data-lucide="chevron-down" class="dropdown-chevron"></i>
+                </button>
+                <div class="nav-submenu">
+                    ${item.children.map((child) => buildItem(child, true)).join('')}
+                </div>
+            </div>
+        `;
+    };
+
+    const buildItem = (item, nested = false) => {
+        if (item.type === 'link') return buildLink(item, nested ? 'nav-subitem' : 'nav-item');
+        if (item.type === 'logout') {
+            return `
+                <a href="#" class="nav-item" onclick="logoutUser(event)">
+                    <i data-lucide="${item.icon}"></i>
+                    <span>${item.label}</span>
+                </a>
+            `;
+        }
+        return buildDropdown(item, nested);
+    };
+
+    navLinks.innerHTML = navItems.map((item) => buildItem(item)).join('');
+
+    navLinks.dataset.adminSidebarSequenced = 'true';
+    navLinks.querySelectorAll('[data-sequenced-sidebar-dropdown] > .nav-dropdown-toggle').forEach((toggle) => {
+        toggle.addEventListener('click', () => {
+            toggle.closest('.nav-dropdown')?.classList.toggle('open');
+        });
+    });
+
+    if (window.lucide) window.lucide.createIcons();
+}
+
+function ensureSchedulingNav() {
+    const navLinks = document.querySelector('.nav-links');
+    const loggedInUser = getLoggedInUser();
+    if (!navLinks || !loggedInUser || loggedInUser.role !== 'Admin') return;
+    if (navLinks.querySelector('[data-scheduling-nav]')) return;
+
+    const currentPage = getCurrentPageName();
+    const studentSchedulingPages = ['student_scheduling.html', 'assignments.html', 'assignment_uploading.html', 'student_timetable.html', 'student_diary.html', 'student_leave_requests.html', 'student_courses.html', 'quiz_uploading.html', 'lecture_uploading.html', 'exam_schedule.html', 'stuck_off.html'];
+    const isStudentSchedulingPage = studentSchedulingPages.includes(currentPage);
+    const teacherSchedulingPages = ['teacher_scheduling.html', 'teacher_timetable.html', 'teacher_assigned_classes.html', 'teacher_leave_requests.html'];
+    const isTeacherSchedulingPage = teacherSchedulingPages.includes(currentPage);
+    const insertAfter = Array.from(navLinks.querySelectorAll('a[href]'))
+        .find((link) => normalizeClientPageName(link.getAttribute('href') || '') === 'students.html');
+
+    const wrapper = document.createElement('div');
+    wrapper.dataset.schedulingNav = 'true';
+    wrapper.innerHTML = `
+        <a href="${toRoutePath('student_scheduling.html')}" class="nav-item${isStudentSchedulingPage ? ' active' : ''}">
+            <i data-lucide="users"></i>
+            <span>Student Scheduling</span>
+        </a>
+        <a href="${toRoutePath('quiz_uploading.html')}" class="nav-item${currentPage === 'quiz_uploading.html' ? ' active' : ''}">
+            <i data-lucide="circle-help"></i>
+            <span>Quiz Uploading</span>
+        </a>
+        <a href="${toRoutePath('lecture_uploading.html')}" class="nav-item${currentPage === 'lecture_uploading.html' ? ' active' : ''}">
+            <i data-lucide="presentation"></i>
+            <span>Lecture Uploading</span>
+        </a>
+        <a href="${toRoutePath('teacher_scheduling.html')}" class="nav-item${isTeacherSchedulingPage ? ' active' : ''}">
+            <i data-lucide="book-open"></i>
+            <span>Teacher Scheduling</span>
+        </a>
+    `;
+
+    if (insertAfter) {
+        insertAfter.insertAdjacentElement('afterend', wrapper);
+    } else {
+        navLinks.appendChild(wrapper);
+    }
+
+    if (window.lucide) window.lucide.createIcons();
+}
+
 function applyStudentActionPermissions() {
     if (!isCurrentPage('students.html')) return;
 
@@ -2183,6 +3440,7 @@ async function renderBranches() {
     if (!tbody) return;
 
     try {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 1rem; color: var(--text-secondary);">Loading branches...</td></tr>';
         const response = await fetch(`${API_BASE_URL}/branches`);
         const responseText = await response.text();
         let branches = [];
@@ -2197,6 +3455,22 @@ async function renderBranches() {
             throw new Error(branches.error || 'Branches could not be loaded.');
         }
 
+        branches = Array.isArray(branches) ? branches : (Array.isArray(branches.branches) ? branches.branches : []);
+        renderBranchRows(branches);
+    } catch (error) {
+        branchRecordsCache = [];
+        updateBranchAccessSummary([]);
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 1rem; color: #dc2626;">Branches could not be loaded. Please refresh and try again.</td></tr>';
+    }
+}
+
+function renderBranchRows(branches = []) {
+    const tbody = document.getElementById('branchTableBody');
+    if (!tbody) return;
+
+    try {
+        branchRecordsCache = Array.isArray(branches) ? branches : [];
+        updateBranchAccessSummary(branches);
         tbody.innerHTML = '';
         if (!Array.isArray(branches) || branches.length === 0) {
             tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 1rem; color: var(--text-secondary);">No branches registered yet.</td></tr>';
@@ -2214,12 +3488,11 @@ async function renderBranches() {
                 <td>${branch.profileId || '-'}</td>
                 <td>
                     <div class="branch-actions">
-                    <button class="action-btn btn-edit" onclick='editBranch(${JSON.stringify(branch)})' title="Edit">
-                        <i data-lucide="edit-2" width="14"></i> Edit
-                    </button>
-                    <button class="action-btn btn-delete" onclick="deleteBranch('${branch.id}')" title="Delete">
-                        <i data-lucide="trash-2" width="14"></i>
-                    </button>
+                        <select class="table-action-select" onchange="handleBranchActionSelect(this, '${branch.id}')">
+                            <option value="">Actions</option>
+                            <option value="edit">Edit</option>
+                            <option value="delete">Delete</option>
+                        </select>
                     </div>
                 </td>
             `;
@@ -2227,15 +3500,317 @@ async function renderBranches() {
         });
         if (window.lucide) window.lucide.createIcons();
     } catch (error) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 1rem; color: #dc2626;">Branches could not be loaded.</td></tr>';
+        branchRecordsCache = [];
+        updateBranchAccessSummary([]);
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 1rem; color: #dc2626;">Branches could not be displayed.</td></tr>';
+    }
+}
+
+function handleBranchActionSelect(selectElement, branchId) {
+    const action = String(selectElement?.value || '').trim().toLowerCase();
+    if (!action) return;
+    if (selectElement) selectElement.value = '';
+
+    const branch = (Array.isArray(branchRecordsCache) ? branchRecordsCache : [])
+        .find((record) => String(record.id) === String(branchId));
+
+    if (action === 'edit' && branch) {
+        editBranch(branch);
+        return;
+    }
+
+    if (action === 'delete') {
+        deleteBranch(branchId);
+    }
+}
+
+function getFamilies() {
+    return getArrayData(STORAGE_KEY_FAMILIES);
+}
+
+function saveFamilies(families) {
+    localStorage.setItem(STORAGE_KEY_FAMILIES, JSON.stringify(Array.isArray(families) ? families : []));
+}
+
+function buildFamilyNameFromStudentFields() {
+    const fatherName = document.getElementById('fatherName')?.value.trim();
+    const phone = document.getElementById('parentPhone')?.value.trim();
+    if (fatherName) return `${fatherName} Family`;
+    if (phone) return `Family ${phone}`;
+    return '';
+}
+
+function normalizeFamilyPhone(value = '') {
+    return String(value || '').replace(/\D/g, '');
+}
+
+function normalizeFamilyIdentityValue(value = '') {
+    return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function normalizeFamilyContactValue(value = '') {
+    const digits = normalizeFamilyPhone(value);
+    return digits || normalizeFamilyIdentityValue(value);
+}
+
+function getExplicitFamilyMatchKey(familyName = '', familyNo = '', familyContact = '') {
+    const nameKey = normalizeFamilyIdentityValue(familyName);
+    const numberKey = normalizeFamilyIdentityValue(familyNo);
+    const contactKey = normalizeFamilyContactValue(familyContact);
+    return nameKey && numberKey && contactKey ? `${nameKey}|${numberKey}|${contactKey}` : '';
+}
+
+function ensureExplicitFamilyRecord(familyName = '', familyNo = '', familyContact = '') {
+    const cleanName = String(familyName || '').trim();
+    const cleanNo = String(familyNo || '').trim();
+    const cleanContact = String(familyContact || '').trim();
+    const matchKey = getExplicitFamilyMatchKey(cleanName, cleanNo, cleanContact);
+    if (!matchKey) return '';
+
+    const families = getFamilies();
+    const existing = families.find((family) => getExplicitFamilyMatchKey(family.name, family.familyNo, family.familyContact) === matchKey);
+        if (existing) {
+            existing.name = cleanName;
+            existing.familyNo = cleanNo;
+            existing.familyContact = cleanContact;
+            existing.updatedAt = new Date().toISOString();
+        saveFamilies(families);
+        return existing.id;
+    }
+
+    const family = {
+        id: generateUniqueRecordId('FAM'),
+        name: cleanName,
+        familyNo: cleanNo,
+        familyContact: cleanContact,
+        createdAt: new Date().toISOString()
+    };
+    families.push(family);
+    saveFamilies(families);
+    return family.id;
+}
+
+function updateExplicitFamilyRelationDetails(familyId, fatherName = '', parentPhone = '', guardianName = '', guardianContact = '') {
+    if (!familyId) return;
+    const families = getFamilies();
+    const family = families.find((item) => String(item.id || '') === String(familyId));
+    if (!family) return;
+    if (fatherName) family.fatherName = String(fatherName || '').trim();
+    if (parentPhone) {
+        family.parentPhone = String(parentPhone || '').trim();
+        family.phone = String(parentPhone || '').trim();
+    }
+    if (guardianName) family.guardianName = String(guardianName || '').trim();
+    if (guardianContact) family.guardianContact = String(guardianContact || '').trim();
+    family.updatedAt = new Date().toISOString();
+    saveFamilies(families);
+}
+
+function getFamilyMatchKey(fatherName = '', phone = '') {
+    return `${String(fatherName || '').trim().toLowerCase()}|${normalizeFamilyPhone(phone)}`;
+}
+
+function getFamilyGuardianMatchKey(guardianName = '', guardianContact = '') {
+    return `${String(guardianName || '').trim().toLowerCase()}|${normalizeFamilyPhone(guardianContact)}`;
+}
+
+function getStudentFamilyRelationKey(fatherName = '', parentPhone = '', guardianName = '') {
+    const fatherKey = normalizeFamilyIdentityValue(fatherName);
+    const phoneKey = normalizeFamilyPhone(parentPhone);
+    const guardianKey = normalizeFamilyIdentityValue(guardianName);
+    return fatherKey && phoneKey && guardianKey ? `${fatherKey}|${phoneKey}|${guardianKey}` : '';
+}
+
+function findFamilyByStudentRelation(fatherName = '', parentPhone = '', guardianName = '', excludeStudentId = '') {
+    const relationKey = getStudentFamilyRelationKey(fatherName, parentPhone, guardianName);
+    if (!relationKey) return null;
+
+    const students = getData(STORAGE_KEY_STUDENTS);
+    const matchedStudent = students.find((student) => (
+        String(student.id || '') !== String(excludeStudentId || '') &&
+        getStudentFamilyRelationKey(student.fatherName, student.parentPhone, student.guardianName) === relationKey &&
+        student.familyName &&
+        student.familyNo &&
+        student.familyContact
+    ));
+
+    if (matchedStudent) {
+        return {
+            id: matchedStudent.familyId || '',
+            name: matchedStudent.familyName || '',
+            familyNo: matchedStudent.familyNo || '',
+            familyContact: matchedStudent.familyContact || '',
+            createdAt: matchedStudent.familyAddedAt || ''
+        };
+    }
+
+    return getFamilies().find((family) => (
+        getStudentFamilyRelationKey(family.fatherName, family.parentPhone || family.phone, family.guardianName) === relationKey &&
+        family.name &&
+        family.familyNo &&
+        family.familyContact
+    )) || null;
+}
+
+function setStudentFamilyFieldsFromFamily(family) {
+    if (!family) return false;
+    const familyNameField = document.getElementById('studentFamilyName');
+    const familyNoField = document.getElementById('studentFamilyNo');
+    const familyContactField = document.getElementById('studentFamilyContact');
+    const familyAddedField = document.getElementById('studentFamilyAddedTime');
+    if (!familyNameField || !familyNoField || !familyContactField) return false;
+
+    familyNameField.value = family.name || '';
+    familyNoField.value = family.familyNo || '';
+    familyContactField.value = family.familyContact || '';
+    if (familyAddedField) {
+        const addedAt = family.createdAt || new Date().toISOString();
+        const parsed = new Date(addedAt);
+        familyAddedField.value = Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString().slice(0, 16);
+    }
+    return true;
+}
+
+function autoFillStudentFamilyFromRelation(force = false) {
+    const familyNameField = document.getElementById('studentFamilyName');
+    const familyNoField = document.getElementById('studentFamilyNo');
+    const familyContactField = document.getElementById('studentFamilyContact');
+    if (!familyNameField || !familyNoField || !familyContactField) return null;
+
+    const hasManualFamilyValue = familyNameField.value.trim() || familyNoField.value.trim() || familyContactField.value.trim();
+    if (hasManualFamilyValue && !force) return null;
+
+    const match = findFamilyByStudentRelation(
+        document.getElementById('fatherName')?.value || '',
+        document.getElementById('parentPhone')?.value || '',
+        document.getElementById('guardianName')?.value || '',
+        document.getElementById('studentId')?.value || ''
+    );
+    if (!match) return null;
+
+    setStudentFamilyFieldsFromFamily(match);
+    return match;
+}
+
+function ensureFamilyRecord(familyName, parentPhone = '', guardianName = '', guardianContact = '', fatherName = '') {
+    const cleanName = String(familyName || '').trim();
+    if (!cleanName) return '';
+
+    const families = getFamilies();
+    const cleanFatherName = String(fatherName || '').trim();
+    const parentPhoneKey = normalizeFamilyPhone(parentPhone);
+    const cleanGuardianName = String(guardianName || '').trim();
+    const cleanGuardianContact = String(guardianContact || '').trim();
+    const guardianPhoneKey = normalizeFamilyPhone(cleanGuardianContact);
+    const existing = families.find((family) => {
+        const sameName = String(family.name || '').toLowerCase() === cleanName.toLowerCase();
+        const familyPhoneKey = normalizeFamilyPhone(family.parentPhone || family.phone || '');
+        const familyGuardianContactKey = normalizeFamilyPhone(family.guardianContact || '');
+        const sameFatherAndPhone = cleanFatherName &&
+            parentPhoneKey &&
+            getFamilyMatchKey(family.fatherName, family.parentPhone || family.phone) === getFamilyMatchKey(cleanFatherName, parentPhone) &&
+            familyPhoneKey === parentPhoneKey;
+        const sameGuardianContact = cleanGuardianContact &&
+            guardianPhoneKey &&
+            familyGuardianContactKey === guardianPhoneKey;
+        const sameGuardianNameAndContact = cleanGuardianName &&
+            guardianPhoneKey &&
+            getFamilyGuardianMatchKey(family.guardianName, family.guardianContact) === getFamilyGuardianMatchKey(cleanGuardianName, cleanGuardianContact);
+        return sameFatherAndPhone || sameGuardianContact || sameGuardianNameAndContact || (sameName && (!cleanFatherName || !parentPhoneKey));
+    });
+    if (existing) {
+        if (parentPhone) existing.phone = parentPhone;
+        if (parentPhone) existing.parentPhone = parentPhone;
+        if (cleanFatherName) existing.fatherName = cleanFatherName;
+        if (cleanGuardianName) existing.guardianName = cleanGuardianName;
+        if (cleanGuardianContact) existing.guardianContact = cleanGuardianContact;
+        saveFamilies(families);
+        return existing.id;
+    }
+
+    const family = {
+        id: generateUniqueRecordId('FAM'),
+        name: cleanName,
+        phone: parentPhone || '',
+        parentPhone,
+        fatherName: cleanFatherName,
+        guardianName: cleanGuardianName,
+        guardianContact: cleanGuardianContact,
+        createdAt: new Date().toISOString()
+    };
+    families.push(family);
+    saveFamilies(families);
+    return family.id;
+}
+
+function syncStudentFamilyLinksByFatherPhone(students, familyId, familyName, fatherName, parentPhone, guardianName = '', guardianContact = '') {
+    const matchKey = getFamilyMatchKey(fatherName, parentPhone);
+    const guardianKey = getFamilyGuardianMatchKey(guardianName, guardianContact);
+    const canMatchFatherPhone = fatherName && normalizeFamilyPhone(parentPhone);
+    const canMatchGuardian = guardianName && normalizeFamilyPhone(guardianContact);
+    if (!familyId || (!canMatchFatherPhone && !canMatchGuardian)) return students;
+    return students.map((student) => {
+        const matchesFatherPhone = canMatchFatherPhone && getFamilyMatchKey(student.fatherName, student.parentPhone) === matchKey;
+        const matchesGuardian = canMatchGuardian && getFamilyGuardianMatchKey(student.guardianName, student.guardianContact) === guardianKey;
+        if (!matchesFatherPhone && !matchesGuardian) return student;
+        return {
+            ...student,
+            familyId,
+            familyName
+        };
+    });
+}
+
+function syncStudentFamilyLinksByDetails(students, familyId, familyName, familyNo, familyContact = '') {
+    const matchKey = getExplicitFamilyMatchKey(familyName, familyNo, familyContact);
+    if (!familyId || !matchKey) return students;
+    return students.map((student) => {
+        if (getExplicitFamilyMatchKey(student.familyName, student.familyNo, student.familyContact) !== matchKey) return student;
+        return {
+            ...student,
+            familyId,
+            familyName,
+            familyNo,
+            familyContact: familyContact || student.familyContact || ''
+        };
+    });
+}
+
+function populateStudentFamilyOptions(selectedId = '') {
+    const select = document.getElementById('studentFamilyId');
+    if (!select) return;
+
+    const families = getFamilies().sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+    select.innerHTML = '<option value="">Create new family from this student</option>' + families.map((family) => (
+        `<option value="${escapeHtml(family.id)}">${escapeHtml(family.name || 'Family')}</option>`
+    )).join('');
+    select.value = selectedId || '';
+}
+
+function updateBranchAccessSummary(branches = []) {
+    const countEl = document.getElementById('branchAccessCount');
+    const detailEl = document.getElementById('branchAccessDetail');
+    if (!countEl && !detailEl) return;
+
+    const records = Array.isArray(branches) ? branches : [];
+    const total = records.length;
+    const active = records.filter((branch) => branch?.isActive !== false).length;
+    const inactive = Math.max(total - active, 0);
+
+    if (countEl) countEl.innerText = total.toString();
+    if (detailEl) {
+        const label = total === 1 ? 'branch' : 'branches';
+        detailEl.innerHTML = `<i data-lucide="building-2" size="16"></i> ${active} active / ${inactive} inactive ${label}`;
+        if (window.lucide) window.lucide.createIcons();
     }
 }
 
 async function handleBranchRegistrationSubmit(event) {
     event.preventDefault();
 
+    const submitButton = event.submitter || document.querySelector('#branchRegistrationForm button[type="submit"]');
     const recordId = document.getElementById('branchRecordId').value.trim();
-    const campusName = document.getElementById('branchCampusName').value;
+    const campusName = document.getElementById('branchCampusName').value.trim();
     const fullName = document.getElementById('branchDisplayName').value.trim() || campusName;
     const username = document.getElementById('branchUsername').value.trim();
     const password = document.getElementById('branchPassword').value.trim();
@@ -2246,9 +3821,17 @@ async function handleBranchRegistrationSubmit(event) {
     }
 
     try {
+        if (submitButton) {
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<i data-lucide="loader-circle"></i> Saving...';
+            if (window.lucide) window.lucide.createIcons();
+        }
         const response = await fetch(`${API_BASE_URL}/branches`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                ...(sessionStorage.getItem('eduCore_token') ? { Authorization: `Bearer ${sessionStorage.getItem('eduCore_token')}` } : {})
+            },
             body: JSON.stringify({ id: recordId || undefined, campusName, fullName, username, password })
         });
 
@@ -2263,25 +3846,33 @@ async function handleBranchRegistrationSubmit(event) {
 
         pushNotification('Branch Registered', `${campusName} branch login has been created.`, 'user');
         resetBranchRegistrationForm();
-        renderBranches();
+        await renderBranches();
+        populateCampusDropdowns();
         showSuccessModal(recordId ? 'Branch Updated!' : 'Branch Registered!', recordId
             ? `${campusName} branch login details have been updated.`
             : `${campusName} can now log in with its branch username and password.`);
     } catch (error) {
         alert(error.message);
+    } finally {
+        const currentSubmitButton = document.querySelector('#branchRegistrationForm button[type="submit"]');
+        if (currentSubmitButton) {
+            currentSubmitButton.disabled = false;
+            currentSubmitButton.innerHTML = '<i data-lucide="save"></i> Save Branch';
+            if (window.lucide) window.lucide.createIcons();
+        }
     }
 }
 
 function editBranch(branch) {
     document.getElementById('branchRecordId').value = branch.id || '';
-    document.getElementById('branchCampusName').value = branch.campusName || 'Main Campus';
+    document.getElementById('branchCampusName').value = branch.campusName || '';
     document.getElementById('branchDisplayName').value = branch.fullName || '';
     document.getElementById('branchUsername').value = branch.username || '';
     document.getElementById('branchPassword').value = branch.plainPassword || '';
 
     const submitButton = document.querySelector('#branchRegistrationForm button[type="submit"]');
     if (submitButton) {
-        submitButton.innerHTML = '<i data-lucide="save"></i> Update Branch Login';
+        submitButton.innerHTML = '<i data-lucide="save"></i> Update Branch';
     }
     if (window.lucide) window.lucide.createIcons();
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -2293,11 +3884,10 @@ function resetBranchRegistrationForm() {
 
     form.reset();
     document.getElementById('branchRecordId').value = '';
-    document.getElementById('branchCampusName').value = 'Main Campus';
 
     const submitButton = document.querySelector('#branchRegistrationForm button[type="submit"]');
     if (submitButton) {
-        submitButton.innerHTML = '<i data-lucide="save"></i> Save Branch Login';
+        submitButton.innerHTML = '<i data-lucide="save"></i> Save Branch';
     }
     if (window.lucide) window.lucide.createIcons();
 }
@@ -2308,7 +3898,8 @@ async function deleteBranch(branchId) {
 
     try {
         const response = await fetch(`${API_BASE_URL}/branches/${encodeURIComponent(branchId)}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            headers: sessionStorage.getItem('eduCore_token') ? { Authorization: `Bearer ${sessionStorage.getItem('eduCore_token')}` } : {}
         });
         const responseText = await response.text();
         let result = null;
@@ -2325,6 +3916,7 @@ async function deleteBranch(branchId) {
 
         resetBranchRegistrationForm();
         renderBranches();
+        populateCampusDropdowns();
         pushNotification('Branch Deleted', 'The branch login was removed successfully.', 'user');
     } catch (error) {
         alert(error.message);
@@ -2339,12 +3931,13 @@ function renderDashboardTable(term = '') {
     const tbody = document.getElementById('dashTableBody');
     if (!tbody) return;
 
+    term = String(term || '').toLowerCase().trim();
     // Use students data for the "Activity" table
-    const students = getData(STORAGE_KEY_STUDENTS);
-    const filtered = students.filter(s =>
-        s.fullName.toLowerCase().includes(term) ||
-        s.rollNo.toLowerCase().includes(term)
-    );
+    const students = getDashboardCampusFilteredRecords(getArrayData(STORAGE_KEY_STUDENTS));
+    const filtered = students.filter(s => recordMatchesSearch(s, term, [
+        'studentCode', 'fullName', 'fatherName', 'rollNo', 'classGrade', 'campusName',
+        'gender', 'parentPhone', 'feesStatus', 'username'
+    ]));
 
     // If searching, show all matches. Otherwise show last 5.
     const displayList = term ? filtered : students.slice(-5).reverse();
@@ -2466,6 +4059,7 @@ function showPaidHistory() {
 function renderFinance(term = '') {
     const tbody = document.getElementById('financeTableBody');
     if (!tbody) return;
+    term = String(term || '').toLowerCase().trim();
 
     // If no category selected yet, do nothing or clear
     if (!currentCategory) {
@@ -2484,7 +4078,9 @@ function renderFinance(term = '') {
     }
 
     if (term) {
-        filtered = filtered.filter(b => b.note && b.note.toLowerCase().includes(term));
+        filtered = filtered.filter(b => recordMatchesSearch(b, term, [
+            'category', 'date', 'paymentDate', 'note', 'amount', 'status', 'receiptName'
+        ]));
     }
 
     tbody.innerHTML = '';
@@ -2730,6 +4326,168 @@ function closePaymentModal() {
     if (modal) modal.style.display = 'none';
 }
 
+function formatDashboardCurrency(amount) {
+    const value = Number(amount || 0);
+    return `PKR ${Math.round(value).toLocaleString('en-PK')}`;
+}
+
+function isFreeStudyStudent(student = {}) {
+    return (
+        student?.freeStudy === true ||
+        student?.freeStudy === 'true' ||
+        String(student?.zeroFeeReason || student?.freeStudyReason || '').trim()
+    );
+}
+
+function getDashboardStudentFee(student = {}) {
+    if (isFreeStudyStudent(student)) return 0;
+    const studentFeeRaw = String(student?.monthlyFee ?? student?.fee ?? '').trim();
+    const studentFee = Number(studentFeeRaw || 0) || 0;
+    const hasManualFee = studentFee > 0 && (student?.monthlyFeeCustom === true || student?.monthlyFeeCustom === 'true');
+    if (hasManualFee) return studentFee;
+
+    let classFees = {};
+    try {
+        classFees = JSON.parse(localStorage.getItem(STORAGE_KEY_CLASS_FEES) || '{}') || {};
+    } catch (_error) {
+        classFees = {};
+    }
+
+    const normalize = (value) => String(value || '').trim().toLowerCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ');
+    const targetClass = normalize(student?.classGrade || '');
+    const match = Object.entries(classFees).find(([className]) => normalize(className) === targetClass);
+    const config = match ? (match[1] || {}) : {};
+    const classFee = Number(config.monthlyFee || config.fee || 0) || 0;
+    if (studentFee > 0 && classFee > 0 && studentFee !== classFee) return studentFee;
+    if (classFee > 0) return classFee;
+
+    return studentFee;
+}
+
+function getCurrentDashboardFeeMonth() {
+    return new Date().toLocaleString('en-US', { month: 'long' });
+}
+
+function getDashboardFeeStatusRevenue(students = []) {
+    const currentMonth = getCurrentDashboardFeeMonth();
+    let monthlyFeesData = {};
+    let paymentDetails = {};
+
+    try {
+        monthlyFeesData = JSON.parse(localStorage.getItem('eduCore_monthly_fees') || '{}') || {};
+    } catch (_error) {
+        monthlyFeesData = {};
+    }
+
+    try {
+        paymentDetails = JSON.parse(localStorage.getItem('eduCore_payment_details') || '{}') || {};
+    } catch (_error) {
+        paymentDetails = {};
+    }
+
+    return (students || []).reduce((summary, student) => {
+        const studentId = String(student?.id || '').trim();
+        if (!studentId) return summary;
+
+        const feeAmount = getDashboardStudentFee(student);
+        if (!(feeAmount > 0)) return summary;
+
+        const monthStatus = monthlyFeesData?.[studentId]?.[currentMonth];
+        const paidRecordAmount = Number(paymentDetails?.[studentId]?.[currentMonth]?.amount || 0) || 0;
+        const studentStatus = String(student?.feesStatus || '').trim().toLowerCase();
+
+        let paidAmount = 0;
+        if (monthStatus === 'Paid') paidAmount = feeAmount;
+        else if (paidRecordAmount > 0) paidAmount = Math.min(paidRecordAmount, feeAmount);
+        else if (studentStatus === 'paid') paidAmount = feeAmount;
+
+        if (paidAmount > 0) {
+            summary.total += paidAmount;
+            summary.paidStudents += 1;
+        }
+
+        return summary;
+    }, { total: 0, paidStudents: 0, month: currentMonth });
+}
+
+function getDashboardCampusKey(value = '') {
+    return String(value || '').trim().toLowerCase();
+}
+
+function getSelectedDashboardCampus() {
+    const select = document.getElementById('dashboardCampusFilter');
+    const value = String(select?.value || getSavedGlobalCampusFilter() || 'all').trim();
+    return value && value !== 'all' ? value : 'all';
+}
+
+function dashboardCampusMatches(record = {}, selectedCampus = getSelectedDashboardCampus()) {
+    if (!selectedCampus || selectedCampus === 'all') return true;
+    const selectedKey = getDashboardCampusKey(selectedCampus);
+    const recordCampus = record.campusName || record.branchName || record.campus || record.bankBranch || '';
+    return getDashboardCampusKey(recordCampus) === selectedKey;
+}
+
+function getDashboardCampusFilteredRecords(records = []) {
+    const selectedCampus = getSelectedDashboardCampus();
+    return (Array.isArray(records) ? records : []).filter((record) => dashboardCampusMatches(record, selectedCampus));
+}
+
+function isDashboardSuperAdminUser() {
+    const user = getLoggedInUser();
+    const role = String(user?.role || '').trim().toLowerCase();
+    const groupKey = String(user?.groupKey || '').trim().toLowerCase();
+    return role === 'admin' && (!groupKey || groupKey === 'superadmin' || groupKey === 'super_admin');
+}
+
+async function populateDashboardCampusFilter() {
+    const select = document.getElementById('dashboardCampusFilter');
+    if (!select) return;
+
+    if (!isDashboardSuperAdminUser()) {
+        select.style.display = 'none';
+        return;
+    }
+
+    const savedValue = getSavedGlobalCampusFilter();
+    const campuses = await loadRegisteredCampusNames();
+    select.innerHTML = '<option value="all">All Campuses</option>';
+    campuses.forEach((campusName) => {
+        const option = document.createElement('option');
+        option.value = campusName;
+        option.textContent = campusName;
+        select.appendChild(option);
+    });
+    select.value = [...select.options].some((option) => option.value === savedValue) ? savedValue : 'all';
+    setSavedGlobalCampusFilter(select.value);
+
+    if (!select.dataset.dashboardCampusBound) {
+        select.dataset.dashboardCampusBound = 'true';
+        select.addEventListener('change', () => {
+            setSavedGlobalCampusFilter(select.value || 'all');
+            updateDashboardStats();
+        });
+    }
+}
+
+function updateDashboardRevenueStats(studentsForDashboard) {
+    const amountEl = document.getElementById('dashRevenue');
+    const detailEl = document.getElementById('dashRevenueDetail');
+    if (!amountEl && !detailEl) return;
+
+    const students = Array.isArray(studentsForDashboard)
+        ? studentsForDashboard
+        : getDashboardCampusFilteredRecords(getArrayData(STORAGE_KEY_STUDENTS));
+    const feeSummary = getDashboardFeeStatusRevenue(students);
+    const selectedCampus = getSelectedDashboardCampus();
+    const campusLabel = selectedCampus === 'all' ? '' : ` in ${selectedCampus}`;
+
+    if (amountEl) amountEl.innerText = formatDashboardCurrency(feeSummary.total);
+    if (detailEl) {
+        detailEl.textContent = `${feeSummary.paidStudents} ${feeSummary.paidStudents === 1 ? 'student' : 'students'} paid for ${feeSummary.month}${campusLabel}`;
+        if (window.lucide) window.lucide.createIcons();
+    }
+}
+
 // Preview Image
 document.addEventListener('change', (e) => {
     if (e.target && e.target.id === 'paymentReceipt') {
@@ -2769,26 +4527,84 @@ document.addEventListener('submit', (e) => {
 });
 
 function updateDashboardStats() {
-    const s = getData(STORAGE_KEY_STUDENTS);
-    const t = getData(STORAGE_KEY_TEACHERS);
-    const staff = getData(STORAGE_KEY_STAFF);
+    const s = getArrayData(STORAGE_KEY_STUDENTS);
+    const t = getArrayData(STORAGE_KEY_TEACHERS);
+    const staff = getGlobalCampusFilteredRecords(getData(STORAGE_KEY_STAFF));
+    const students = getDashboardCampusFilteredRecords(Array.isArray(s) ? s : []);
+    const teachers = getDashboardCampusFilteredRecords(Array.isArray(t) ? t : []);
+    const staffMembers = getDashboardCampusFilteredRecords(Array.isArray(staff) ? staff : []);
 
-    if (document.getElementById('dashStudentCount')) document.getElementById('dashStudentCount').innerText = s.length || '0';
-    if (document.getElementById('dashTeacherCount')) document.getElementById('dashTeacherCount').innerText = t.length || '0';
-    if (document.getElementById('dashStaffCount')) document.getElementById('dashStaffCount').innerText = staff.length || '0';
+    if (document.getElementById('dashStudentCount')) document.getElementById('dashStudentCount').innerText = students.length || '0';
+    if (document.getElementById('dashTeacherCount')) document.getElementById('dashTeacherCount').innerText = teachers.length || '0';
+    if (document.getElementById('dashStaffCount')) document.getElementById('dashStaffCount').innerText = staffMembers.length || '0';
 
-    // Calculate Total Revenue (Sum of monthlyFee for students with feesStatus === 'Paid')
-    if (document.getElementById('dashRevenue')) {
-        const totalRevenue = s.reduce((sum, student) => {
-            if (student.feesStatus === 'Paid') {
-                return sum + (parseInt(student.monthlyFee) || 0);
-            }
-            return sum;
-        }, 0);
-        document.getElementById('dashRevenue').innerText = 'PKR ' + totalRevenue.toLocaleString();
-    }
+    updateDashboardRevenueStats(students);
 
+    updateDashboardComplaintStats();
+    updateDashboardBannerStats();
     updateActivePortalLogins();
+}
+
+function updateDashboardComplaintStats() {
+    const selectedCampus = getSelectedDashboardCampus();
+    const complaints = selectedCampus === 'all'
+        ? getArrayData(STORAGE_KEY_COMPLAINTS)
+        : getArrayData(STORAGE_KEY_COMPLAINTS).filter((complaint) => dashboardCampusMatches(complaint, selectedCampus));
+    const total = complaints.length;
+    const pending = complaints.filter((complaint) => String(complaint.status || 'Pending').toLowerCase() !== 'replied').length;
+    const countEl = document.getElementById('dashComplaintCount');
+    const detailEl = document.getElementById('dashComplaintDetail');
+
+    if (countEl) countEl.innerText = total.toString();
+    if (detailEl) {
+        detailEl.innerHTML = `<i data-lucide="message-square" size="16"></i> ${pending} pending`;
+        if (window.lucide) window.lucide.createIcons();
+    }
+}
+
+async function updateDashboardBannerStats(records) {
+    const countEl = document.getElementById('dashLiveBannerCount');
+    const detailEl = document.getElementById('dashLiveBannerDetail');
+    if (!countEl && !detailEl) return;
+
+    try {
+        let banners = Array.isArray(records) ? records : null;
+        if (!banners) {
+            const response = await fetch(`${API_BASE_URL}/banners`);
+            const data = await response.json();
+            banners = Array.isArray(data.banners) ? data.banners : [];
+        }
+
+        const liveCount = banners.filter((banner) => banner.isActive !== false).length;
+        if (countEl) countEl.innerText = liveCount.toString();
+        if (detailEl) {
+            detailEl.innerHTML = `<i data-lucide="image" size="16"></i> ${banners.length} total banners`;
+            if (window.lucide) window.lucide.createIcons();
+        }
+    } catch (error) {
+        if (countEl) countEl.innerText = '0';
+        if (detailEl) detailEl.innerHTML = '<i data-lucide="image" size="16"></i> Unable to load';
+        if (window.lucide) window.lucide.createIcons();
+    }
+}
+
+function initializeDashboardHome() {
+    const dashStudentCount = document.getElementById('dashStudentCount');
+    if (!dashStudentCount) return;
+
+    populateDashboardCampusFilter().then(updateDashboardStats).catch(() => updateDashboardStats());
+    updateDashboardStats();
+    if (!dashboardActiveSessionsInterval) {
+        dashboardActiveSessionsInterval = window.setInterval(updateActivePortalLogins, 30000);
+    }
+    bindActiveSessionsModalEvents();
+
+    const dSearch = document.getElementById('dashSearch');
+    if (dSearch && !dSearch.dataset.dashboardSearchBound) {
+        dSearch.dataset.dashboardSearchBound = 'true';
+        dSearch.addEventListener('input', (e) => renderDashboardTable(e.target.value));
+        renderDashboardTable(dSearch.value || '');
+    }
 }
 
 function escapeSessionText(value) {
@@ -2799,6 +4615,16 @@ function escapeSessionText(value) {
         '"': '&quot;',
         "'": '&#39;'
     }[char]));
+}
+
+function recordMatchesSearch(record = {}, term = '', fields = []) {
+    const normalizedTerm = String(term || '').trim().toLowerCase();
+    if (!normalizedTerm) return true;
+    const compactTerm = normalizedTerm.replace(/[\s-]+/g, '');
+    return fields.some((field) => {
+        const value = String(record?.[field] ?? '').toLowerCase();
+        return value.includes(normalizedTerm) || value.replace(/[\s-]+/g, '').includes(compactTerm);
+    });
 }
 
 function formatSessionTimestamp(value) {
@@ -2820,6 +4646,8 @@ function bindActiveSessionsModalEvents() {
     const overlay = document.getElementById('sessionModalOverlay');
     const closeBtn = document.getElementById('sessionModalClose');
     if (!card || !overlay || !closeBtn) return;
+    if (activeSessionsModalEventsBound) return;
+    activeSessionsModalEventsBound = true;
 
     card.addEventListener('click', () => {
         overlay.classList.add('active');
@@ -2997,57 +4825,27 @@ function toggleStudentForm(editMode = false) {
     const container = document.getElementById('studentFormContainer');
     const form = document.getElementById('studentForm');
     const title = document.getElementById('formTitle');
-    const loggedInUser = getLoggedInUser();
-
-    if (editMode) {
-        if (!canCurrentUserPerformAction('students', 'edit')) {
-            showAppAlert('You do not have permission to edit students.', 'Permission Denied');
-            return;
-        }
-    } else if (loggedInUser?.role === 'Teacher' || loggedInUser?.role === 'Staff') {
-        if (!canCurrentUserPerformAction('students', 'add')) {
-            showAppAlert('You do not have permission to add students.', 'Permission Denied');
-            return;
-        }
-    }
+    if (!container || !form) return;
 
     if (container.style.display === 'block' && !editMode) {
         container.style.display = 'none';
         form.reset();
         document.getElementById('studentId').value = '';
         setStudentPhotoPreview('');
+        populateStudentFamilyOptions();
     } else {
         const classSelect = document.getElementById('classGrade');
         if (classSelect && classSelect.tagName === 'SELECT') {
-            const storedClasses = getData(STORAGE_KEY_CLASSES);
-            const defaultClasses = [
-                'Play Group', 'Nursery', 'Prep',
-                'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5',
-                'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'
-            ];
-
             classSelect.innerHTML = '<option value="">Select Class</option>';
-
-            // Add Default Classes
-            defaultClasses.forEach(cls => {
+            getAvailableStudentClassOptions().forEach((cls) => {
                 const opt = document.createElement('option');
                 opt.value = cls;
                 opt.textContent = cls;
                 classSelect.appendChild(opt);
             });
-
-            // Add Custom Classes from Storage
-            storedClasses.forEach(c => {
-                const val = c.section ? `${c.name} (${c.section})` : c.name;
-                if (!defaultClasses.includes(val)) {
-                    const opt = document.createElement('option');
-                    opt.value = val;
-                    opt.textContent = val;
-                    classSelect.appendChild(opt);
-                }
-            });
         }
-        initializeStudentClassFeeAutofill();
+        ensureStudentCampusDefault();
+        bindStudentCampusCodeSync();
         container.style.display = 'block';
         // Reset Panels
         document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
@@ -3056,33 +4854,572 @@ function toggleStudentForm(editMode = false) {
         if (!editMode) {
             form.reset();
             document.getElementById('studentId').value = '';
+            ensureStudentCampusDefault();
             const studentCodeField = document.getElementById('studentCode');
-            if (studentCodeField) studentCodeField.value = generateStudentCode();
+            if (studentCodeField) updateStudentCodeForSelectedCampus(true);
             const admissionDateField = document.getElementById('admissionDate');
             if (admissionDateField) admissionDateField.value = new Date().toISOString().split('T')[0];
+            if (document.getElementById('feeFrequency')) document.getElementById('feeFrequency').value = 'Monthly';
+            if (document.getElementById('remainingAmount')) document.getElementById('remainingAmount').value = '0';
+            populateStudentFamilyOptions();
+            setStudentPhotoPreview('');
             title.innerText = 'Add New Student';
         } else {
             title.innerText = 'Edit Student Details';
         }
+        container.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 }
 
+async function validateStudentRequiredFields() {
+    ensureStudentCampusDefault();
+
+    const requiredFields = [
+        ['fullName', 'Full Name'],
+        ['fatherName', "Father's Name"],
+        ['studentDob', 'Date of Birth'],
+        ['classGrade', 'Class'],
+        ['campusName', 'Campus'],
+        ['parentPhone', 'Contact Phone'],
+        ['gender', 'Gender'],
+        ['rollNo', 'Roll No']
+    ];
+
+    const missingField = requiredFields.find(([fieldId]) => {
+        const field = document.getElementById(fieldId);
+        return field && !String(field.value || '').trim();
+    });
+
+    if (missingField) {
+        const field = document.getElementById(missingField[0]);
+        field?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        field?.focus();
+        await showAppAlert(`${missingField[1]} is required.`, 'Missing Student Detail');
+        return false;
+    }
+
+    return true;
+}
+
 function generateStudentCode() {
-    const students = getData(STORAGE_KEY_STUDENTS);
+    const students = getArrayData(STORAGE_KEY_STUDENTS);
+    const prefix = 'STU';
     let maxNumber = 0;
 
     students.forEach(student => {
-        const rawCode = student.studentCode || '';
-        const match = rawCode.match(/(\d+)$/);
+        const rawCode = String(student.studentCode || '').trim();
+        const match = rawCode.match(/^STU-(\d{1,5})$/i);
         if (match) {
             const parsed = parseInt(match[1], 10);
-            if (!Number.isNaN(parsed) && parsed > maxNumber) {
-                maxNumber = parsed;
-            }
+            if (!Number.isNaN(parsed) && parsed > maxNumber) maxNumber = parsed;
         }
     });
 
-    return `STD-${String(maxNumber + 1).padStart(4, '0')}`;
+    return `${prefix}-${String(maxNumber + 1).padStart(3, '0')}`;
+}
+
+function generateStudentUsernameFromCode(studentCode, attempt = 1) {
+    const base = String(studentCode || 'student').toLowerCase().replace(/[^a-z0-9]/g, '') || 'student';
+    return attempt <= 1 ? base : `${base}${attempt}`;
+}
+
+function isGeneratedStudentUsername(username = '', studentCode = '') {
+    const base = generateStudentUsernameFromCode(studentCode);
+    const value = String(username || '').trim().toLowerCase();
+    return value === base || new RegExp(`^${base}\\d+$`, 'i').test(value);
+}
+
+function isUsernameConflictError(message = '') {
+    const text = String(message || '').toLowerCase();
+    return text.includes('username') && (
+        text.includes('already used') ||
+        text.includes('already assigned') ||
+        text.includes('unique')
+    );
+}
+
+function normalizeClassFeeKey(className = '') {
+    return String(className || '').trim().toLowerCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ');
+}
+
+function getAvailableStudentClassOptions() {
+    const seen = new Set();
+    const classes = [];
+    const addClass = (className) => {
+        const value = String(className || '').trim();
+        if (!value) return;
+        const key = normalizeClassFeeKey(value);
+        if (seen.has(key)) return;
+        seen.add(key);
+        classes.push(value);
+    };
+
+    DEFAULT_STUDENT_CLASS_ORDER.forEach(addClass);
+    getData(STORAGE_KEY_CLASSES).forEach((item) => {
+        const val = item?.section ? `${item.name} (${item.section})` : item?.name;
+        addClass(val);
+    });
+
+    return classes;
+}
+
+function normalizeClassFeeConfig(input = {}) {
+    const raw = input && typeof input === 'object' ? input : {};
+    return Object.entries(raw).reduce((acc, [className, config]) => {
+        const name = String(className || '').trim();
+        const monthlyFee = String(config?.monthlyFee ?? config?.fee ?? '').trim();
+        const annualCharges = String(config?.annualCharges ?? config?.annualFee ?? '').trim();
+        const feeFrequency = String(config?.feeFrequency || 'Monthly').trim() || 'Monthly';
+        const feeMonth = String(config?.feeMonth || '').trim();
+        const feeYear = String(config?.feeYear || '').trim();
+        if (name && (monthlyFee || annualCharges)) acc[name] = { monthlyFee, annualCharges, feeFrequency, feeMonth, feeYear };
+        return acc;
+    }, {});
+}
+
+function saveClassFeeLocalBackup() {
+    try {
+        localStorage.setItem(STORAGE_KEY_CLASS_FEES, JSON.stringify(classFeeDefaults || {}));
+        localStorage.setItem(STORAGE_KEY_CLASS_FEE_HISTORY, JSON.stringify(Array.isArray(classFeeHistory) ? classFeeHistory : []));
+    } catch (_error) {}
+}
+
+async function loadClassFeeDefaults() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/class-fees`);
+        const result = await parseJsonResponse(response, 'Class fee defaults unavailable.');
+        if (!response.ok || result?.success === false) {
+            throw new Error(result?.message || 'Class fee defaults unavailable.');
+        }
+        classFeeDefaults = normalizeClassFeeConfig(result.classFees || {});
+        classFeeHistory = Array.isArray(result.classFeeHistory) ? result.classFeeHistory : [];
+        saveClassFeeLocalBackup();
+    } catch (error) {
+        try {
+            classFeeDefaults = normalizeClassFeeConfig(JSON.parse(localStorage.getItem(STORAGE_KEY_CLASS_FEES) || '{}'));
+            classFeeHistory = JSON.parse(localStorage.getItem(STORAGE_KEY_CLASS_FEE_HISTORY) || '[]');
+            if (!Array.isArray(classFeeHistory)) classFeeHistory = [];
+        } catch (_fallbackError) {
+            classFeeDefaults = {};
+            classFeeHistory = [];
+        }
+    }
+    renderClassFeeSettings();
+    renderClassFeeHistory();
+    return classFeeDefaults;
+}
+
+function getClassFeeDefault(className = '') {
+    const selectedKey = normalizeClassFeeKey(className);
+    if (!selectedKey) return null;
+    const match = Object.entries(classFeeDefaults)
+        .find(([name]) => normalizeClassFeeKey(name) === selectedKey);
+    return match ? match[1] : null;
+}
+
+function applyClassFeeToLocalStudents(className = '', monthlyFee = '', feeFrequency = 'Monthly') {
+    const selectedKey = normalizeClassFeeKey(className);
+    if (!selectedKey) return;
+    const students = getArrayData(STORAGE_KEY_STUDENTS);
+    const previousClassFee = String(getClassFeeDefault(className)?.monthlyFee || '').trim();
+    let changed = false;
+    const updatedStudents = students.map((student) => {
+        if (normalizeClassFeeKey(student?.classGrade || '') !== selectedKey) return student;
+        const studentFee = String(student?.monthlyFee ?? '').trim();
+        const studentFeeAmount = Number(studentFee || 0) || 0;
+        const isFreeStudy = typeof isFreeStudyStudent === 'function' && isFreeStudyStudent(student);
+        const hasCustomFee = studentFeeAmount > 0 && (
+            student?.monthlyFeeCustom === true ||
+            student?.monthlyFeeCustom === 'true' ||
+            (previousClassFee && studentFee !== previousClassFee)
+        ) || isFreeStudy;
+        if (hasCustomFee) return student;
+        changed = true;
+        return {
+            ...student,
+            monthlyFee: String(monthlyFee || '0'),
+            monthlyFeeCustom: false,
+            feeFrequency: feeFrequency || 'Monthly'
+        };
+    });
+    if (changed) {
+        localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(updatedStudents));
+    }
+}
+
+function bindStudentClassFeeAutoFill() {
+    const classSelect = document.getElementById('classGrade');
+    const monthlyFeeInput = document.getElementById('monthlyFee');
+    const remainingAmountInput = document.getElementById('remainingAmount');
+    const zeroFeeReasonInput = document.getElementById('zeroFeeReason');
+    if (!classSelect || classSelect.dataset.classFeeBound === '1') return;
+    classSelect.dataset.classFeeBound = '1';
+    classSelect.addEventListener('change', refreshStudentClassFeeAutoFill);
+    monthlyFeeInput?.addEventListener('input', () => {
+        monthlyFeeInput.dataset.autoClassFee = '0';
+    });
+    zeroFeeReasonInput?.addEventListener('input', () => {
+        if (!String(zeroFeeReasonInput.value || '').trim()) return;
+        if (monthlyFeeInput) {
+            monthlyFeeInput.value = '0';
+            monthlyFeeInput.dataset.autoClassFee = '0';
+        }
+        if (remainingAmountInput) remainingAmountInput.value = '0';
+    });
+}
+
+async function refreshStudentClassFeeAutoFill() {
+    await loadClassFeeDefaults();
+    applyClassFeeDefaultToStudentForm(true);
+}
+
+function applyClassFeeDefaultToStudentForm(force = false) {
+    const classSelect = document.getElementById('classGrade');
+    const monthlyFeeInput = document.getElementById('monthlyFee');
+    const feeFrequencyInput = document.getElementById('feeFrequency');
+    if (!classSelect || !monthlyFeeInput) return;
+
+    const feeDefault = getClassFeeDefault(classSelect.value);
+    if (!feeDefault) {
+        if (force) {
+            monthlyFeeInput.value = '';
+            monthlyFeeInput.dataset.autoClassFee = '';
+            if (feeFrequencyInput) feeFrequencyInput.value = 'Monthly';
+        }
+        return;
+    }
+
+    const currentFee = String(monthlyFeeInput.value || '').trim();
+    const canReplaceFee = force
+        ? (monthlyFeeInput.dataset.autoClassFee !== '0')
+        : (!currentFee || currentFee === '0' || monthlyFeeInput.dataset.autoClassFee === '1');
+    if (canReplaceFee) {
+        monthlyFeeInput.value = feeDefault.monthlyFee;
+        monthlyFeeInput.dataset.autoClassFee = '1';
+        if (feeFrequencyInput) feeFrequencyInput.value = feeDefault.feeFrequency || 'Monthly';
+    }
+}
+
+function isStudentMonthlyFeeCustom(className = '', monthlyFee = '') {
+    const feeDefault = getClassFeeDefault(className);
+    const enteredFee = String(monthlyFee ?? '').trim();
+    const enteredAmount = Number(enteredFee || 0) || 0;
+    const classFee = String(feeDefault?.monthlyFee ?? '').trim();
+    if (!enteredFee || enteredAmount <= 0) return false;
+    if (!classFee) return true;
+    return enteredAmount !== Number(classFee);
+}
+
+function resolveStudentMonthlyFeeForSave(className = '', monthlyFee = '', zeroFeeReason = '') {
+    const feeDefault = getClassFeeDefault(className);
+    const enteredFee = String(monthlyFee ?? '').trim();
+    const enteredAmount = Number(enteredFee || 0) || 0;
+    const freeReason = String(zeroFeeReason || '').trim();
+    const classFee = String(feeDefault?.monthlyFee ?? '').trim();
+    const classAmount = Number(classFee || 0) || 0;
+    if (freeReason) {
+        return {
+            monthlyFee: '0',
+            monthlyFeeCustom: true,
+            feeFrequency: feeDefault?.feeFrequency || 'Monthly',
+            freeStudy: true
+        };
+    }
+    if (enteredAmount > 0) {
+        return {
+            monthlyFee: String(enteredAmount),
+            monthlyFeeCustom: classAmount > 0 ? enteredAmount !== classAmount : true,
+            feeFrequency: feeDefault?.feeFrequency || 'Monthly',
+            freeStudy: false
+        };
+    }
+    if (classAmount > 0) {
+        return {
+            monthlyFee: String(classAmount),
+            monthlyFeeCustom: false,
+            feeFrequency: feeDefault?.feeFrequency || 'Monthly',
+            freeStudy: false
+        };
+    }
+    return {
+        monthlyFee: '0',
+        monthlyFeeCustom: Boolean(freeReason),
+        feeFrequency: feeDefault?.feeFrequency || 'Monthly',
+        freeStudy: Boolean(freeReason)
+    };
+}
+
+async function setupClassFeeSettings() {
+    const form = document.getElementById('classFeeForm');
+    const classSelect = document.getElementById('classFeeClassSelect');
+    const amountInput = document.getElementById('classFeeAmount');
+    const annualInput = document.getElementById('classAnnualCharges');
+    const frequencyInput = document.getElementById('classFeeFrequency');
+    const monthInput = document.getElementById('classFeeMonth');
+    const yearInput = document.getElementById('classFeeYear');
+    const saveButton = document.getElementById('classFeeSaveButton');
+    const cancelEditButton = document.getElementById('classFeeCancelEditButton');
+    if (!form || !classSelect || !amountInput) return;
+
+    populateClassFeeSelect();
+    await loadClassFeeDefaults();
+
+    classSelect.addEventListener('change', () => {
+        const feeDefault = getClassFeeDefault(classSelect.value);
+        amountInput.value = feeDefault?.monthlyFee || '';
+        if (annualInput) annualInput.value = feeDefault?.annualCharges || '';
+        if (frequencyInput) frequencyInput.value = feeDefault?.feeFrequency || 'Monthly';
+        if (monthInput && feeDefault?.feeMonth) monthInput.value = feeDefault.feeMonth;
+        if (yearInput && feeDefault?.feeYear) yearInput.value = feeDefault.feeYear;
+    });
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const className = String(classSelect.value || '').trim();
+        const monthlyFee = String(amountInput.value || '').trim();
+        const annualCharges = String(annualInput?.value || '').trim();
+        const feeFrequency = String(frequencyInput?.value || 'Monthly').trim() || 'Monthly';
+        const feeMonth = String(monthInput?.value || '').trim();
+        const feeYear = String(yearInput?.value || '').trim();
+        if (!className || (!monthlyFee && !annualCharges)) {
+            await showAppAlert('Please select a class and enter monthly fee or annual charges.', 'Missing Fee');
+            return;
+        }
+
+        const token = sessionStorage.getItem('eduCore_token') || '';
+        try {
+            const editingId = String(classFeeEditingHistoryId || '').trim();
+            const response = await fetch(editingId ? `${API_BASE_URL}/class-fees/history/${encodeURIComponent(editingId)}` : `${API_BASE_URL}/class-fees`, {
+                method: editingId ? 'PUT' : 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({ className, monthlyFee, annualCharges, feeFrequency, feeMonth, feeYear })
+            });
+            const result = await parseJsonResponse(response, 'Class fee could not be saved.');
+            if (!response.ok || result?.success === false) {
+                throw new Error(result?.message || 'Class fee could not be saved.');
+            }
+            const previousClassFeeDefaults = classFeeDefaults;
+            classFeeDefaults = normalizeClassFeeConfig(result.classFees || {});
+            classFeeHistory = Array.isArray(result.classFeeHistory) ? result.classFeeHistory : classFeeHistory;
+            saveClassFeeLocalBackup();
+            classFeeDefaults = previousClassFeeDefaults;
+            applyClassFeeToLocalStudents(className, monthlyFee, feeFrequency);
+            classFeeDefaults = normalizeClassFeeConfig(result.classFees || {});
+            clearClassFeeHistoryEditMode();
+            renderClassFeeSettings();
+            renderClassFeeHistory();
+            const monthlyText = monthlyFee ? `monthly PKR ${Number(monthlyFee).toLocaleString('en-PK')}` : '';
+            const annualText = annualCharges ? `annual PKR ${Number(annualCharges).toLocaleString('en-PK')}` : '';
+            pushNotification(editingId ? 'Fee History Updated' : 'Class Fee Updated', `${className} ${[monthlyText, annualText].filter(Boolean).join(' and ')} saved.`, 'success');
+        } catch (error) {
+            await showAppAlert(error.message || 'Class fee could not be saved.', 'Save Failed');
+        }
+    });
+
+    if (cancelEditButton) {
+        cancelEditButton.addEventListener('click', clearClassFeeHistoryEditMode);
+    }
+
+    if (saveButton) {
+        saveButton.dataset.defaultLabel = saveButton.innerHTML;
+    }
+}
+
+function populateClassFeeSelect() {
+    const classSelect = document.getElementById('classFeeClassSelect');
+    if (!classSelect) return;
+    classSelect.innerHTML = '<option value="">Select Class</option>';
+    getAvailableStudentClassOptions().forEach((className) => {
+        const opt = document.createElement('option');
+        opt.value = className;
+        opt.textContent = className;
+        classSelect.appendChild(opt);
+    });
+}
+
+function renderClassFeeSettings() {
+    const list = document.getElementById('classFeeList');
+    if (!list) return;
+    const entries = Object.entries(classFeeDefaults).sort((a, b) => compareStudentClassNames(a[0], b[0]));
+    if (!entries.length) {
+        list.innerHTML = '<span style="color: var(--text-secondary); font-size: 0.9rem;">No class fee defaults saved yet.</span>';
+        return;
+    }
+    list.innerHTML = entries.map(([className, config]) => `
+        <span class="class-fee-pill">
+            ${escapeHtml(className)}: PKR ${Number(config.monthlyFee || 0).toLocaleString('en-PK')} ${escapeHtml(config.feeFrequency || 'Monthly')}${config.annualCharges ? ` | Annual PKR ${Number(config.annualCharges || 0).toLocaleString('en-PK')}` : ''}${config.feeMonth || config.feeYear ? ` (${escapeHtml([config.feeMonth, config.feeYear].filter(Boolean).join(' '))})` : ''}
+        </span>
+    `).join('');
+}
+
+function setClassFeeSelectValue(className) {
+    const classSelect = document.getElementById('classFeeClassSelect');
+    if (!classSelect) return;
+    const target = String(className || '').trim();
+    if (!target) return;
+    const exists = Array.from(classSelect.options).some((option) => option.value === target);
+    if (!exists) {
+        const opt = document.createElement('option');
+        opt.value = target;
+        opt.textContent = target;
+        classSelect.appendChild(opt);
+    }
+    classSelect.value = target;
+}
+
+function clearClassFeeHistoryEditMode() {
+    classFeeEditingHistoryId = '';
+    const saveButton = document.getElementById('classFeeSaveButton');
+    const cancelButton = document.getElementById('classFeeCancelEditButton');
+    const form = document.getElementById('classFeeForm');
+    if (saveButton) {
+        saveButton.innerHTML = saveButton.dataset.defaultLabel || '<i data-lucide="save"></i> Save Fee';
+    }
+    if (cancelButton) cancelButton.style.display = 'none';
+    if (form) form.dataset.editingHistoryId = '';
+    if (window.lucide && window.lucide.createIcons) window.lucide.createIcons();
+}
+
+function editClassFeeHistory(historyId) {
+    const id = String(historyId || '').trim();
+    const item = (Array.isArray(classFeeHistory) ? classFeeHistory : []).find((row) => String(row?.id || '') === id);
+    if (!item) {
+        showAppAlert('Fee history record was not found.', 'Edit Failed');
+        return;
+    }
+
+    classFeeEditingHistoryId = id;
+    setClassFeeSelectValue(item.className || '');
+    const amountInput = document.getElementById('classFeeAmount');
+    const annualInput = document.getElementById('classAnnualCharges');
+    const frequencyInput = document.getElementById('classFeeFrequency');
+    const monthInput = document.getElementById('classFeeMonth');
+    const yearInput = document.getElementById('classFeeYear');
+    const saveButton = document.getElementById('classFeeSaveButton');
+    const cancelButton = document.getElementById('classFeeCancelEditButton');
+    const form = document.getElementById('classFeeForm');
+
+    if (amountInput) amountInput.value = item.monthlyFee || '';
+    if (annualInput) annualInput.value = item.annualCharges || '';
+    if (frequencyInput) frequencyInput.value = item.feeFrequency || 'Monthly';
+    if (monthInput && item.feeMonth) monthInput.value = item.feeMonth;
+    if (yearInput) yearInput.value = item.feeYear || yearInput.value || String(new Date().getFullYear());
+    if (saveButton) saveButton.innerHTML = '<i data-lucide="save"></i> Update Fee';
+    if (cancelButton) cancelButton.style.display = '';
+    if (form) {
+        form.dataset.editingHistoryId = id;
+        form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    if (window.lucide && window.lucide.createIcons) window.lucide.createIcons();
+}
+
+async function deleteClassFeeHistory(historyId) {
+    const id = String(historyId || '').trim();
+    const item = (Array.isArray(classFeeHistory) ? classFeeHistory : []).find((row) => String(row?.id || '') === id);
+    if (!item) {
+        await showAppAlert('Fee history record was not found.', 'Delete Failed');
+        return;
+    }
+
+    const ok = typeof showAppConfirm === 'function'
+        ? await showAppConfirm(`Delete fee history for ${item.className || 'this class'}?`, 'Delete Fee History')
+        : window.confirm(`Delete fee history for ${item.className || 'this class'}?`);
+    if (!ok) return;
+
+    const token = sessionStorage.getItem('eduCore_token') || '';
+    try {
+        const response = await fetch(`${API_BASE_URL}/class-fees/history/${encodeURIComponent(id)}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        const result = await parseJsonResponse(response, 'Fee history could not be deleted.');
+        if (!response.ok || result?.success === false) {
+            throw new Error(result?.message || 'Fee history could not be deleted.');
+        }
+        classFeeDefaults = normalizeClassFeeConfig(result.classFees || {});
+        classFeeHistory = Array.isArray(result.classFeeHistory) ? result.classFeeHistory : [];
+        saveClassFeeLocalBackup();
+        if (classFeeEditingHistoryId === id) clearClassFeeHistoryEditMode();
+        renderClassFeeSettings();
+        renderClassFeeHistory();
+        pushNotification('Fee History Deleted', `${item.className || 'Class'} fee history removed.`, 'info');
+    } catch (error) {
+        await showAppAlert(error.message || 'Fee history could not be deleted.', 'Delete Failed');
+    }
+}
+
+function handleClassFeeHistoryAction(selectElement, historyId) {
+    const action = String(selectElement?.value || '').trim().toLowerCase();
+    if (!action) return;
+    selectElement.value = '';
+    if (action === 'edit') {
+        editClassFeeHistory(historyId);
+    }
+    if (action === 'delete') {
+        deleteClassFeeHistory(historyId);
+    }
+}
+
+function renderClassFeeHistory() {
+    const wrap = document.getElementById('classFeeHistoryWrap');
+    if (!wrap) return;
+
+    const rows = Array.isArray(classFeeHistory) ? [...classFeeHistory] : [];
+    rows.sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+
+    if (!rows.length) {
+        wrap.innerHTML = '<div class="empty-history">No fee history saved yet.</div>';
+        return;
+    }
+
+    wrap.innerHTML = `
+        <table class="history-table">
+            <thead>
+                <tr>
+                    <th>Year</th>
+                    <th>Month</th>
+                    <th>Class</th>
+                    <th>Fee</th>
+                    <th>Annual</th>
+                    <th>Frequency</th>
+                    <th>Updated</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rows.map((item) => {
+                    const updated = item.updatedAt ? new Date(item.updatedAt) : null;
+                    const updatedText = updated && !Number.isNaN(updated.getTime())
+                        ? updated.toLocaleDateString('en-PK')
+                        : '';
+                    const historyId = escapeHtml(item.id || '');
+                    return `
+                        <tr>
+                            <td>${escapeHtml(item.feeYear || '')}</td>
+                            <td>${escapeHtml(item.feeMonth || '')}</td>
+                            <td>${escapeHtml(item.className || '')}</td>
+                            <td>PKR ${Number(item.monthlyFee || 0).toLocaleString('en-PK')}</td>
+                            <td>${item.annualCharges ? `PKR ${Number(item.annualCharges || 0).toLocaleString('en-PK')}` : '-'}</td>
+                            <td>${escapeHtml(item.feeFrequency || 'Monthly')}</td>
+                            <td>${escapeHtml(updatedText)}</td>
+                            <td>
+                                <div class="history-actions">
+                                    <select class="table-action-select" onchange="handleClassFeeHistoryAction(this, '${historyId}')">
+                                        <option value="">Actions</option>
+                                        <option value="edit">Edit</option>
+                                        <option value="delete">Delete</option>
+                                    </select>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }).join('')}
+            </tbody>
+        </table>
+    `;
 }
 
 function normalizeDateInputValue(value) {
@@ -3096,68 +5433,159 @@ async function handleStudentFormSubmit(e) {
     e.preventDefault();
     const idField = document.getElementById('studentId');
     const isEdit = idField.value !== '';
-    const loggedInUser = getLoggedInUser();
 
-    if (isEdit) {
-        if (!canCurrentUserPerformAction('students', 'edit')) {
-            showAppAlert('You do not have permission to edit students.', 'Permission Denied');
-            return;
-        }
-    } else if (loggedInUser?.role === 'Teacher' || loggedInUser?.role === 'Staff') {
-        if (!canCurrentUserPerformAction('students', 'add')) {
-            showAppAlert('You do not have permission to add students.', 'Permission Denied');
+    const existingStudents = getData(STORAGE_KEY_STUDENTS);
+    const existingStudent = isEdit ? existingStudents.find(s => s.id === idField.value) : null;
+    const currentStatus = isEdit && existingStudent ? (existingStudent.feesStatus || 'Pending') : 'Pending';
+    const enrollmentStatus = isEdit && existingStudent ? (existingStudent.enrollmentStatus || 'Active') : 'Active';
+
+    const studentCodeField = document.getElementById('studentCode');
+    if (!isEdit) studentCodeField.value = generateStudentCode();
+    const studentCode = studentCodeField.value.trim() || generateStudentCode();
+    const parentPhone = document.getElementById('parentPhone').value.trim();
+    let usernameInput = document.getElementById('username').value.trim();
+    let studentPasswordInput = document.getElementById('studentPassword').value;
+    const monthlyFeeInput = document.getElementById('monthlyFee') ? document.getElementById('monthlyFee').value : '';
+    const remainingAmountInput = document.getElementById('remainingAmount') ? document.getElementById('remainingAmount').value : '';
+    const zeroFeeReasonInput = document.getElementById('zeroFeeReason') ? document.getElementById('zeroFeeReason').value.trim() : '';
+    const studentEmailInput = document.getElementById('studentEmail') ? document.getElementById('studentEmail').value.trim().toLowerCase() : '';
+    const guardianName = document.getElementById('guardianName')?.value.trim() || '';
+    const guardianContact = document.getElementById('guardianContact')?.value.trim() || '';
+    const studentAddress = document.getElementById('studentAddress')?.value.trim() || '';
+
+    const requiredFields = [
+        ['fullName', 'Full Name is required.'],
+        ['fatherName', "Father's Name is required."],
+        ['studentDob', 'Date of Birth is required.'],
+        ['classGrade', 'Class is required.'],
+        ['campusName', 'Campus Name is required.'],
+        ['parentPhone', 'Contact Phone is required.'],
+        ['gender', 'Gender is required.'],
+        ['rollNo', 'Roll No is required.']
+    ];
+
+    for (const [fieldId, message] of requiredFields) {
+        const field = document.getElementById(fieldId);
+        if (!String(field?.value || '').trim()) {
+            alert(message);
+            field?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            field?.focus();
             return;
         }
     }
 
-    const existingStudents = getData(STORAGE_KEY_STUDENTS);
-    const existingStudent = isEdit ? existingStudents.find(s => s.id === idField.value) : null;
-    const currentStatus = isEdit && existingStudent ? existingStudent.feesStatus : 'Pending';
+    if (!usernameInput) {
+        usernameInput = generateStudentUsernameFromCode(studentCode);
+        document.getElementById('username').value = usernameInput;
+    }
+    const usernameWasAutoGenerated = isGeneratedStudentUsername(usernameInput, studentCode);
 
-    const usernameInput = document.getElementById('username').value;
-    const studentPasswordInput = document.getElementById('studentPassword').value;
-    const monthlyFeeInput = document.getElementById('monthlyFee') ? document.getElementById('monthlyFee').value : '0';
-    const studentEmailInput = document.getElementById('studentEmail') ? document.getElementById('studentEmail').value.trim().toLowerCase() : '';
-
-    // Validation
-    if (!monthlyFeeInput || monthlyFeeInput === '0') {
-        alert('Please set the student fee structure.');
-        if (!document.getElementById('feePanel').classList.contains('active')) toggleStepPanel('feePanel');
-        return;
+    if (!studentPasswordInput) {
+        const digits = parentPhone.replace(/\D/g, '');
+        studentPasswordInput = `Student${digits.length >= 4 ? digits.slice(-4) : '123'}`;
+        document.getElementById('studentPassword').value = studentPasswordInput;
     }
 
     const studentIdentityError = validateStudentIdentityInputs({
         studentId: idField.value,
+        studentCode,
         username: usernameInput,
         email: studentEmailInput
     });
 
     if (studentIdentityError) {
         alert(studentIdentityError);
+        if (studentIdentityError.toLowerCase().includes('student id')) document.getElementById('studentCode')?.focus();
+        if (studentIdentityError.toLowerCase().includes('username')) document.getElementById('username')?.focus();
+        if (studentIdentityError.toLowerCase().includes('email')) document.getElementById('studentEmail')?.focus();
+        return;
+    }
+
+    const photoInput = document.getElementById('studentProfileImage');
+    let profileImage = existingStudent?.profileImage || '';
+    const fatherNameInput = document.getElementById('fatherName').value.trim();
+    const relationFamilyMatch = autoFillStudentFamilyFromRelation(false);
+    const familyName = document.getElementById('studentFamilyName')?.value.trim() || '';
+    const familyNo = document.getElementById('studentFamilyNo')?.value.trim() || '';
+    const familyContact = document.getElementById('studentFamilyContact')?.value.trim() || '';
+
+    if ((familyName || familyNo || familyContact) && (!familyName || !familyNo || !familyContact)) {
+        alert('Please enter Family Name, Family No., and Family Contact to link this student with a family.');
+        const missingFamilyField = !familyName
+            ? document.getElementById('studentFamilyName')
+            : (!familyNo ? document.getElementById('studentFamilyNo') : document.getElementById('studentFamilyContact'));
+        missingFamilyField?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        missingFamilyField?.focus();
+        return;
+    }
+
+    const familyId = ensureExplicitFamilyRecord(familyName, familyNo, familyContact);
+    updateExplicitFamilyRelationDetails(familyId, fatherNameInput, parentPhone, guardianName, guardianContact);
+    const matchedFamilyAddedAt = relationFamilyMatch?.createdAt || getFamilies().find((family) => String(family.id || '') === String(familyId || ''))?.createdAt || '';
+    await loadClassFeeDefaults();
+    const selectedClassGrade = document.getElementById('classGrade').value;
+    const resolvedFee = resolveStudentMonthlyFeeForSave(selectedClassGrade, monthlyFeeInput, zeroFeeReasonInput);
+    if (Number(resolvedFee.monthlyFee || 0) <= 0 && !zeroFeeReasonInput) {
+        alert('Please enter the reason why this student has zero fee / free study.');
+        document.getElementById('zeroFeeReason')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        document.getElementById('zeroFeeReason')?.focus();
+        return;
+    }
+    const effectiveFeeStatus = resolvedFee.freeStudy === true ? 'Zero Fee Student' : currentStatus;
+    const effectiveRemainingAmount = resolvedFee.freeStudy === true ? '0' : (remainingAmountInput || '0');
+    if (document.getElementById('monthlyFee') && resolvedFee.monthlyFeeCustom === false && Number(monthlyFeeInput || 0) <= 0) {
+        document.getElementById('monthlyFee').value = resolvedFee.monthlyFee;
+        document.getElementById('monthlyFee').dataset.autoClassFee = '1';
+    } else if (document.getElementById('monthlyFee') && resolvedFee.freeStudy === true) {
+        document.getElementById('monthlyFee').value = '0';
+        document.getElementById('monthlyFee').dataset.autoClassFee = '0';
+    }
+
+    try {
+        if (photoInput?.files?.[0]) profileImage = await readFileAsDataUrl(photoInput.files[0]);
+    } catch (error) {
+        alert(error.message);
         return;
     }
 
     const newStudent = {
         id: isEdit ? idField.value : generateUniqueRecordId('STU'),
-        studentCode: document.getElementById('studentCode').value || generateStudentCode(),
-        fullName: document.getElementById('fullName').value,
-        profileImage: existingStudent?.profileImage || '',
-        fatherName: document.getElementById('fatherName').value,
+        studentCode,
+        fullName: document.getElementById('fullName').value.trim(),
+        profileImage,
+        fatherName: fatherNameInput,
         dob: document.getElementById('studentDob').value,
         admissionDate: document.getElementById('admissionDate') ? document.getElementById('admissionDate').value : (existingStudent?.admissionDate || ''),
-        classGrade: document.getElementById('classGrade').value,
+        classGrade: selectedClassGrade,
         campusName: document.getElementById('campusName').value,
-        parentPhone: document.getElementById('parentPhone').value,
+        parentPhone,
+        address: studentAddress,
+        guardianName,
+        guardianContact,
         email: studentEmailInput,
         gender: document.getElementById('gender').value,
-        rollNo: document.getElementById('rollNo').value,
-        formB: document.getElementById('formB').value,
-        feesStatus: currentStatus,
-        enrollmentStatus: existingStudent?.enrollmentStatus || 'Active',
-        terminatedAt: existingStudent?.terminatedAt || '',
-        terminationNote: existingStudent?.terminationNote || '',
-        monthlyFee: monthlyFeeInput,
-        feeFrequency: document.getElementById('feeFrequency') ? document.getElementById('feeFrequency').value : 'Monthly',
+        rollNo: document.getElementById('rollNo').value.trim(),
+        formB: document.getElementById('formB').value.trim(),
+        fingerprintData: document.getElementById('studentFingerprintData') ? document.getElementById('studentFingerprintData').value.trim() : (existingStudent?.fingerprintData || ''),
+        familyId,
+        familyName,
+        familyNo,
+        familyContact,
+        familyAddedAt: (familyName && familyNo && familyContact) ? (
+            isEdit && existingStudent && existingStudent.familyContact === familyContact && existingStudent.familyName === familyName && existingStudent.familyNo === familyNo
+                ? existingStudent.familyAddedAt || new Date().toISOString()
+                : matchedFamilyAddedAt || new Date().toISOString()
+        ) : '',
+        feesStatus: effectiveFeeStatus,
+        enrollmentStatus,
+        monthlyFee: resolvedFee.monthlyFee,
+        monthlyFeeCustom: resolvedFee.monthlyFeeCustom,
+        freeStudy: resolvedFee.freeStudy === true,
+        zeroFeeReason: resolvedFee.freeStudy === true ? zeroFeeReasonInput : '',
+        remainingAmount: effectiveRemainingAmount,
+        feeFrequency: document.getElementById('feeFrequency') ? (document.getElementById('feeFrequency').value || resolvedFee.feeFrequency) : resolvedFee.feeFrequency,
+        createdAt: existingStudent?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         username: usernameInput,
         password: studentPasswordInput,
         plainPassword: studentPasswordInput,
@@ -3165,8 +5593,8 @@ async function handleStudentFormSubmit(e) {
     };
 
     // Auto-set payment date if status is Paid
-    if (currentStatus === 'Paid') {
-        if (existingStudent && existingStudent.feesStatus === 'Paid' && existingStudent.paymentDate) {
+    if (effectiveFeeStatus === 'Paid' || effectiveFeeStatus === 'Zero Fee Student') {
+        if (existingStudent && ['Paid', 'Zero Fee Student'].includes(existingStudent.feesStatus) && existingStudent.paymentDate) {
             newStudent.paymentDate = existingStudent.paymentDate;
         } else {
             newStudent.paymentDate = new Date().toLocaleDateString();
@@ -3175,29 +5603,90 @@ async function handleStudentFormSubmit(e) {
         newStudent.paymentDate = '';
     }
 
-    let students = getData(STORAGE_KEY_STUDENTS);
+    const previousStudents = getData(STORAGE_KEY_STUDENTS);
+    let students = previousStudents.slice();
     if (isEdit) {
         const index = students.findIndex(s => s.id === newStudent.id);
         if (index !== -1) students[index] = newStudent;
     } else {
         students.push(newStudent);
     }
-    saveData(STORAGE_KEY_STUDENTS, students, { skipSync: true });
-    syncToSQLDetailed('students', [newStudent]).then((syncResult) => {
-        if (!syncResult.success) {
-            console.warn('Student SQL sync failed:', syncResult.error);
+    students = syncStudentFamilyLinksByDetails(students, familyId, familyName, familyNo, familyContact);
+
+    let localSaveResult;
+    try {
+        localSaveResult = saveStudentsWithLocalFallback(students, newStudent);
+        students = localSaveResult.students;
+    } catch (error) {
+        await showAppAlert(error.message || 'Student could not be saved in the browser.', 'Save Failed');
+        return;
+    }
+
+    let syncResult = await syncToSQLDetailed('students', [localSaveResult.student]);
+    if (!syncResult.success && !isEdit && usernameWasAutoGenerated && isUsernameConflictError(syncResult.error)) {
+        for (let attempt = 2; attempt <= 50 && !syncResult.success; attempt += 1) {
+            usernameInput = generateStudentUsernameFromCode(studentCode, attempt);
+            document.getElementById('username').value = usernameInput;
+
+            const retryStudents = getData(STORAGE_KEY_STUDENTS).map((student) => (
+                student.id === newStudent.id
+                    ? { ...student, username: usernameInput, password: studentPasswordInput, plainPassword: studentPasswordInput }
+                    : student
+            ));
+            const retryStudent = { ...localSaveResult.student, username: usernameInput, password: studentPasswordInput, plainPassword: studentPasswordInput };
+            localSaveResult = saveStudentsWithLocalFallback(retryStudents, retryStudent);
+            students = localSaveResult.students;
+            syncResult = await syncToSQLDetailed('students', [localSaveResult.student]);
         }
-    });
+    }
+    if (!syncResult.success) {
+        saveData(STORAGE_KEY_STUDENTS, previousStudents, { skipSync: true });
+        renderStudents();
+        await showAppAlert(
+            syncResult.error || 'Student could not be saved to the database. Please login again and try once more.',
+            'Student Save Failed'
+        );
+        return;
+    }
+
+    try {
+        await refreshStudentsFromSQL();
+    } catch (error) {
+        console.warn('Student list refresh failed:', error.message);
+    }
 
     pushNotification('Student Updated', `Account for "${newStudent.fullName}" saved and activated.`, 'user');
     toggleStudentForm();
+    populateQuickStudentFilters();
     renderStudents();
-    if (usernameInput && studentPasswordInput) {
-        showSuccessModal('Student Registered!', `The account for ${newStudent.fullName} is now active. They can log in using username: ${usernameInput}`);
-    } else {
-        showSuccessModal('Student Registered!', `The record for ${newStudent.fullName} is saved without login credentials.`);
-    }
+    showSuccessModal('Student Registered!', `The account for ${newStudent.fullName} is now active. They can log in using username: ${usernameInput}`);
 }
+
+function bindStudentFormSubmit() {
+    const studentForm = document.getElementById('studentForm');
+    if (!studentForm || studentForm.dataset.submitBound === '1') return;
+    studentForm.dataset.submitBound = '1';
+    studentForm.onsubmit = (event) => {
+        handleStudentFormSubmit(event);
+        return false;
+    };
+}
+
+bindStudentFormSubmit();
+
+function bindStudentFamilyAutoFill() {
+    const form = document.getElementById('studentForm');
+    if (!form || form.dataset.familyAutofillBound === '1') return;
+    form.dataset.familyAutofillBound = '1';
+
+    ['fatherName', 'parentPhone', 'guardianName'].forEach((fieldId) => {
+        document.getElementById(fieldId)?.addEventListener('input', () => {
+            autoFillStudentFamilyFromRelation(false);
+        });
+    });
+}
+
+bindStudentFamilyAutoFill();
 
 function decodeRowPayload(encodedPayload) {
     try {
@@ -3225,6 +5714,104 @@ function viewStudentFromEncoded(encodedPayload) {
     viewStudent(payload);
 }
 
+function printStudentAdmissionFormFromEncoded(encodedPayload) {
+    const payload = decodeRowPayload(encodedPayload);
+    if (!payload) {
+        alert('Unable to load student details for printing.');
+        return;
+    }
+    printStudentAdmissionForm(payload);
+}
+
+function getEmailSchoolName() {
+    try {
+        const branding = typeof getBrandingSettings === 'function' ? getBrandingSettings() : {};
+        return String(branding.schoolName || branding.schoolTitle || 'Myownschool').trim() || 'Myownschool';
+    } catch (_error) {
+        return 'Myownschool';
+    }
+}
+
+async function sendCustomEmailToRecord(record = {}, roleLabel = 'Recipient') {
+    const to = String(record?.email || '').trim();
+    const displayName = String(record?.fullName || record?.name || roleLabel || 'Recipient').trim();
+    const schoolName = getEmailSchoolName();
+    if (!record || !to) {
+        showAppAlert(`This ${String(roleLabel || 'record').toLowerCase()} does not have an email address saved.`, 'Email Missing');
+        return;
+    }
+
+    const subject = window.prompt('Email subject', `Message from ${schoolName}`);
+    if (!subject) return;
+    const message = window.prompt('Email message');
+    if (!message) return;
+
+    try {
+        const token = sessionStorage.getItem('eduCore_token') || '';
+        const response = await fetch(`${API_BASE_URL}/email/send`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            body: JSON.stringify({
+                to,
+                subject,
+                text: `Dear ${displayName},\n\n${message}\n\n${schoolName}`,
+                html: `
+                    <div style="margin:0;padding:0;background:#eef2f7;font-family:Arial,Helvetica,sans-serif;color:#111827">
+                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef2f7;padding:28px 12px">
+                            <tr>
+                                <td align="center">
+                                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;border-collapse:collapse;background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 12px 32px rgba(15,23,42,.12)">
+                                        <tr>
+                                            <td style="background:#0f766e;padding:24px 28px;color:#ffffff">
+                                                <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                                                    <tr>
+                                                        <td width="74"><img src="cid:school-logo" width="62" height="62" alt="${escapeHtml(schoolName)}" style="display:block;border-radius:14px;background:#ffffff;padding:6px;object-fit:contain"></td>
+                                                        <td style="padding-left:14px"><div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em">${escapeHtml(schoolName)}</div><h1 style="margin:6px 0 0;font-size:24px;line-height:1.25;color:#ffffff">${escapeHtml(subject)}</h1></td>
+                                                    </tr>
+                                                </table>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td style="padding:28px">
+                                                <p style="margin:0 0 12px;color:#111827;font-size:15px">Dear ${escapeHtml(displayName)},</p>
+                                                <div style="margin-top:18px;padding:18px 20px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;color:#1f2937;font-size:15px;line-height:1.8;white-space:pre-line">${escapeHtml(message)}</div>
+                                                <p style="margin:22px 0 0;color:#111827;font-size:14px;font-weight:700">${escapeHtml(schoolName)}</p>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                `
+            })
+        });
+        const result = await parseJsonResponse(response, 'Email could not be sent.');
+        if (!response.ok || result?.success === false) throw new Error(result?.message || 'Email could not be sent.');
+        showAppAlert('Email sent successfully.', 'Email Sent');
+    } catch (error) {
+        showAppAlert(error.message || String(error), 'Email Failed');
+    }
+}
+
+async function sendStudentCustomEmailFromEncoded(encodedPayload) {
+    const student = decodeRowPayload(encodedPayload);
+    return sendCustomEmailToRecord(student, 'Student');
+}
+
+async function sendTeacherCustomEmailFromEncoded(encodedPayload) {
+    const teacher = decodeRowPayload(encodedPayload);
+    return sendCustomEmailToRecord(teacher, 'Teacher');
+}
+
+async function sendStaffCustomEmailFromEncoded(encodedPayload) {
+    const staffMember = decodeRowPayload(encodedPayload);
+    return sendCustomEmailToRecord(staffMember, 'Staff member');
+}
+
 function handleStudentActionSelect(selectElement, encodedPayload, studentId, isBranchUser = 0) {
     const action = String(selectElement?.value || '').trim().toLowerCase();
     if (!action) return;
@@ -3233,6 +5820,16 @@ function handleStudentActionSelect(selectElement, encodedPayload, studentId, isB
 
     if (action === 'view') {
         viewStudentFromEncoded(encodedPayload);
+        return;
+    }
+
+    if (action === 'print_admission') {
+        printStudentAdmissionFormFromEncoded(encodedPayload);
+        return;
+    }
+
+    if (action === 'email') {
+        sendStudentCustomEmailFromEncoded(encodedPayload);
         return;
     }
 
@@ -3249,12 +5846,12 @@ function handleStudentActionSelect(selectElement, encodedPayload, studentId, isB
         return;
     }
 
-    if (action === 'terminate') {
+    if (action === 'stuckoff' || action === 'terminate') {
         if (!canCurrentUserPerformAction('students', 'edit')) {
             showAppAlert('You do not have permission to update student status.', 'Permission Denied');
             return;
         }
-        terminateStudent(studentId);
+        stuckOffStudent(studentId);
         return;
     }
 
@@ -3276,10 +5873,51 @@ function handleStudentActionSelect(selectElement, encodedPayload, studentId, isB
     }
 }
 
+function handleTeacherActionSelect(selectElement, encodedPayload, teacherId) {
+    const action = String(selectElement?.value || '').trim().toLowerCase();
+    if (!action) return;
+
+    if (selectElement) selectElement.value = '';
+
+    if (action === 'attendance') {
+        viewTeacherAttendanceFromEncoded(encodedPayload);
+        return;
+    }
+
+    if (action === 'schedule') {
+        openTeacherSchedule(teacherId);
+        return;
+    }
+
+    if (action === 'email') {
+        sendTeacherCustomEmailFromEncoded(encodedPayload);
+        return;
+    }
+
+    if (action === 'edit') {
+        editTeacherFromEncoded(encodedPayload);
+        return;
+    }
+
+    if (action === 'stuckoff') {
+        markTeacherStuckOff(teacherId);
+        return;
+    }
+
+    if (action === 'reactivate') {
+        reactivateTeacher(teacherId);
+        return;
+    }
+
+    if (action === 'delete') {
+        deleteTeacher(teacherId);
+    }
+}
+
 function viewStudent(student) {
     const modal = document.getElementById('studentViewModal');
     if (!modal) {
-        const compactDetails = `ID: ${student.studentCode || '-'} | Roll: ${student.rollNo || '-'} | Name: ${student.fullName || '-'} | Class: ${student.classGrade || '-'} | Campus: ${student.campusName || 'Main Campus'}`;
+        const compactDetails = `ID: ${student.studentCode || '-'} | Roll: ${student.rollNo || '-'} | Name: ${student.fullName || '-'} | Class: ${student.classGrade || '-'} | Campus: ${student.campusName || '-'}`;
         showAppAlert(compactDetails, 'Student Details');
         return;
     }
@@ -3291,10 +5929,13 @@ function viewStudent(student) {
         viewStudentFatherName: student.fatherName || '-',
         viewStudentDob: formatDateForDisplay(student.dob),
         viewStudentClass: student.classGrade || '-',
-        viewStudentCampus: student.campusName || 'Main Campus',
+        viewStudentCampus: student.campusName || '-',
         viewStudentGender: student.gender || '-',
         viewStudentStatus: isStudentTerminated(student) ? 'Terminated' : (student.feesStatus || 'Pending'),
         viewStudentPhone: student.parentPhone || '-',
+        viewStudentAddress: student.address || '-',
+        viewStudentGuardianName: student.guardianName || '-',
+        viewStudentGuardianContact: student.guardianContact || '-',
         viewStudentEmail: student.email || '-',
         viewStudentUsername: student.username || '-'
     };
@@ -3442,7 +6083,10 @@ function parseStudentQuickFilterValues(values) {
     const genders = [];
     const campuses = [];
     const classes = [];
+    const feeStatuses = [];
     let below5 = false;
+    let polioList = false;
+    let zeroFee = false;
 
     normalizedValues.forEach((value) => {
         if (value.startsWith('gender:')) {
@@ -3463,6 +6107,22 @@ function parseStudentQuickFilterValues(values) {
             return;
         }
 
+        if (value.startsWith('fee:')) {
+            const status = value.slice('fee:'.length);
+            if (status) feeStatuses.push(status);
+            return;
+        }
+
+        if (value === 'zero-fee') {
+            zeroFee = true;
+            return;
+        }
+
+        if (value === 'list:polio') {
+            polioList = true;
+            return;
+        }
+
         if (value === 'age:below5') {
             below5 = true;
         }
@@ -3472,8 +6132,17 @@ function parseStudentQuickFilterValues(values) {
         genders,
         campuses,
         classes,
-        below5
+        feeStatuses,
+        polioList,
+        below5,
+        zeroFee
     };
+}
+
+function isStudentZeroFee(student) {
+    const remaining = Number(student?.remainingAmount || student?.dueBalance || student?.balance || 0) || 0;
+    const feeStatus = String(student?.feesStatus || '').trim().toLowerCase();
+    return feeStatus === 'paid' && remaining === 0;
 }
 
 function getStudentClassSortRank(className) {
@@ -3674,13 +6343,14 @@ function createStudentQuickFilterMenuItem(optionElement) {
 }
 
 function getStudentStatusLabel(student) {
+    if (isStudentStuckOff(student)) return 'Stuck Off';
     return isStudentTerminated(student) ? 'Terminated' : (student?.feesStatus || 'Pending');
 }
 
 function getStudentColumnSearchText(student, field) {
     if (!student) return '';
     if (field === 'status') return getStudentStatusLabel(student);
-    if (field === 'campusName') return student.campusName || 'Main Campus';
+    if (field === 'campusName') return student.campusName || '-';
     if (field === 'dob') return `${student.dob || ''} ${formatDateForDisplay(student.dob)}`;
     return student[field] || '';
 }
@@ -3735,7 +6405,7 @@ function applyStudentColumnSearchValue(field, label, value) {
         searchInput.value = normalizedValue;
         searchInput.placeholder = studentColumnSearchFilter
             ? `Searching ${label}...`
-            : 'Search by name, roll no, or student ID';
+            : 'Search';
     }
 
     renderStudents();
@@ -3762,6 +6432,32 @@ function clearStudentColumnSearch() {
     closeStudentColumnSearchModal();
 }
 
+function runStudentSearchFromInput(inputElement) {
+    studentColumnSearchFilter = null;
+    const input = inputElement || document.getElementById('studentSearchInput');
+    if (input) input.placeholder = 'Search';
+    try {
+        renderStudents(String(input?.value || '').toLowerCase());
+    } catch (error) {
+        const term = String(input?.value || '').trim().toLowerCase();
+        const rows = Array.from(document.querySelectorAll('#studentTableBody tr'));
+        let visibleCount = 0;
+        rows.forEach((row) => {
+            const matches = !term || row.textContent.toLowerCase().includes(term);
+            row.style.display = matches ? '' : 'none';
+            if (matches) visibleCount += 1;
+        });
+        const noData = document.getElementById('noDataMessage');
+        if (noData) {
+            noData.textContent = term && visibleCount === 0 ? 'No record found.' : 'No students found. Add one to get started!';
+            noData.style.display = visibleCount === 0 ? 'block' : 'none';
+        }
+        const totalCountEl = document.getElementById('totalStudentCount');
+        if (totalCountEl) totalCountEl.innerText = String(visibleCount);
+        console.warn('Student search fallback used:', error);
+    }
+}
+
 function renderStudents(term = '') {
     const tbody = document.getElementById('studentTableBody');
     if (!tbody) return;
@@ -3781,6 +6477,11 @@ function renderStudents(term = '') {
 
     const columnSearch = studentColumnSearchFilter;
     const activeSearchTerm = columnSearch ? columnSearch.value : term;
+    const studentSearchFields = [
+        'studentCode', 'fullName', 'fatherName', 'rollNo', 'classGrade', 'campusName',
+        'gender', 'parentPhone', 'address', 'guardianName', 'guardianContact', 'email', 'formB',
+        'monthlyFee', 'remainingAmount', 'feesStatus', 'enrollmentStatus', 'username'
+    ];
     populateStudentQuickFilterOptions();
     const selectedQuickValues = getStudentQuickFilterSelectedValues(quickFilter);
     const parsedFilters = parseStudentQuickFilterValues(selectedQuickValues);
@@ -3788,28 +6489,35 @@ function renderStudents(term = '') {
     const genderSet = new Set(parsedFilters.genders.map((gender) => String(gender || '').toLowerCase()));
     let campusSet = new Set(parsedFilters.campuses.map((campus) => String(campus || '').toLowerCase()));
     const classSet = new Set(parsedFilters.classes.map((className) => String(className || '').toLowerCase()));
+    const feeStatusSet = new Set(parsedFilters.feeStatuses.map((status) => String(status || '').toLowerCase()));
     const requireBelow5 = parsedFilters.below5;
+    const requireZeroFee = parsedFilters.zeroFee;
 
     if (loggedInUser?.role === 'Branch' && loggedInUser.campusName) {
         campusSet = new Set([String(loggedInUser.campusName).toLowerCase()]);
     }
+    const globalCampus = getGlobalCampusFilterForCurrentUser();
+    if (globalCampus && globalCampus !== 'all') {
+        campusSet = new Set([String(globalCampus).toLowerCase()]);
+    }
 
-    const students = getData(STORAGE_KEY_STUDENTS);
+    const students = getArrayData(STORAGE_KEY_STUDENTS);
     const filtered = students.filter(s =>
         (
             !activeSearchTerm ||
             (columnSearch
                 ? String(getStudentColumnSearchText(s, columnSearch.field)).toLowerCase().includes(activeSearchTerm)
                 : (
-                    (s.fullName && s.fullName.toLowerCase().includes(activeSearchTerm)) ||
-                    (s.rollNo && s.rollNo.toString().toLowerCase().includes(activeSearchTerm)) ||
-                    (s.studentCode && s.studentCode.toLowerCase().includes(activeSearchTerm))
+                    recordMatchesSearch(s, activeSearchTerm, studentSearchFields)
                 ))
         ) &&
         (genderSet.size === 0 || genderSet.has(String(s.gender || '').toLowerCase())) &&
         (!requireBelow5 || isStudentBelowAge(s, 5)) &&
         (classSet.size === 0 || classSet.has(String(s.classGrade || '').toLowerCase())) &&
-        (campusSet.size === 0 || campusSet.has(String(s.campusName || 'Main Campus').toLowerCase()))
+        (campusSet.size === 0 || campusSet.has(String(s.campusName || '').toLowerCase())) &&
+        (feeStatusSet.size === 0 || feeStatusSet.has(String(getStudentStatusLabel(s) || '').toLowerCase())) &&
+        (!requireZeroFee || isStudentZeroFee(s)) &&
+        !isStudentTerminated(s)
     );
 
     // Update total count display - Use filtered results length as requested
@@ -3820,9 +6528,12 @@ function renderStudents(term = '') {
     const noData = document.getElementById('noDataMessage');
 
     if (filtered.length === 0) {
-        noData.style.display = 'block';
+        if (noData) {
+            noData.textContent = activeSearchTerm ? 'No record found.' : 'No students found. Add one to get started!';
+            noData.style.display = 'block';
+        }
     } else {
-        noData.style.display = 'none';
+        if (noData) noData.style.display = 'none';
         filtered.forEach(s => {
             const terminated = isStudentTerminated(s);
             const statusLabel = getStudentStatusLabel(s);
@@ -3841,15 +6552,17 @@ function renderStudents(term = '') {
                 <td class="cell-compact">${s.fatherName || '-'}</td>
                 <td>${formatDateForDisplay(s.dob)}</td>
                 <td class="cell-compact">${s.classGrade}</td>
-                <td class="cell-compact">${s.campusName || 'Main Campus'}</td>
+                <td class="cell-compact">${s.campusName || '-'}</td>
                 <td>${s.gender || '-'}</td>
                 <td><span class="status-badge ${statusClass}">${statusLabel}</span></td>
                 <td><div class="table-action-wrap">
                     <select class="table-action-select" onchange="handleStudentActionSelect(this, '${encodedStudent}', '${s.id}', ${isBranchUser ? 1 : 0})">
                         <option value="">Actions</option>
                         <option value="view">View</option>
+                        <option value="print_admission">Print Admission Form</option>
+                        ${s.email ? '<option value="email">Send Email</option>' : ''}
                         ${canEditStudents ? '<option value="edit">Edit</option>' : ''}
-                        ${canEditStudents ? (terminated ? '<option value="reactivate">Reactivate</option>' : '<option value="terminate">Mark Terminated</option>') : ''}
+                        ${canEditStudents ? (terminated ? '<option value="reactivate">Reactivate</option>' : '<option value="stuckoff">Stuck-Off</option>') : ''}
                         ${canDeleteStudents ? '<option value="delete">Delete</option>' : ''}
                     </select>
                 </div>
@@ -3861,132 +6574,373 @@ function renderStudents(term = '') {
     }
 }
 
-function getStudentPrintFieldDefinitions() {
-    return [
-        { key: 'studentCode', label: 'Student ID', value: (s) => s.studentCode || '-' },
-        { key: 'rollNo', label: 'Roll No', value: (s) => s.rollNo || '-' },
-        { key: 'fullName', label: 'Student Name', value: (s) => s.fullName || '-' },
-        { key: 'fatherName', label: 'Father Name', value: (s) => s.fatherName || '-' },
-        { key: 'parentPhone', label: 'Contact No', value: (s) => s.parentPhone || '-' },
-        { key: 'dob', label: 'DOB', value: (s) => formatDateForDisplay(s.dob) },
-        { key: 'admissionDate', label: 'Admission Date', value: (s) => formatDateForDisplay(s.admissionDate) },
-        { key: 'classGrade', label: 'Class', value: (s) => s.classGrade || '-' },
-        { key: 'campusName', label: 'Campus', value: (s) => s.campusName || 'Main Campus' },
-        { key: 'gender', label: 'Gender', value: (s) => s.gender || '-' },
-        { key: 'email', label: 'Email', value: (s) => s.email || '-' },
-        { key: 'formB', label: 'Form B', value: (s) => s.formB || '-' },
-        { key: 'monthlyFee', label: 'Monthly Fee', value: (s) => s.monthlyFee || '-' },
-        { key: 'feesStatus', label: 'Fee Status', value: (s) => isStudentTerminated(s) ? 'Terminated' : (s.feesStatus || '-') }
-    ];
-}
+function showAdminRecordsSection(sectionKey = '') {
+    const select = document.getElementById('adminRecordsSelect');
+    if (select && select.value !== sectionKey) select.value = sectionKey;
 
-function getDefaultStudentPrintFieldKeys(printMode = 'school') {
-    if (printMode === 'outer') {
-        return ['fullName', 'fatherName', 'parentPhone', 'rollNo'];
-    }
-    return getStudentPrintFieldDefinitions().map((field) => field.key);
-}
+    const sections = {
+        stuckoff: document.getElementById('stuckoffRecordSection'),
+        resigned: document.getElementById('resignedRecordSection'),
+        alumni: document.getElementById('alumniRecordSection')
+    };
 
-function normalizeStudentPrintFieldKeys(keys, printMode = 'school') {
-    const allowed = new Set(getStudentPrintFieldDefinitions().map((field) => field.key));
-    const normalized = Array.from(new Set((Array.isArray(keys) ? keys : [])
-        .map((key) => String(key || '').trim())
-        .filter((key) => allowed.has(key))));
-    return normalized.length ? normalized : getDefaultStudentPrintFieldKeys(printMode);
-}
-
-function getSelectedStudentPrintFieldKeys(printMode = 'school') {
-    try {
-        const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY_STUDENT_PRINT_FIELDS) || '[]');
-        return normalizeStudentPrintFieldKeys(parsed, printMode);
-    } catch (error) {
-        return getDefaultStudentPrintFieldKeys(printMode);
-    }
-}
-
-function saveSelectedStudentPrintFieldKeys(keys, printMode = 'school') {
-    const normalized = normalizeStudentPrintFieldKeys(keys, printMode);
-    localStorage.setItem(STORAGE_KEY_STUDENT_PRINT_FIELDS, JSON.stringify(normalized));
-    updateStudentPrintFieldsTrigger(normalized);
-}
-
-function updateStudentPrintFieldsTrigger(keys = null) {
-    const trigger = document.getElementById('studentPrintFieldsTrigger');
-    if (!trigger) return;
-    const selectedKeys = keys || getSelectedStudentPrintFieldKeys(document.getElementById('studentPrintMode')?.value || 'school');
-    const fields = getStudentPrintFieldDefinitions().filter((field) => selectedKeys.includes(field.key));
-    if (!fields.length) {
-        trigger.textContent = 'Default Fields';
-    } else if (fields.length <= 2) {
-        trigger.textContent = fields.map((field) => field.label).join(', ');
-    } else {
-        trigger.textContent = `${fields.slice(0, 2).map((field) => field.label).join(', ')} +${fields.length - 2}`;
-    }
-}
-
-function renderStudentPrintFieldsMenu() {
-    const menu = document.getElementById('studentPrintFieldsMenu');
-    if (!menu) return;
-    const printMode = document.getElementById('studentPrintMode')?.value || 'school';
-    const selectedSet = new Set(getSelectedStudentPrintFieldKeys(printMode));
-
-    menu.innerHTML = '';
-    getStudentPrintFieldDefinitions().forEach((field) => {
-        const label = document.createElement('label');
-        label.className = 'student-multifilter-item';
-
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.value = field.key;
-        checkbox.checked = selectedSet.has(field.key);
-        checkbox.addEventListener('change', () => {
-            const checkedKeys = Array.from(menu.querySelectorAll('input[type="checkbox"]:checked'))
-                .map((input) => input.value);
-            saveSelectedStudentPrintFieldKeys(checkedKeys, printMode);
-        });
-
-        const text = document.createElement('span');
-        text.textContent = field.label;
-
-        label.appendChild(checkbox);
-        label.appendChild(text);
-        menu.appendChild(label);
-    });
-    updateStudentPrintFieldsTrigger(Array.from(selectedSet));
-}
-
-function initializeStudentPrintFieldsControl() {
-    const container = document.getElementById('studentPrintFieldsMulti');
-    const trigger = document.getElementById('studentPrintFieldsTrigger');
-    const menu = document.getElementById('studentPrintFieldsMenu');
-    const printMode = document.getElementById('studentPrintMode');
-    if (!container || !trigger || !menu || container.dataset.bound === '1') return;
-
-    container.dataset.bound = '1';
-    renderStudentPrintFieldsMenu();
-
-    trigger.addEventListener('click', (event) => {
-        event.stopPropagation();
-        const isOpen = container.classList.toggle('open');
-        trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    Object.entries(sections).forEach(([key, section]) => {
+        if (section) section.classList.toggle('active', key === sectionKey);
     });
 
-    menu.addEventListener('click', (event) => event.stopPropagation());
+    renderAdminRecordPanels();
+}
 
-    document.addEventListener('click', () => {
-        container.classList.remove('open');
-        trigger.setAttribute('aria-expanded', 'false');
-    });
+function handleStudentAdminRecordHash() {
+    if (!isCurrentPage('students.html')) return;
+    const sectionKey = String(window.location.hash || '').replace('#', '');
+    if (!['stuckoff', 'resigned', 'alumni'].includes(sectionKey)) return;
 
-    if (printMode) {
-        printMode.addEventListener('change', () => {
-            const mode = printMode.value || 'school';
-            if (!localStorage.getItem(STORAGE_KEY_STUDENT_PRINT_FIELDS)) {
-                saveSelectedStudentPrintFieldKeys(getDefaultStudentPrintFieldKeys(mode), mode);
-            }
-            renderStudentPrintFieldsMenu();
-        });
+    showAdminRecordsSection(sectionKey);
+    document.querySelector('.admin-records-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderAdminRecordPanels() {
+    renderStuckOffStudents();
+    renderResignedTeachers();
+    renderAlumniRecords();
+}
+
+function renderStuckOffStudents() {
+    const container = document.getElementById('stuckoffStudentsList');
+    if (!container) return;
+
+    const students = getArrayData(STORAGE_KEY_STUDENTS).filter(isStudentTerminated);
+    if (!students.length) {
+        container.innerHTML = '<div class="admin-record-empty">No stuck off students found.</div>';
+        return;
     }
+
+    container.innerHTML = `
+        <table class="admin-record-table">
+            <thead>
+                <tr>
+                    <th>Student</th>
+                    <th>Class</th>
+                    <th>Campus</th>
+                    <th>Stuck Off Date</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${students.map((student) => `
+                    <tr>
+                        <td><strong>${escapeHtml(student.fullName || '-')}</strong><br><span style="color:var(--text-secondary);">${escapeHtml(student.studentCode || student.rollNo || '-')}</span></td>
+                        <td>${escapeHtml(student.classGrade || '-')}</td>
+                        <td>${escapeHtml(student.campusName || '-')}</td>
+                        <td>${escapeHtml(formatDateForDisplay(student.stuckOffAt || student.terminatedAt) || '-')}</td>
+                        <td><button type="button" class="action-btn btn-edit" onclick="reactivateStudent('${student.id}')">Unmark</button></td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+function getStuckOffStudentRecords() {
+    return getArrayData(STORAGE_KEY_STUDENTS)
+        .filter(isStudentTerminated)
+        .map((student) => ({
+            type: 'Student',
+            id: student.id,
+            code: student.studentCode || student.rollNo || '-',
+            name: student.fullName || '-',
+            detail: student.classGrade || '-',
+            campus: student.campusName || '-',
+            date: student.stuckOffAt || student.terminatedAt || '',
+            reason: student.terminationNote || '',
+            status: getStudentStatusLabel(student),
+            action: `reactivateStudent('${String(student.id).replace(/'/g, "\\'")}')`
+        }));
+}
+
+function getStuckOffTeacherRecords() {
+    return getArrayData(STORAGE_KEY_TEACHERS)
+        .filter(isTeacherStuckOff)
+        .map((teacher) => ({
+            type: 'Teacher',
+            id: teacher.id,
+            code: teacher.employeeCode || teacher.id || '-',
+            name: teacher.fullName || '-',
+            detail: teacher.subject || teacher.designation || '-',
+            campus: teacher.campusName || '-',
+            date: teacher.stuckOffAt || '',
+            reason: teacher.stuckOffNote || '',
+            status: 'Stuck Off',
+            action: `reactivateTeacher('${String(teacher.id).replace(/'/g, "\\'")}')`
+        }));
+}
+
+function renderStuckOffPage() {
+    const tbody = document.getElementById('stuckOffRecordsBody');
+    if (!tbody) return;
+
+    const typeFilter = document.getElementById('stuckOffTypeFilter')?.value || 'all';
+    const searchTerm = String(document.getElementById('stuckOffSearchInput')?.value || '').trim().toLowerCase();
+    const emptyState = document.getElementById('stuckOffEmptyState');
+    const totalEl = document.getElementById('stuckOffTotalCount');
+    const studentCountEl = document.getElementById('stuckOffStudentCount');
+    const teacherCountEl = document.getElementById('stuckOffTeacherCount');
+
+    const students = getStuckOffStudentRecords();
+    const teachers = getStuckOffTeacherRecords();
+    let records = [...students, ...teachers];
+
+    if (typeFilter === 'students') records = students;
+    if (typeFilter === 'teachers') records = teachers;
+
+    if (searchTerm) {
+        records = records.filter((record) => (
+            record.name.toLowerCase().includes(searchTerm) ||
+            record.code.toLowerCase().includes(searchTerm) ||
+            record.detail.toLowerCase().includes(searchTerm) ||
+            record.campus.toLowerCase().includes(searchTerm)
+        ));
+    }
+
+    records.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || a.name.localeCompare(b.name));
+
+    if (totalEl) totalEl.textContent = records.length;
+    if (studentCountEl) studentCountEl.textContent = students.length;
+    if (teacherCountEl) teacherCountEl.textContent = teachers.length;
+
+    if (!records.length) {
+        tbody.innerHTML = '';
+        if (emptyState) emptyState.style.display = 'block';
+        return;
+    }
+
+    if (emptyState) emptyState.style.display = 'none';
+    tbody.innerHTML = records.map((record) => `
+        <tr>
+            <td><span class="record-type-pill ${record.type === 'Teacher' ? 'teacher' : 'student'}">${escapeHtml(record.type)}</span></td>
+            <td><strong>${escapeHtml(record.name)}</strong><br><span class="muted-text">${escapeHtml(record.code)}</span></td>
+            <td>${escapeHtml(record.detail)}</td>
+            <td>${escapeHtml(record.campus)}</td>
+            <td>${escapeHtml(formatDateForDisplay(record.date) || '-')}</td>
+            <td><span class="status-badge status-failed">${escapeHtml(record.status)}</span></td>
+            <td>${escapeHtml(record.reason || '-')}</td>
+            <td><button type="button" class="action-btn btn-edit" onclick="${record.action}">Reactivate</button></td>
+        </tr>
+    `).join('');
+}
+
+function isTeacherResigned(teacher) {
+    return teacher?.resigned === true || String(teacher?.employmentStatus || '').toLowerCase() === 'resigned';
+}
+
+function markTeacherStuckOff(teacherId) {
+    const teachers = getArrayData(STORAGE_KEY_TEACHERS);
+    const index = teachers.findIndex((teacher) => String(teacher.id) === String(teacherId));
+    if (index === -1) return;
+
+    const teacher = teachers[index];
+    if (isTeacherStuckOff(teacher)) {
+        showAppAlert('Teacher is already marked as stuck off.', 'No Changes');
+        return;
+    }
+
+    const confirmText = `Mark "${teacher.fullName || 'Teacher'}" as stuck off?\n\nThis teacher will be removed from the active teacher list and shown in Stuck Off records.`;
+    const ok = typeof showAppConfirm === 'function' ? showAppConfirm(confirmText) : Promise.resolve(window.confirm(confirmText));
+
+    Promise.resolve(ok).then(async (confirmed) => {
+        if (!confirmed) return;
+
+        const today = new Date().toISOString().slice(0, 10);
+        const updatedTeacher = {
+            ...teacher,
+            employmentStatus: 'Stuck Off',
+            stuckOffAt: today,
+            stuckOffNote: teacher.stuckOffNote || ''
+        };
+
+        teachers[index] = updatedTeacher;
+        saveData(STORAGE_KEY_TEACHERS, teachers, { skipSync: true });
+        await syncToSQLDetailed('teachers', [updatedTeacher]).catch(() => null);
+        pushNotification('Teacher Updated', `"${updatedTeacher.fullName || 'Teacher'}" marked as stuck off.`, 'info');
+        renderTeachers();
+        renderAdminRecordPanels();
+        renderStuckOffPage();
+    }).catch(() => {});
+}
+
+function reactivateTeacher(teacherId) {
+    const teachers = getArrayData(STORAGE_KEY_TEACHERS);
+    const index = teachers.findIndex((teacher) => String(teacher.id) === String(teacherId));
+    if (index === -1) return;
+
+    const teacher = teachers[index];
+    if (!isTeacherStuckOff(teacher) && !isTeacherResigned(teacher)) {
+        showAppAlert('Teacher is already active.', 'No Changes');
+        return;
+    }
+
+    const confirmText = `Reactivate "${teacher.fullName || 'Teacher'}"?`;
+    const ok = typeof showAppConfirm === 'function' ? showAppConfirm(confirmText) : Promise.resolve(window.confirm(confirmText));
+
+    Promise.resolve(ok).then(async (confirmed) => {
+        if (!confirmed) return;
+
+        const updatedTeacher = {
+            ...teacher,
+            resigned: false,
+            employmentStatus: 'Active',
+            stuckOffAt: '',
+            stuckOffNote: '',
+            resignedAt: ''
+        };
+
+        teachers[index] = updatedTeacher;
+        saveData(STORAGE_KEY_TEACHERS, teachers, { skipSync: true });
+        await syncToSQLDetailed('teachers', [updatedTeacher]).catch(() => null);
+        pushNotification('Teacher Updated', `"${updatedTeacher.fullName || 'Teacher'}" is active again.`, 'success');
+        renderTeachers();
+        renderAdminRecordPanels();
+        renderStuckOffPage();
+    }).catch(() => {});
+}
+
+function renderResignedTeachers() {
+    const container = document.getElementById('resignedTeachersList');
+    if (!container) return;
+
+    let teachers = getArrayData(STORAGE_KEY_TEACHERS);
+    if (!teachers.length) {
+        container.innerHTML = '<div class="admin-record-empty">No teachers found.</div>';
+        return;
+    }
+
+    container.innerHTML = `
+        <table class="admin-record-table">
+            <thead>
+                <tr>
+                    <th>Teacher</th>
+                    <th>Subject</th>
+                    <th>Campus</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${teachers.map((teacher) => {
+                    const resigned = isTeacherResigned(teacher);
+                    return `
+                        <tr>
+                            <td><strong>${escapeHtml(teacher.fullName || '-')}</strong><br><span style="color:var(--text-secondary);">${escapeHtml(teacher.employeeCode || teacher.id || '-')}</span></td>
+                            <td>${escapeHtml(teacher.subject || '-')}</td>
+                            <td>${escapeHtml(teacher.campusName || '-')}</td>
+                            <td><span class="status-badge ${resigned ? 'status-failed' : 'status-paid'}">${resigned ? 'Resigned' : 'Active'}</span></td>
+                            <td>
+                                <button type="button" class="action-btn ${resigned ? 'btn-edit' : 'btn-delete'}" onclick="toggleTeacherResignedStatus('${teacher.id}', ${resigned ? 'false' : 'true'})">
+                                    ${resigned ? 'Unmark' : 'Mark Resigned'}
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('')}
+            </tbody>
+        </table>
+    `;
+    if (window.lucide) window.lucide.createIcons();
+}
+
+function toggleTeacherResignedStatus(teacherId, shouldResign) {
+    const teachers = getArrayData(STORAGE_KEY_TEACHERS);
+    const index = teachers.findIndex((teacher) => String(teacher.id) === String(teacherId));
+    if (index === -1) return;
+
+    teachers[index] = {
+        ...teachers[index],
+        resigned: Boolean(shouldResign),
+        employmentStatus: shouldResign ? 'Resigned' : 'Active',
+        resignedAt: shouldResign ? new Date().toISOString().slice(0, 10) : ''
+    };
+
+    saveData(STORAGE_KEY_TEACHERS, teachers, { skipSync: true });
+    renderResignedTeachers();
+    if (typeof renderTeachers === 'function') renderTeachers();
+    showSuccessModal(shouldResign ? 'Teacher Marked Resigned!' : 'Teacher Unmarked!', shouldResign
+        ? `${teachers[index].fullName || 'Teacher'} has been marked as resigned.`
+        : `${teachers[index].fullName || 'Teacher'} is active again.`);
+}
+
+function bindAlumniForm() {
+    const form = document.getElementById('alumniForm');
+    if (!form || form.dataset.bound === '1') return;
+    form.dataset.bound = '1';
+    form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const alumni = getData(STORAGE_KEY_ALUMNI);
+        const record = {
+            id: generateUniqueRecordId('ALM'),
+            teacherName: document.getElementById('alumniTeacherName')?.value.trim() || '',
+            post: document.getElementById('alumniPost')?.value.trim() || '',
+            organization: document.getElementById('alumniOrganization')?.value.trim() || '',
+            contact: document.getElementById('alumniContact')?.value.trim() || '',
+            remarks: document.getElementById('alumniRemarks')?.value.trim() || '',
+            createdAt: new Date().toISOString()
+        };
+
+        if (!record.teacherName || !record.post) {
+            showAppAlert('Teacher name and current post are required.', 'Missing Alumni Detail');
+            return;
+        }
+
+        alumni.push(record);
+        localStorage.setItem(STORAGE_KEY_ALUMNI, JSON.stringify(alumni));
+        form.reset();
+        renderAlumniRecords();
+        showSuccessModal('Alumni Added!', `${record.teacherName} has been added to alumni records.`);
+    });
+}
+
+function renderAlumniRecords() {
+    const container = document.getElementById('alumniList');
+    if (!container) return;
+
+    const alumni = getData(STORAGE_KEY_ALUMNI);
+    if (!alumni.length) {
+        container.innerHTML = '<div class="admin-record-empty">No alumni records added yet.</div>';
+        return;
+    }
+
+    container.innerHTML = `
+        <table class="admin-record-table">
+            <thead>
+                <tr>
+                    <th>Teacher</th>
+                    <th>Current Post</th>
+                    <th>Organization</th>
+                    <th>Contact</th>
+                    <th>Remarks</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${alumni.map((record) => `
+                    <tr>
+                        <td><strong>${escapeHtml(record.teacherName || '-')}</strong></td>
+                        <td>${escapeHtml(record.post || '-')}</td>
+                        <td>${escapeHtml(record.organization || '-')}</td>
+                        <td>${escapeHtml(record.contact || '-')}</td>
+                        <td>${escapeHtml(record.remarks || '-')}</td>
+                        <td><button type="button" class="action-btn btn-delete" onclick="deleteAlumniRecord('${record.id}')">Delete</button></td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+function deleteAlumniRecord(recordId) {
+    const alumni = getData(STORAGE_KEY_ALUMNI).filter((record) => String(record.id) !== String(recordId));
+    localStorage.setItem(STORAGE_KEY_ALUMNI, JSON.stringify(alumni));
+    renderAlumniRecords();
 }
 
 function printStudentsList() {
@@ -4015,32 +6969,45 @@ function printStudentsList() {
     const parsedFilters = parseStudentQuickFilterValues(selectedQuickValues);
 
     const printModeRaw = String(printModeEl ? printModeEl.value : (localStorage.getItem('eduCore_student_print_mode') || 'school')).trim().toLowerCase();
-    const printMode = (printModeRaw === 'outer' || printModeRaw === 'school') ? printModeRaw : 'school';
-    if (printModeEl && printModeEl.value !== printMode) printModeEl.value = printMode;
-    localStorage.setItem('eduCore_student_print_mode', printMode);
+    let printMode = (printModeRaw === 'outer' || printModeRaw === 'school') ? printModeRaw : 'school';
+    if (parsedFilters.polioList) printMode = 'polio';
+    if (printModeEl && printMode !== 'polio' && printModeEl.value !== printMode) printModeEl.value = printMode;
+    if (printMode !== 'polio') localStorage.setItem('eduCore_student_print_mode', printMode);
 
     const genderSet = new Set(parsedFilters.genders.map((gender) => String(gender || '').toLowerCase()));
     let campusSet = new Set(parsedFilters.campuses.map((campus) => String(campus || '').toLowerCase()));
     const classSet = new Set(parsedFilters.classes.map((className) => String(className || '').toLowerCase()));
+    const feeStatusSet = new Set(parsedFilters.feeStatuses.map((status) => String(status || '').toLowerCase()));
     const requireBelow5 = parsedFilters.below5;
+    const requireZeroFee = parsedFilters.zeroFee;
 
     if (loggedInUser?.role === 'Branch' && loggedInUser.campusName) {
         campusSet = new Set([String(loggedInUser.campusName).toLowerCase()]);
     }
+    const globalCampus = getGlobalCampusFilterForCurrentUser();
+    if (globalCampus && globalCampus !== 'all') {
+        campusSet = new Set([String(globalCampus).toLowerCase()]);
+    }
 
-    const students = getData(STORAGE_KEY_STUDENTS);
+    const students = getArrayData(STORAGE_KEY_STUDENTS);
     const filtered = students
         .filter((s) =>
             (
                 !term ||
                 (s.fullName && s.fullName.toLowerCase().includes(term)) ||
                 (s.rollNo && s.rollNo.toString().toLowerCase().includes(term)) ||
-                (s.studentCode && s.studentCode.toLowerCase().includes(term))
+                (s.studentCode && s.studentCode.toLowerCase().includes(term)) ||
+                (s.fatherName && s.fatherName.toLowerCase().includes(term)) ||
+                (s.parentPhone && s.parentPhone.toLowerCase().includes(term)) ||
+                (s.address && s.address.toLowerCase().includes(term))
             ) &&
             (genderSet.size === 0 || genderSet.has(String(s.gender || '').toLowerCase())) &&
             (!requireBelow5 || isStudentBelowAge(s, 5)) &&
             (classSet.size === 0 || classSet.has(String(s.classGrade || '').toLowerCase())) &&
-            (campusSet.size === 0 || campusSet.has(String(s.campusName || 'Main Campus').toLowerCase()))
+            (campusSet.size === 0 || campusSet.has(String(s.campusName || '').toLowerCase())) &&
+            (feeStatusSet.size === 0 || feeStatusSet.has(String(getStudentStatusLabel(s) || '').toLowerCase())) &&
+            (!requireZeroFee || isStudentZeroFee(s)) &&
+            !isStudentTerminated(s)
         )
         .sort((a, b) => {
             const rollA = Number.parseInt(String(a.rollNo || ''), 10);
@@ -4055,10 +7022,7 @@ function printStudentsList() {
     const settings = getData(STORAGE_KEY_SETTINGS) || {};
     const schoolName = settings.schoolName || 'Student List';
     const printedAt = new Date().toLocaleString();
-    const modeLabel = printMode === 'outer' ? 'Outer Student List' : 'School Student List';
-    const selectedFieldKeys = getSelectedStudentPrintFieldKeys(printMode);
-    const selectedFields = getStudentPrintFieldDefinitions()
-        .filter((field) => selectedFieldKeys.includes(field.key));
+    const modeLabel = printMode === 'polio' ? 'Polio List' : (printMode === 'outer' ? 'Outer Student List' : 'School Student List');
 
     const formatDateSafe = (value) => {
         try {
@@ -4069,20 +7033,49 @@ function printStudentsList() {
     };
 
     const rowsMarkup = filtered.length
-        ? filtered.map((s, idx) => `
+        ? filtered.map((s, idx) => {
+            if (printMode === 'polio') {
+                return `
+                    <tr>
+                        <td class="num">${idx + 1}</td>
+                        <td>${escapeHtml(s.fullName || '-')}</td>
+                        <td>${escapeHtml(s.classGrade || '-')}</td>
+                        <td>${escapeHtml(s.fatherName || '-')}</td>
+                        <td>${escapeHtml(s.parentPhone || '-')}</td>
+                        <td>${escapeHtml(s.address || '-')}</td>
+                    </tr>
+                `;
+            }
+
+            if (printMode === 'outer') {
+                return `
+                    <tr>
+                        <td class="num">${idx + 1}</td>
+                        <td>${escapeHtml(s.fullName || '-')}</td>
+                        <td>${escapeHtml(s.fatherName || '-')}</td>
+                        <td>${escapeHtml(s.parentPhone || '-')}</td>
+                        <td>${escapeHtml(s.rollNo || '-')}</td>
+                    </tr>
+                `;
+            }
+
+            return `
                 <tr>
                     <td class="num">${idx + 1}</td>
-                    ${selectedFields.map((field) => `<td>${escapeHtml(field.value(s))}</td>`).join('')}
+                    <td>${escapeHtml(s.studentCode || '-')}</td>
+                    <td>${escapeHtml(s.rollNo || '-')}</td>
+                    <td>${escapeHtml(s.fullName || '-')}</td>
+                    <td>${escapeHtml(s.fatherName || '-')}</td>
+                    <td>${escapeHtml(s.parentPhone || '-')}</td>
+                    <td>${formatDateSafe(s.dob)}</td>
+                    <td>${formatDateSafe(s.admissionDate)}</td>
+                    <td>${escapeHtml(s.classGrade || '-')}</td>
+                    <td>${escapeHtml(s.campusName || '-')}</td>
+                    <td>${escapeHtml(s.gender || '-')}</td>
                 </tr>
-            `).join('')
-        : `<tr><td colspan="${selectedFields.length + 1}" class="empty">No students match the current filter.</td></tr>`;
-
-    const headerMarkup = `
-        <tr>
-            <th style="width:30px;">#</th>
-            ${selectedFields.map((field) => `<th>${escapeHtml(field.label)}</th>`).join('')}
-        </tr>
-    `;
+            `;
+        }).join('')
+        : `<tr><td colspan="${printMode === 'polio' ? 6 : (printMode === 'outer' ? 5 : 11)}" class="empty">No students match the current filter.</td></tr>`;
 
     const html = `
         <!doctype html>
@@ -4116,7 +7109,42 @@ function printStudentsList() {
             </div>
             <table>
                 <thead>
-                    ${headerMarkup}
+                    ${printMode === 'polio'
+        ? `
+                        <tr>
+                            <th style="width:30px;">#</th>
+                            <th>Student Name</th>
+                            <th>Class</th>
+                            <th>Father Name</th>
+                            <th>Contact</th>
+                            <th>Address</th>
+                        </tr>
+                    `
+        : (printMode === 'outer'
+        ? `
+                        <tr>
+                            <th style="width:30px;">#</th>
+                            <th>Student Name</th>
+                            <th>Father Name</th>
+                            <th>Contact No</th>
+                            <th style="width:70px;">Roll No</th>
+                        </tr>
+                    `
+        : `
+                        <tr>
+                            <th style="width:30px;">#</th>
+                            <th class="nowrap">Student ID</th>
+                            <th class="nowrap">Roll No</th>
+                            <th>Student Name</th>
+                            <th>Father Name</th>
+                            <th class="nowrap">Contact No</th>
+                            <th class="nowrap">DOB</th>
+                            <th class="nowrap">Admission Date</th>
+                            <th>Class</th>
+                            <th>Campus</th>
+                            <th>Gender</th>
+                        </tr>
+                    `)}
                 </thead>
                 <tbody>
                     ${rowsMarkup}
@@ -4142,6 +7170,145 @@ function printStudentsList() {
     printWindow.document.close();
 }
 
+function printStudentAdmissionForm(student = {}) {
+    if (!student || typeof student !== 'object') {
+        alert('Unable to print admission form. Student details are missing.');
+        return;
+    }
+
+    const branding = typeof getBrandingSettings === 'function' ? getBrandingSettings() : {};
+    const rawSchoolName = String(branding.schoolName || branding.schoolTitle || '').trim();
+    const legacyPlaceholderNames = new Set(['harward school', 'harvard school']);
+    const schoolName = rawSchoolName && !legacyPlaceholderNames.has(rawSchoolName.toLowerCase())
+        ? rawSchoolName
+        : 'Myownschool';
+    const schoolLogo = new URL('images/logo.jpeg', window.location.href).href;
+    const printedAt = new Date().toLocaleString();
+    const statusLabel = getStudentStatusLabel(student);
+
+    const formatDateSafe = (value) => {
+        try {
+            return escapeHtml(formatDateForDisplay(value));
+        } catch (_error) {
+            return escapeHtml(value || '-');
+        }
+    };
+    const fieldValue = (value) => escapeHtml(String(value ?? '').trim() || '-');
+    const photoMarkup = student.profileImage
+        ? `<img src="${escapeHtml(student.profileImage)}" alt="${fieldValue(student.fullName)}">`
+        : `<div class="photo-placeholder">${escapeHtml(getStudentInitial(student.fullName || 'Student'))}</div>`;
+
+    const detailRows = [
+        ['Student ID', student.studentCode],
+        ['Roll No', student.rollNo],
+        ['Full Name', student.fullName],
+        ["Father's Name", student.fatherName],
+        ['Date of Birth', formatDateSafe(student.dob), true],
+        ['Admission Date', formatDateSafe(student.admissionDate || student.createdAt), true],
+        ['Class', student.classGrade],
+        ['Campus Name', student.campusName],
+        ['Gender', student.gender],
+        ['Contact Phone', student.parentPhone],
+        ['Address', student.address],
+        ['Guardian Name', student.guardianName],
+        ['Guardian Contact', student.guardianContact],
+        ['Email', student.email],
+        ['Form B No', student.formB],
+        ['Monthly Fee (PKR)', student.monthlyFee],
+        ['Fee Frequency', student.feeFrequency],
+        ['Username', student.username],
+        ['Status', statusLabel]
+    ];
+
+    const rowsMarkup = detailRows.map(([label, value, alreadyEscaped]) => `
+        <div class="field">
+            <div class="label">${escapeHtml(label)}</div>
+            <div class="value">${alreadyEscaped ? value : fieldValue(value)}</div>
+        </div>
+    `).join('');
+
+    const html = `
+        <!doctype html>
+        <html>
+        <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>${escapeHtml(schoolName)} - Admission Form</title>
+            <style>
+                :root { color-scheme: light; }
+                @page { size: A4; margin: 12mm; }
+                * { box-sizing: border-box; }
+                body { margin: 0; font-family: Arial, sans-serif; color: #111827; background: #fff; }
+                .sheet { width: 100%; min-height: 100vh; border: 2px solid #111827; padding: 16px; }
+                .header { display: grid; grid-template-columns: 76px 1fr 116px; gap: 14px; align-items: center; border-bottom: 2px solid #111827; padding-bottom: 12px; }
+                .logo { width: 70px; height: 70px; object-fit: contain; }
+                .school h1 { margin: 0; font-size: 24px; line-height: 1.15; text-transform: uppercase; }
+                .school p { margin: 6px 0 0; font-size: 13px; color: #475569; }
+                .photo { width: 106px; height: 122px; border: 1.5px solid #111827; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #f8fafc; }
+                .photo img { width: 100%; height: 100%; object-fit: cover; }
+                .photo-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 34px; font-weight: 800; color: #0f766e; }
+                .form-title { text-align: center; font-size: 18px; font-weight: 800; text-transform: uppercase; margin: 14px 0; letter-spacing: .04em; }
+                .meta { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: #475569; margin-bottom: 10px; }
+                .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
+                .field { min-height: 47px; border: 1px solid #94a3b8; padding: 7px 9px; page-break-inside: avoid; }
+                .label { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: #475569; font-weight: 800; margin-bottom: 4px; }
+                .value { font-size: 14px; font-weight: 700; min-height: 18px; word-break: break-word; }
+                .declaration { margin-top: 14px; border: 1px solid #94a3b8; padding: 10px; font-size: 12px; line-height: 1.6; color: #334155; }
+                .signatures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 34px; }
+                .signature { border-top: 1.5px solid #111827; padding-top: 7px; text-align: center; font-size: 12px; font-weight: 700; }
+                @media print {
+                    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    .sheet { min-height: auto; }
+                }
+            </style>
+        </head>
+        <body>
+            <main class="sheet">
+                <section class="header">
+                    <img class="logo" src="${escapeHtml(schoolLogo)}" alt="${escapeHtml(schoolName)} logo">
+                    <div class="school">
+                        <h1>${escapeHtml(schoolName)}</h1>
+                        <p>Student Admission Form</p>
+                    </div>
+                    <div class="photo">${photoMarkup}</div>
+                </section>
+                <div class="form-title">Admission Form</div>
+                <div class="meta">
+                    <span>Printed: ${escapeHtml(printedAt)}</span>
+                    <span>Student ID: ${fieldValue(student.studentCode)}</span>
+                </div>
+                <section class="grid">
+                    ${rowsMarkup}
+                </section>
+                <section class="declaration">
+                    I certify that the above information is correct to the best of my knowledge and agree to follow the school rules and policies.
+                </section>
+                <section class="signatures">
+                    <div class="signature">Parent / Guardian</div>
+                    <div class="signature">Admission Officer</div>
+                    <div class="signature">Principal</div>
+                </section>
+            </main>
+            <script>
+                window.focus();
+                window.print();
+                window.onafterprint = () => window.close();
+            </script>
+        </body>
+        </html>
+    `;
+
+    const printWindow = window.open('', 'eduCoreAdmissionFormPrint', 'width=900,height=700');
+    if (!printWindow) {
+        alert('Popup blocked. Please allow popups to print the admission form.');
+        return;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+}
+
 function populateStudentQuickFilterOptions() {
     const quickFilter = document.getElementById('studentQuickFilter');
     if (!quickFilter) return;
@@ -4150,12 +7317,12 @@ function populateStudentQuickFilterOptions() {
     const previousSelected = getStudentQuickFilterSelectedValues(quickFilter);
     const loggedInUser = getLoggedInUser();
 
-    const students = getData(STORAGE_KEY_STUDENTS);
+    const students = getArrayData(STORAGE_KEY_STUDENTS);
     const campusMap = new Map();
     const classMap = new Map();
     [...DEFAULT_CAMPUS_NAMES,
         ...studentQuickFilterBranchCampuses,
-        ...students.map((student) => String(student.campusName || 'Main Campus').trim())
+        ...students.map((student) => String(student.campusName || '').trim())
     ]
         .forEach((campusName) => {
             const normalized = String(campusName || '').trim();
@@ -4186,6 +7353,7 @@ function populateStudentQuickFilterOptions() {
     const campuses = Array.from(campusMap.values()).sort((a, b) => a.localeCompare(b));
     const classes = Array.from(classMap.values()).sort(compareStudentClassNames);
     const signature = [
+        'filters:v2',
         `campuses:${campuses.map((name) => String(name || '').toLowerCase()).join('|')}`,
         `classes:${classes.map((name) => String(name || '').toLowerCase()).join('|')}`
     ].join('||');
@@ -4194,10 +7362,14 @@ function populateStudentQuickFilterOptions() {
     if (needsRebuild) {
         quickFilter.innerHTML = `
             <option value="all">All Students</option>
+            <option value="list:polio">Polio List</option>
             <option value="gender:Male">Male Students</option>
             <option value="gender:Female">Female Students</option>
             <option value="gender:Other">Other Gender</option>
             <option value="age:below5">Below 5 Years</option>
+            <option value="fee:Paid">Fee Paid</option>
+            <option value="zero-fee">Zero Fee Students</option>
+            <option value="fee:Pending">Fee Pending</option>
         `;
 
         if (campuses.length) {
@@ -4244,8 +7416,17 @@ function populateStudentQuickFilterOptions() {
     if (trigger) trigger.disabled = false;
     if (container) container.classList.remove('disabled');
 
-    setStudentQuickFilterSelectedValues(previousSelected);
+    const globalCampus = getGlobalCampusFilterForCurrentUser();
+    if (globalCampus && globalCampus !== 'all') {
+        setStudentQuickFilterSelectedValues([`campus:${globalCampus}`]);
+    } else {
+        setStudentQuickFilterSelectedValues(previousSelected);
+    }
     buildStudentQuickFilterMultiMenu(needsRebuild);
+}
+
+function populateQuickStudentFilters() {
+    populateStudentQuickFilterOptions();
 }
 
 async function loadStudentQuickFilterBranchCampuses() {
@@ -4276,16 +7457,30 @@ function editStudent(s) {
     if (document.getElementById('studentDob')) document.getElementById('studentDob').value = s.dob || '';
     if (document.getElementById('admissionDate')) document.getElementById('admissionDate').value = normalizeDateInputValue(s.admissionDate || s.createdAt || '');
     document.getElementById('classGrade').value = s.classGrade;
-    document.getElementById('campusName').value = s.campusName || 'Main Campus';
+    document.getElementById('campusName').value = s.campusName || '';
     document.getElementById('parentPhone').value = s.parentPhone;
+    if (document.getElementById('studentAddress')) document.getElementById('studentAddress').value = s.address || '';
+    if (document.getElementById('guardianName')) document.getElementById('guardianName').value = s.guardianName || '';
+    if (document.getElementById('guardianContact')) document.getElementById('guardianContact').value = s.guardianContact || '';
     if (document.getElementById('studentEmail')) document.getElementById('studentEmail').value = s.email || '';
     document.getElementById('gender').value = s.gender || '';
     document.getElementById('rollNo').value = s.rollNo;
     document.getElementById('formB').value = s.formB || '';
+    if (document.getElementById('studentFingerprintData')) document.getElementById('studentFingerprintData').value = s.fingerprintData || '';
+    if (document.getElementById('studentFamilyName')) document.getElementById('studentFamilyName').value = s.familyName || '';
+    if (document.getElementById('studentFamilyNo')) document.getElementById('studentFamilyNo').value = s.familyNo || '';
+    if (document.getElementById('studentFamilyContact')) document.getElementById('studentFamilyContact').value = s.familyContact || '';
+    if (document.getElementById('studentFamilyAddedTime')) document.getElementById('studentFamilyAddedTime').value = (s.familyAddedAt ? new Date(s.familyAddedAt).toISOString().slice(0, 16) : '');
     if (document.getElementById('monthlyFee')) document.getElementById('monthlyFee').value = s.monthlyFee || '0';
+    if (document.getElementById('monthlyFee')) document.getElementById('monthlyFee').dataset.autoClassFee = s.monthlyFeeCustom === true || s.monthlyFeeCustom === 'true' ? '0' : '';
+    if (document.getElementById('zeroFeeReason')) document.getElementById('zeroFeeReason').value = s.zeroFeeReason || s.freeStudyReason || '';
+    if (document.getElementById('remainingAmount')) document.getElementById('remainingAmount').value = s.remainingAmount || '0';
     if (document.getElementById('feeFrequency')) document.getElementById('feeFrequency').value = s.feeFrequency || 'Monthly';
+    if (!(s.monthlyFeeCustom === true || s.monthlyFeeCustom === 'true')) applyClassFeeDefaultToStudentForm();
     if (document.getElementById('username')) document.getElementById('username').value = s.username || '';
     if (document.getElementById('studentPassword')) document.getElementById('studentPassword').value = getVisibleStudentPassword(s);
+    if (document.getElementById('studentProfileImage')) document.getElementById('studentProfileImage').value = '';
+    setStudentPhotoPreview(s.profileImage || '', s.fullName || '');
 }
 
 async function deleteStudent(id) {
@@ -4295,7 +7490,7 @@ async function deleteStudent(id) {
     }
     if (!(await showAppConfirm('Delete this student?'))) return;
 
-    let students = getData(STORAGE_KEY_STUDENTS);
+    let students = getArrayData(STORAGE_KEY_STUDENTS);
     const existingStudents = [...students];
     students = students.filter(s => s.id !== id);
     localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(students));
@@ -4366,6 +7561,120 @@ function toggleTeacherForm(editMode = false) {
     }
 }
 
+function validateTeacherRequiredFields() {
+    const requiredFields = [
+        ['tFullName', 'Full Name'],
+        ['tFatherName', "Father's Name"],
+        ['tDob', 'Date of Birth'],
+        ['tCnic', 'CNIC'],
+        ['tAddress', 'Address'],
+        ['tQualification', 'Qualification'],
+        ['tCampusName', 'Campus'],
+        ['tGender', 'Gender'],
+        ['tDesignation', 'Designation'],
+        ['tSubject', 'Subject']
+    ];
+
+    const missingField = requiredFields.find(([fieldId]) => {
+        const field = document.getElementById(fieldId);
+        return field && !String(field.value || '').trim();
+    });
+
+    if (!missingField) return '';
+
+    const field = document.getElementById(missingField[0]);
+    field?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    field?.focus();
+    return `${missingField[1]} is required.`;
+}
+
+function isStorageQuotaError(error) {
+    return error?.name === 'QuotaExceededError' ||
+        error?.code === 22 ||
+        String(error?.message || '').toLowerCase().includes('quota');
+}
+
+function saveStudentsWithLocalFallback(students, newStudent) {
+    try {
+        saveData(STORAGE_KEY_STUDENTS, students, { skipSync: true });
+        return { students, student: newStudent, strippedProfileImage: false };
+    } catch (error) {
+        if (!isStorageQuotaError(error)) throw error;
+
+        const compactStudent = {
+            ...newStudent,
+            profileImage: ''
+        };
+        const compactStudents = students.map((student) => (
+            student.id === compactStudent.id
+                ? compactStudent
+                : student
+        ));
+
+        saveData(STORAGE_KEY_STUDENTS, compactStudents, { skipSync: true });
+        return { students: compactStudents, student: compactStudent, strippedProfileImage: true };
+    }
+}
+
+function saveTeachersWithLocalFallback(teachers, newTeacher) {
+    try {
+        saveData(STORAGE_KEY_TEACHERS, teachers, { skipSync: true });
+        return { teachers, teacher: newTeacher, strippedDocuments: false, strippedProfileImage: false };
+    } catch (error) {
+        if (!isStorageQuotaError(error)) throw error;
+
+        const compactTeacher = {
+            ...newTeacher,
+            idCardFront: null,
+            idCardBack: null,
+            cvFile: null
+        };
+        const compactTeachers = teachers.map((teacher) => (
+            teacher.id === compactTeacher.id
+                ? compactTeacher
+                : {
+                    ...teacher,
+                    idCardFront: null,
+                    idCardBack: null,
+                    cvFile: null
+            }
+        ));
+
+        try {
+            saveData(STORAGE_KEY_TEACHERS, compactTeachers, { skipSync: true });
+            return { teachers: compactTeachers, teacher: compactTeacher, strippedDocuments: true, strippedProfileImage: false };
+        } catch (secondError) {
+            if (!isStorageQuotaError(secondError)) throw secondError;
+
+            const minimalTeacher = {
+                ...compactTeacher,
+                profileImage: ''
+            };
+            const minimalTeachers = compactTeachers.map((teacher) => (
+                teacher.id === minimalTeacher.id
+                    ? minimalTeacher
+                    : {
+                        ...teacher,
+                        profileImage: ''
+                    }
+            ));
+
+            saveData(STORAGE_KEY_TEACHERS, minimalTeachers, { skipSync: true });
+            return { teachers: minimalTeachers, teacher: minimalTeacher, strippedDocuments: true, strippedProfileImage: true };
+        }
+    }
+}
+
+function clearTeacherListFilters() {
+    const searchInput = document.getElementById('teacherSearchInput');
+    const campusFilter = document.getElementById('teacherCampusFilter');
+    const genderFilter = document.getElementById('teacherGenderFilter');
+
+    if (searchInput) searchInput.value = '';
+    if (campusFilter) campusFilter.value = '';
+    if (genderFilter) genderFilter.value = '';
+}
+
 async function handleTeacherFormSubmit(e) {
     e.preventDefault();
     const idField = document.getElementById('teacherId');
@@ -4408,6 +7717,7 @@ async function handleTeacherFormSubmit(e) {
     let profileImage = existingTeacher?.profileImage || '';
 
     try {
+        profileImage = await readImageInputDataUrl('tProfileImage', profileImage);
         idCardFront = await getOptionalFilePayload('tIdCardFront', idCardFront);
         idCardBack = await getOptionalFilePayload('tIdCardBack', idCardBack);
         cvFile = await getOptionalFilePayload('tCvFile', cvFile);
@@ -4415,11 +7725,6 @@ async function handleTeacherFormSubmit(e) {
         alert(error.message);
         return;
     }
-
-    const normalizedTeacherDesignation = normalizeTeacherDesignation(
-        document.getElementById('tDesignation')?.value || 'Teacher',
-        getDesignationGroup('tDesignation', 'teacher')
-    );
 
     const newTeacher = {
         id: isEdit ? idField.value : generateUniqueRecordId('TCH'),
@@ -4435,9 +7740,10 @@ async function handleTeacherFormSubmit(e) {
         qualification: document.getElementById('tQualification').value,
         campusName: document.getElementById('tCampusName').value,
         gender: document.getElementById('tGender').value,
-        designation: normalizedTeacherDesignation.designation,
-        groupKey: normalizedTeacherDesignation.groupKey,
+        designation: document.getElementById('tDesignation')?.value || 'Teacher',
+        groupKey: getDesignationGroup('tDesignation', 'teacher'),
         subject: document.getElementById('tSubject').value,
+        fingerprintData: document.getElementById('tFingerprintData') ? document.getElementById('tFingerprintData').value.trim() : (existingTeacher?.fingerprintData || ''),
         salary: salaryValInput,
         username: usernameInput,
         plainPassword: tPasswordInput,
@@ -4450,6 +7756,9 @@ async function handleTeacherFormSubmit(e) {
         bankAccountNumber: document.getElementById('tBankAccountNumber').value.trim(),
         bankBranch: document.getElementById('tBankBranch').value.trim(),
         schedule: normalizeTeacherSchedule(existingTeacher?.schedule),
+        employmentStatus: existingTeacher?.employmentStatus || 'Active',
+        stuckOffAt: existingTeacher?.stuckOffAt || '',
+        stuckOffNote: existingTeacher?.stuckOffNote || '',
         role: 'Teacher'
     };
 
@@ -4473,6 +7782,18 @@ async function handleTeacherFormSubmit(e) {
     showSuccessModal('Teacher Registered!', `Professor ${newTeacher.fullName}'s account is active. They can now access their portal.`);
 }
 
+function bindTeacherFormSubmit() {
+    const teacherForm = document.getElementById('teacherForm');
+    if (!teacherForm || teacherForm.dataset.submitBound === '1') return;
+    teacherForm.dataset.submitBound = '1';
+    teacherForm.onsubmit = (event) => {
+        handleTeacherFormSubmit(event);
+        return false;
+    };
+}
+
+bindTeacherFormSubmit();
+
 function getTeacherScheduleSummary(teacher) {
     const schedule = normalizeTeacherSchedule(teacher.schedule);
     if (!schedule.length) {
@@ -4484,7 +7805,7 @@ function getTeacherScheduleSummary(teacher) {
 }
 
 function openTeacherSchedule(teacherId) {
-    const teachers = getData(STORAGE_KEY_TEACHERS);
+    const teachers = getArrayData(STORAGE_KEY_TEACHERS);
     const teacher = teachers.find(item => item.id === teacherId);
     const modal = document.getElementById('teacherScheduleModal');
     if (!teacher || !modal) return;
@@ -4582,7 +7903,7 @@ function renderTeacherScheduleDraft() {
 
 async function saveTeacherSchedule() {
     const teacherId = document.getElementById('scheduleTeacherId').value;
-    const teachers = getData(STORAGE_KEY_TEACHERS);
+    const teachers = getArrayData(STORAGE_KEY_TEACHERS);
     const teacher = teachers.find(item => item.id === teacherId);
     if (!teacher) return;
 
@@ -4603,20 +7924,32 @@ function renderTeachers(term = '') {
     if (!tbody) return;
 
     if (typeof term !== 'string') term = '';
+    term = term.toLowerCase().trim();
 
     const campusFilter = document.getElementById('teacherCampusFilter');
     const genderFilter = document.getElementById('teacherGenderFilter');
     const selectedCampus = campusFilter ? campusFilter.value : '';
     const selectedGender = genderFilter ? genderFilter.value : '';
-    const teachers = getData(STORAGE_KEY_TEACHERS);
-    const filtered = teachers.filter(t =>
-        (
-            (t.fullName && t.fullName.toLowerCase().includes(term)) ||
-            (t.subject && t.subject.toString().toLowerCase().includes(term))
-        ) &&
-        (!selectedCampus || (t.campusName || '') === selectedCampus) &&
-        (!selectedGender || (t.gender || '') === selectedGender)
-    );
+    const teachers = getGlobalCampusFilteredRecords(getArrayData(STORAGE_KEY_TEACHERS));
+    const teacherSearchFields = [
+        'employeeCode', 'fullName', 'fatherName', 'dob', 'cnic', 'phone', 'email',
+        'address', 'qualification', 'campusName', 'gender', 'designation', 'subject',
+        'salary', 'username', 'plainPassword', 'bankName', 'bankAccountNumber'
+    ];
+    const filtered = teachers
+        .filter(t =>
+            !isTeacherStuckOff(t) &&
+            recordMatchesSearch(t, term, teacherSearchFields) &&
+            (!selectedCampus || (t.campusName || '') === selectedCampus) &&
+            (!selectedGender || (t.gender || '') === selectedGender)
+        )
+        .sort((a, b) => {
+            const codeA = String(a.employeeCode || a.id || '').toLowerCase();
+            const codeB = String(b.employeeCode || b.id || '').toLowerCase();
+            const codeCompare = codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+            if (codeCompare !== 0) return codeCompare;
+            return String(a.fullName || '').localeCompare(String(b.fullName || ''), undefined, { sensitivity: 'base' });
+        });
 
     // Update total count display
     const totalCountEl = document.getElementById('totalTeacherCount');
@@ -4626,43 +7959,43 @@ function renderTeachers(term = '') {
     const noData = document.getElementById('noTeacherDataMessage');
 
     const getBankDetailsMarkup = (record) => {
-        const hasBankData = record.bankName || record.bankAccountNumber || record.bankAccountTitle || record.bankBranch;
+        const hasBankData = record.bankName || record.bankAccountNumber;
         if (!hasBankData) return '<span style="color: var(--text-secondary);">-</span>';
 
         return `
             <div class="table-detail-stack">
                 <div><strong>Bank:</strong> ${record.bankName || '-'}</div>
                 <div><strong>Account:</strong> ${record.bankAccountNumber || '-'}</div>
-                <div><strong>Holder:</strong> ${record.bankAccountTitle || '-'}</div>
-                <div><strong>Branch:</strong> ${record.bankBranch || '-'}</div>
             </div>
         `;
     };
 
-    const getDocumentBadgesMarkup = (record, isTeacher = false) => {
-        const badges = [];
-        if (record.idCardFront) badges.push(`<button type="button" class="doc-download-btn" onclick="downloadStoredDocumentAsPdf('teacher', '${record.id}', 'idCardFront', 'teacher-id-front')">ID Front PDF</button>`);
-        if (record.idCardBack) badges.push(`<button type="button" class="doc-download-btn" onclick="downloadStoredDocumentAsPdf('teacher', '${record.id}', 'idCardBack', 'teacher-id-back')">ID Back PDF</button>`);
-        if (isTeacher && record.cvFile) badges.push(`<button type="button" class="doc-download-btn" onclick="downloadStoredDocumentAsPdf('teacher', '${record.id}', 'cvFile', 'teacher-cv')">CV PDF</button>`);
+    const getDocumentBadgesMarkup = (record) => {
+        const hasDocuments = ['idCardFront', 'idCardBack', 'cvFile']
+            .some((fieldName) => parseStoredFilePayload(record[fieldName])?.dataUrl);
 
-        if (!badges.length) return '<span class="doc-badge muted">No Files</span>';
-        return `<div class="doc-badge-wrap">${badges.join('')}</div>`;
+        if (!hasDocuments) return '<span class="doc-badge muted">No Files</span>';
+        return `
+            <button type="button" class="doc-download-btn" onclick="downloadTeacherDocumentsAsPdf('${record.id}')">
+                Download PDF
+            </button>
+        `;
     };
 
     if (filtered.length === 0) {
-        noData.style.display = 'block';
+        if (noData) {
+            noData.textContent = term ? 'No record found.' : 'No teachers found. Add one to get started!';
+            noData.style.display = 'block';
+        }
     } else {
-        noData.style.display = 'none';
+        if (noData) noData.style.display = 'none';
         filtered.forEach(t => {
             const encodedTeacher = encodeURIComponent(JSON.stringify(t));
             const normalizedTeacherDesignation = normalizeTeacherDesignation(t.designation, t.groupKey);
-            const teacherAvatar = t.profileImage
-                ? `<img src="${t.profileImage}" alt="${t.fullName}" style="width:30px;height:30px;border-radius:50%;object-fit:cover;border:1px solid rgba(15,23,42,0.08);">`
-                : `<div style="width:30px;height:30px;background:#f0bdd1;color:#be185d;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:bold">${t.fullName.charAt(0).toUpperCase()}</div>`;
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td><div class="teacher-name-cell">
-                    ${teacherAvatar}
+                    <div class="teacher-avatar">${buildTeacherAvatarMarkup(t)}</div>
                     <div class="teacher-name-text">
                         <div style="font-weight:500">${t.fullName}</div>
                         <div style="font-size:0.75rem;color:var(--text-secondary)">${t.employeeCode || ''} ${normalizedTeacherDesignation.designation ? ` - ${normalizedTeacherDesignation.designation}` : ''}</div>
@@ -4677,7 +8010,7 @@ function renderTeachers(term = '') {
                     ${getTeacherScheduleSummary(t)}
                 </td>
                 <td>${getBankDetailsMarkup(t)}</td>
-                <td>${getDocumentBadgesMarkup(t, true)}</td>
+                <td>${getDocumentBadgesMarkup(t)}</td>
                 <td class="teacher-login-details">
                     <div>
                         <div><strong>User:</strong> ${t.username || '-'}</div>
@@ -4687,14 +8020,17 @@ function renderTeachers(term = '') {
                 <td style="font-weight:600;">PKR ${parseInt(t.salary || 0).toLocaleString()}</td>
                 <td>${t.phone || '-'}</td>
                 <td>
-                    <button class="action-btn btn-view" onclick="viewTeacherAttendanceFromEncoded('${encodedTeacher}')" title="View Attendance">
-                        <i data-lucide="eye" width="14"></i>
-                    </button>
-                    <button class="action-btn btn-edit" onclick="openTeacherSchedule('${t.id}')" title="Assign Lectures">
-                        <i data-lucide="calendar-clock" width="14"></i> Schedule
-                    </button>
-                    <button class="action-btn btn-edit" onclick="editTeacherFromEncoded('${encodedTeacher}')"><i data-lucide="edit-2" width="14"></i> Edit</button>
-                    <button class="action-btn btn-delete" onclick="deleteTeacher('${t.id}')"><i data-lucide="trash-2" width="14"></i></button>
+                    <div class="teacher-action-wrap">
+                        <select class="table-action-select" onchange="handleTeacherActionSelect(this, '${encodedTeacher}', '${t.id}')">
+                            <option value="">Actions</option>
+                            <option value="attendance">Attendance</option>
+                            <option value="schedule">Schedule</option>
+                            ${t.email ? '<option value="email">Send Email</option>' : ''}
+                            <option value="edit">Edit</option>
+                            <option value="stuckoff">Stuck-Off</option>
+                            <option value="delete">Delete</option>
+                        </select>
+                    </div>
                 </td>
             `;
             tbody.appendChild(tr);
@@ -4720,6 +8056,7 @@ function editTeacher(t) {
     document.getElementById('tGender').value = t.gender || '';
     setDesignationSelectValue('tDesignation', normalizedTeacherDesignation.designation, normalizedTeacherDesignation.groupKey);
     document.getElementById('tSubject').value = t.subject;
+    if (document.getElementById('tFingerprintData')) document.getElementById('tFingerprintData').value = t.fingerprintData || '';
     document.getElementById('tSalary').value = t.salary || '0';
     if (document.getElementById('tBankName')) document.getElementById('tBankName').value = t.bankName || '';
     if (document.getElementById('tBankAccountTitle')) document.getElementById('tBankAccountTitle').value = t.bankAccountTitle || '';
@@ -4727,6 +8064,8 @@ function editTeacher(t) {
     if (document.getElementById('tBankBranch')) document.getElementById('tBankBranch').value = t.bankBranch || '';
     if (document.getElementById('tUsername')) document.getElementById('tUsername').value = t.username || '';
     if (document.getElementById('tPassword')) document.getElementById('tPassword').value = t.plainPassword || t.password || '';
+    if (document.getElementById('tProfileImage')) document.getElementById('tProfileImage').value = '';
+    setTeacherPhotoPreview(t.profileImage || '', t.fullName || '');
     if (document.getElementById('tIdCardFront')) document.getElementById('tIdCardFront').value = '';
     if (document.getElementById('tIdCardBack')) document.getElementById('tIdCardBack').value = '';
     if (document.getElementById('tCvFile')) document.getElementById('tCvFile').value = '';
@@ -4735,7 +8074,7 @@ function editTeacher(t) {
 async function deleteTeacher(id) {
     if (!(await showAppConfirm('Delete this teacher?'))) return;
 
-    const existingTeachers = getData(STORAGE_KEY_TEACHERS);
+    const existingTeachers = getArrayData(STORAGE_KEY_TEACHERS);
     const updatedTeachers = existingTeachers.filter(t => t.id !== id);
     saveData(STORAGE_KEY_TEACHERS, updatedTeachers, { skipSync: true });
     renderTeachers();
@@ -4907,7 +8246,7 @@ async function toggleTeacherAttendanceDay(teacherId, monthKey, dayIndex) {
     }
 
     // Refresh View
-    const teachers = getData(STORAGE_KEY_TEACHERS);
+    const teachers = getArrayData(STORAGE_KEY_TEACHERS);
     const teacher = teachers.find(t => t.id === teacherId);
     if (teacher) viewTeacherAttendance(teacher, monthKey);
 }
@@ -4930,6 +8269,7 @@ function toggleStaffForm(editMode = false) {
         container.style.display = 'none';
         form.reset();
         document.getElementById('staffId').value = '';
+        setStaffPhotoPreview('');
     } else {
         container.style.display = 'block';
         if (!editMode) {
@@ -4937,6 +8277,7 @@ function toggleStaffForm(editMode = false) {
             document.getElementById('staffId').value = '';
             const staffCodeField = document.getElementById('staffCode');
             if (staffCodeField) staffCodeField.value = generateEntityCode(STORAGE_KEY_STAFF, 'STF');
+            setStaffPhotoPreview('');
             title.innerText = 'Add New Staff Member';
         } else {
             title.innerText = 'Edit Staff Member';
@@ -4954,8 +8295,12 @@ async function handleStaffFormSubmit(e) {
 
     let idCardFront = existingStaff?.idCardFront || null;
     let idCardBack = existingStaff?.idCardBack || null;
+    let profileImage = existingStaff?.profileImage || '';
 
     try {
+        if (document.getElementById('sProfileImage')?.files?.[0]) {
+            profileImage = await readFileAsDataUrl(document.getElementById('sProfileImage').files[0]);
+        }
         idCardFront = await getOptionalFilePayload('sIdCardFront', idCardFront);
         idCardBack = await getOptionalFilePayload('sIdCardBack', idCardBack);
     } catch (error) {
@@ -4967,6 +8312,7 @@ async function handleStaffFormSubmit(e) {
         id: isEdit ? idField.value : generateUniqueRecordId('STF'),
         employeeCode: document.getElementById('staffCode').value || generateEntityCode(STORAGE_KEY_STAFF, 'STF'),
         fullName: document.getElementById('sFullName').value,
+        profileImage,
         fatherName: document.getElementById('sFatherName').value,
         dob: document.getElementById('sDob').value,
         designation: document.getElementById('sDesignation').value,
@@ -4995,27 +8341,38 @@ async function handleStaffFormSubmit(e) {
     } else {
         staff.push(newStaff);
     }
-    saveData(STORAGE_KEY_STAFF, staff, { skipSync: true });
-    const staffSyncResult = await syncToSQLDetailed('staff', [newStaff]);
-    if (!staffSyncResult.success) {
-        alert(staffSyncResult.error || 'The staff record was saved to local storage, but database sync failed. Check the server and MySQL connection.');
-    }
+    saveData(STORAGE_KEY_STAFF, staff);
     pushNotification('Staff Updated', `Staff record for "${newStaff.fullName}" was added/updated.`, 'user');
     toggleStaffForm();
     renderStaff();
 }
+
+function bindStaffFormSubmit() {
+    const staffForm = document.getElementById('staffForm');
+    if (!staffForm || staffForm.dataset.submitBound === '1') return;
+    staffForm.dataset.submitBound = '1';
+    staffForm.onsubmit = (event) => {
+        handleStaffFormSubmit(event);
+        return false;
+    };
+}
+
+bindStaffFormSubmit();
 
 function renderStaff(term = '') {
     const tbody = document.getElementById('staffTableBody');
     if (!tbody) return;
 
     if (typeof term !== 'string') term = '';
+    term = term.toLowerCase().trim();
 
-    const staff = getData(STORAGE_KEY_STAFF);
-    const filtered = staff.filter(s =>
-        (s.fullName && s.fullName.toLowerCase().includes(term)) ||
-        (s.designation && s.designation.toString().toLowerCase().includes(term))
-    );
+    const staff = getGlobalCampusFilteredRecords(getData(STORAGE_KEY_STAFF));
+    const staffSearchFields = [
+        'employeeCode', 'fullName', 'fatherName', 'dob', 'designation', 'campusName',
+        'cnic', 'phone', 'email', 'address', 'gender', 'salary', 'username',
+        'plainPassword', 'bankName', 'bankAccountNumber', 'bankAccountTitle', 'bankBranch'
+    ];
+    const filtered = staff.filter(s => recordMatchesSearch(s, term, staffSearchFields));
 
     // Update total count display
     const totalCountEl = document.getElementById('totalStaffCount');
@@ -5054,14 +8411,21 @@ function renderStaff(term = '') {
     };
 
     if (filtered.length === 0) {
-        noData.style.display = 'block';
+        if (noData) {
+            noData.textContent = term ? 'No record found.' : 'No staff members found. Add one to get started!';
+            noData.style.display = 'block';
+        }
     } else {
-        noData.style.display = 'none';
+        if (noData) noData.style.display = 'none';
         filtered.forEach(s => {
+            const encodedStaff = encodeURIComponent(JSON.stringify(s));
             const tr = document.createElement('tr');
+            const staffAvatar = s.profileImage
+                ? `<img src="${s.profileImage}" alt="${s.fullName || 'Staff'}">`
+                : getStaffInitial(s.fullName);
             tr.innerHTML = `
-                <td><div style="display:flex;align-items:center;gap:0.5rem">
-                    <div style="width:30px;height:30px;background:#dcfce7;color:#166534;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:bold">${s.fullName.charAt(0).toUpperCase()}</div>
+                <td><div class="staff-name-cell">
+                    <div class="staff-avatar">${staffAvatar}</div>
                     <div>
                         <div style="font-weight:500">${s.fullName}</div>
                         <div style="font-size:0.75rem;color:var(--text-secondary)">${s.employeeCode || ''} ${s.designation ? `• ${s.designation}` : ''}</div>
@@ -5082,6 +8446,7 @@ function renderStaff(term = '') {
                 </td>
                 <td>PKR ${s.salary}</td>
                 <td>
+                    ${s.email ? `<button class="action-btn btn-view" onclick="sendStaffCustomEmailFromEncoded('${encodedStaff}')"><i data-lucide="mail" width="14"></i> Email</button>` : ''}
                     <button class="action-btn btn-edit" onclick='editStaff(${JSON.stringify(s)})'><i data-lucide="edit-2" width="14"></i> Edit</button>
                     <button class="action-btn btn-delete" onclick="deleteStaff('${s.id}')"><i data-lucide="trash-2" width="14"></i></button>
                 </td>
@@ -5117,6 +8482,8 @@ function editStaff(s) {
     if (document.getElementById('sBankAccountTitle')) document.getElementById('sBankAccountTitle').value = s.bankAccountTitle || '';
     if (document.getElementById('sBankAccountNumber')) document.getElementById('sBankAccountNumber').value = s.bankAccountNumber || '';
     if (document.getElementById('sBankBranch')) document.getElementById('sBankBranch').value = s.bankBranch || '';
+    if (document.getElementById('sProfileImage')) document.getElementById('sProfileImage').value = '';
+    setStaffPhotoPreview(s.profileImage || '', s.fullName || '');
     if (document.getElementById('sIdCardFront')) document.getElementById('sIdCardFront').value = '';
     if (document.getElementById('sIdCardBack')) document.getElementById('sIdCardBack').value = '';
 }
@@ -5224,17 +8591,21 @@ function renderClasses(term = '') {
     if (!tbody) return;
 
     if (typeof term !== 'string') term = '';
+    term = term.toLowerCase().trim();
 
     const classes = getData(STORAGE_KEY_CLASSES);
-    const filtered = classes.filter(c => c.name && c.name.toLowerCase().includes(term));
+    const filtered = classes.filter(c => recordMatchesSearch(c, term, ['name', 'section', 'room', 'capacity']));
 
     tbody.innerHTML = '';
     const noData = document.getElementById('noClassDataMessage');
 
     if (filtered.length === 0) {
-        noData.style.display = 'block';
+        if (noData) {
+            noData.textContent = term ? 'No record found.' : 'No classes found. Add one to get started!';
+            noData.style.display = 'block';
+        }
     } else {
-        noData.style.display = 'none';
+        if (noData) noData.style.display = 'none';
         filtered.forEach(c => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
@@ -5322,27 +8693,406 @@ async function loadSettings() {
     if (settings) {
         const data = JSON.parse(settings);
         if (document.getElementById('sSchoolName')) document.getElementById('sSchoolName').value = data.schoolName || '';
+        if (document.getElementById('sSchoolTitle')) document.getElementById('sSchoolTitle').value = data.schoolTitle || '';
         if (document.getElementById('sSession')) document.getElementById('sSession').value = data.session || '';
         if (document.getElementById('sPhone')) document.getElementById('sPhone').value = data.phone || '';
+        updateBrandingLogoPreview(data.logoDataUrl || '');
+    } else {
+        updateBrandingLogoPreview('');
     }
+
+    await loadAdminCredentialSettings();
+}
+
+function updateBrandingLogoPreview(dataUrl = '') {
+    const preview = document.getElementById('brandingLogoPreview');
+    if (!preview) return;
+    if (dataUrl) {
+        preview.innerHTML = `<img src="${escapeHtml(dataUrl)}" alt="School logo preview">`;
+    } else {
+        preview.innerHTML = '96 x 96<br>Logo';
+    }
+}
+
+async function handleBrandingLogoSelection(event) {
+    const file = event.target?.files?.[0];
+    if (!file) return;
+    try {
+        const dataUrl = await readFileAsDataUrl(file);
+        updateBrandingLogoPreview(dataUrl);
+        saveBrandingSettings({ logoDataUrl: dataUrl });
+    } catch (error) {
+        await showAppAlert(error.message || 'Logo could not be loaded.', 'Logo Upload Failed');
+    }
+}
+
+function clearBrandingLogo() {
+    saveBrandingSettings({ logoDataUrl: '' });
+    const input = document.getElementById('sSchoolLogo');
+    if (input) input.value = '';
+    updateBrandingLogoPreview('');
 }
 
 async function handleSettingsSubmit(e) {
     e.preventDefault();
 
-    // Save settings values
-    const settings = {};
-    if (document.getElementById('sSchoolName')) settings.schoolName = document.getElementById('sSchoolName').value;
-    if (document.getElementById('sSession')) settings.session = document.getElementById('sSession').value;
-    if (document.getElementById('sPhone')) settings.phone = document.getElementById('sPhone').value;
+    try {
+        // Save settings values
+        const settings = getBrandingSettings();
+        if (document.getElementById('sSchoolName')) settings.schoolName = document.getElementById('sSchoolName').value;
+        if (document.getElementById('sSchoolTitle')) settings.schoolTitle = document.getElementById('sSchoolTitle').value;
+        if (document.getElementById('sSession')) settings.session = document.getElementById('sSession').value;
+        if (document.getElementById('sPhone')) settings.phone = document.getElementById('sPhone').value;
 
-    localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
+        saveBrandingSettings(settings);
+        await saveAdminCredentialSettings();
 
-    alert('Settings saved successfully!');
-    pushNotification('Settings Updated', 'Settings have been saved.', 'info');
+        alert('Settings saved successfully!');
+        pushNotification('Settings Updated', 'Settings have been saved.', 'info');
 
-    // Refresh display
-    renderLoginHistory();
+        // Refresh display
+        renderLoginHistory();
+    } catch (error) {
+        alert(error.message || 'Settings could not be saved.');
+    }
+}
+
+async function loadAdminCredentialSettings() {
+    const usernameInput = document.getElementById('adminUsernameSetting');
+    const hint = document.getElementById('adminOtpHint');
+    if (!usernameInput) return;
+    resetAdminPasswordChangeFlow(false);
+
+    const token = sessionStorage.getItem('eduCore_token') || '';
+    if (!token) return;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin-credentials`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        const result = await parseJsonResponse(response, 'Admin credentials could not be loaded.');
+        if (!response.ok || result?.success === false) throw new Error(result?.message || 'Admin credentials could not be loaded.');
+        usernameInput.value = result?.credentials?.username || 'admin';
+        usernameInput.dataset.originalValue = usernameInput.value;
+        if (hint && result?.recoveryEmail) {
+            setAdminPasswordStatus(`Click Change Password to send OTP to ${result.recoveryEmail}.`);
+        }
+    } catch (error) {
+        setAdminPasswordStatus(error.message || 'Admin credentials could not be loaded.', 'error');
+    }
+
+    const sendBtn = document.getElementById('sendAdminOtpBtn');
+    if (sendBtn && !sendBtn.dataset.bound) {
+        sendBtn.dataset.bound = 'true';
+        sendBtn.addEventListener('click', sendAdminCredentialOtp);
+    }
+
+    const verifyBtn = document.getElementById('verifyAdminOtpBtn');
+    if (verifyBtn && !verifyBtn.dataset.bound) {
+        verifyBtn.dataset.bound = 'true';
+        verifyBtn.addEventListener('click', verifyAdminCredentialOtp);
+    }
+
+    const savePasswordBtn = document.getElementById('saveAdminPasswordBtn');
+    if (savePasswordBtn && !savePasswordBtn.dataset.bound) {
+        savePasswordBtn.dataset.bound = 'true';
+        savePasswordBtn.addEventListener('click', saveVerifiedAdminPassword);
+    }
+}
+
+function setAdminPasswordStatus(message, type = '') {
+    const hint = document.getElementById('adminOtpHint');
+    if (!hint) return;
+    hint.textContent = message || '';
+    hint.classList.remove('success', 'error');
+    if (type) hint.classList.add(type);
+}
+
+function resetAdminPasswordChangeFlow(hidePanel = true) {
+    const panel = document.getElementById('adminPasswordChangePanel');
+    const otpStep = document.getElementById('adminOtpStep');
+    const passwordStep = document.getElementById('adminPasswordStep');
+    const otpInput = document.getElementById('adminOtpSetting');
+    const passwordInput = document.getElementById('adminNewPasswordSetting');
+    const confirmPasswordInput = document.getElementById('adminConfirmPasswordSetting');
+
+    if (panel) panel.hidden = hidePanel;
+    if (otpStep) otpStep.hidden = false;
+    if (passwordStep) passwordStep.hidden = true;
+    if (otpInput) {
+        otpInput.value = '';
+        otpInput.dataset.verified = '';
+    }
+    if (passwordInput) passwordInput.value = '';
+    if (confirmPasswordInput) confirmPasswordInput.value = '';
+}
+
+function normalizeAdminOtpError(error) {
+    const message = String(error?.message || '').trim();
+    if (/route not found|Cannot POST|404/i.test(message)) {
+        return 'OTP verification route is not active. Please restart/deploy the server once.';
+    }
+    if (/invalid|expired|wrong/i.test(message)) {
+        return 'Wrong OTP. Please enter the correct email OTP.';
+    }
+    return message || 'OTP could not be verified.';
+}
+
+async function sendAdminCredentialOtp() {
+    const sendBtn = document.getElementById('sendAdminOtpBtn');
+    const panel = document.getElementById('adminPasswordChangePanel');
+    const otpStep = document.getElementById('adminOtpStep');
+    const passwordStep = document.getElementById('adminPasswordStep');
+    const otpInput = document.getElementById('adminOtpSetting');
+    const passwordInput = document.getElementById('adminNewPasswordSetting');
+    const confirmPasswordInput = document.getElementById('adminConfirmPasswordSetting');
+    const token = sessionStorage.getItem('eduCore_token') || '';
+    const originalText = sendBtn?.innerHTML || '';
+
+    try {
+        if (sendBtn) {
+            sendBtn.disabled = true;
+            sendBtn.innerHTML = '<i data-lucide="loader"></i> Sending OTP...';
+            if (window.lucide) window.lucide.createIcons();
+        }
+        const response = await fetch(`${API_BASE_URL}/admin-credentials/request-otp`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({})
+        });
+        const result = await parseJsonResponse(response, 'OTP could not be sent.');
+        if (!response.ok || result?.success === false) throw new Error(result?.message || 'OTP could not be sent.');
+        if (panel) panel.hidden = false;
+        if (otpStep) otpStep.hidden = false;
+        if (passwordStep) passwordStep.hidden = true;
+        if (otpInput) {
+            otpInput.value = '';
+            otpInput.dataset.verified = '';
+            otpInput.focus();
+        }
+        if (passwordInput) passwordInput.value = '';
+        if (confirmPasswordInput) confirmPasswordInput.value = '';
+        setAdminPasswordStatus(result.message || 'OTP sent successfully.', 'success');
+    } catch (error) {
+        resetAdminPasswordChangeFlow(true);
+        setAdminPasswordStatus(error.message || 'OTP could not be sent.', 'error');
+    } finally {
+        if (sendBtn) {
+            sendBtn.disabled = false;
+            sendBtn.innerHTML = originalText;
+            if (window.lucide) window.lucide.createIcons();
+        }
+    }
+}
+
+async function verifyAdminCredentialOtp() {
+    const verifyBtn = document.getElementById('verifyAdminOtpBtn');
+    const otpInput = document.getElementById('adminOtpSetting');
+    const otpStep = document.getElementById('adminOtpStep');
+    const passwordStep = document.getElementById('adminPasswordStep');
+    const passwordInput = document.getElementById('adminNewPasswordSetting');
+    const token = sessionStorage.getItem('eduCore_token') || '';
+    const otp = otpInput?.value?.trim() || '';
+    const originalText = verifyBtn?.textContent || '';
+
+    try {
+        if (!/^\d{6}$/.test(otp)) throw new Error('6 digit OTP enter karein.');
+        if (verifyBtn) {
+            verifyBtn.disabled = true;
+            verifyBtn.textContent = 'Verifying...';
+        }
+        const response = await fetch(`${API_BASE_URL}/admin-credentials/verify-otp`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({ otp })
+        });
+        const result = await parseJsonResponse(response, 'OTP could not be verified.');
+        if (!response.ok || result?.success === false) throw new Error(result?.message || 'OTP could not be verified.');
+        if (otpInput) otpInput.dataset.verified = otp;
+        if (otpStep) otpStep.hidden = true;
+        if (passwordStep) passwordStep.hidden = false;
+        if (passwordInput) passwordInput.focus();
+        setAdminPasswordStatus('OTP Verified. Enter your new password.', 'success');
+    } catch (error) {
+        if (otpInput) otpInput.dataset.verified = '';
+        if (otpStep) otpStep.hidden = false;
+        if (passwordStep) passwordStep.hidden = true;
+        setAdminPasswordStatus(normalizeAdminOtpError(error), 'error');
+    } finally {
+        if (verifyBtn) {
+            verifyBtn.disabled = false;
+            verifyBtn.textContent = originalText;
+        }
+    }
+}
+
+async function saveAdminCredentialSettings() {
+    const usernameInput = document.getElementById('adminUsernameSetting');
+    if (!usernameInput) return;
+
+    const username = usernameInput.value.trim();
+    const originalUsername = usernameInput.dataset.originalValue || '';
+
+    if (username === originalUsername) return;
+    if (!username) throw new Error('Admin username required hai.');
+
+    const token = sessionStorage.getItem('eduCore_token') || '';
+    const response = await fetch(`${API_BASE_URL}/admin-credentials`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ username })
+    });
+    const result = await parseJsonResponse(response, 'Admin username could not be updated.');
+    if (!response.ok || result?.success === false) throw new Error(result?.message || 'Admin username could not be updated.');
+
+    usernameInput.dataset.originalValue = result?.credentials?.username || username;
+}
+
+async function saveVerifiedAdminPassword() {
+    const usernameInput = document.getElementById('adminUsernameSetting');
+    const passwordInput = document.getElementById('adminNewPasswordSetting');
+    const confirmPasswordInput = document.getElementById('adminConfirmPasswordSetting');
+    const otpInput = document.getElementById('adminOtpSetting');
+    const saveBtn = document.getElementById('saveAdminPasswordBtn');
+    const panel = document.getElementById('adminPasswordChangePanel');
+    const otpStep = document.getElementById('adminOtpStep');
+    const passwordStep = document.getElementById('adminPasswordStep');
+    if (!usernameInput || !passwordInput || !confirmPasswordInput || !otpInput) return;
+
+    const username = usernameInput.value.trim();
+    const password = passwordInput.value.trim();
+    const confirmPassword = confirmPasswordInput.value.trim();
+    const otp = otpInput.dataset.verified || '';
+    const originalText = saveBtn?.textContent || '';
+
+    try {
+        if (!otp) throw new Error('Pehle email OTP verify karein.');
+        if (!password) throw new Error('New password required hai.');
+        if (password.length < 6) throw new Error('New password must be at least 6 characters.');
+        if (password !== confirmPassword) throw new Error('New password and confirm password do not match.');
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving...';
+        }
+
+        const token = sessionStorage.getItem('eduCore_token') || '';
+        const response = await fetch(`${API_BASE_URL}/admin-credentials`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({ username, password, confirmPassword, otp })
+        });
+        const result = await parseJsonResponse(response, 'Admin password could not be updated.');
+        if (!response.ok || result?.success === false) throw new Error(result?.message || 'Admin password could not be updated.');
+
+        usernameInput.dataset.originalValue = result?.credentials?.username || username;
+        passwordInput.value = '';
+        confirmPasswordInput.value = '';
+        otpInput.value = '';
+        otpInput.dataset.verified = '';
+        if (panel) panel.hidden = true;
+        if (otpStep) otpStep.hidden = false;
+        if (passwordStep) passwordStep.hidden = true;
+        setAdminPasswordStatus('Admin password updated successfully. Login will use the new password now.', 'success');
+    } catch (error) {
+        setAdminPasswordStatus(error.message || 'Admin password could not be updated.', 'error');
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = originalText;
+        }
+    }
+}
+
+function bindAdminForgotPassword() {
+    const openBtn = document.getElementById('forgotAdminPasswordBtn');
+    const modal = document.getElementById('forgotAdminModal');
+    const closeBtn = document.getElementById('closeForgotAdminModal');
+    const sendBtn = document.getElementById('sendForgotAdminOtpBtn');
+    const resetBtn = document.getElementById('resetForgotAdminPasswordBtn');
+    const status = document.getElementById('forgotAdminStatus');
+    if (!openBtn || !modal || openBtn.dataset.bound) return;
+    openBtn.dataset.bound = 'true';
+
+    const setStatus = (message) => {
+        if (status) status.textContent = message || '';
+    };
+    const close = () => {
+        modal.classList.remove('active');
+        setStatus('');
+    };
+
+    openBtn.addEventListener('click', () => {
+        modal.classList.add('active');
+        const usernameInput = document.getElementById('forgotAdminUsername');
+        if (usernameInput && !usernameInput.value) usernameInput.value = document.getElementById('email')?.value?.trim() || 'admin';
+        if (window.lucide) window.lucide.createIcons();
+    });
+    closeBtn?.addEventListener('click', close);
+    modal.addEventListener('click', (event) => {
+        if (event.target === modal) close();
+    });
+
+    sendBtn?.addEventListener('click', async () => {
+        const username = document.getElementById('forgotAdminUsername')?.value?.trim() || '';
+        const original = sendBtn.textContent;
+        try {
+            sendBtn.disabled = true;
+            sendBtn.textContent = 'Sending...';
+            const response = await fetch(`${API_BASE_URL}/admin-password/forgot/request-otp`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username })
+            });
+            const result = await parseJsonResponse(response, 'OTP could not be sent.');
+            if (!response.ok || result?.success === false) throw new Error(result?.message || 'OTP could not be sent.');
+            setStatus(result.message || 'OTP sent successfully.');
+        } catch (error) {
+            setStatus(error.message || 'OTP could not be sent.');
+        } finally {
+            sendBtn.disabled = false;
+            sendBtn.textContent = original;
+        }
+    });
+
+    resetBtn?.addEventListener('click', async () => {
+        const username = document.getElementById('forgotAdminUsername')?.value?.trim() || '';
+        const password = document.getElementById('forgotAdminNewPassword')?.value?.trim() || '';
+        const otp = document.getElementById('forgotAdminOtp')?.value?.trim() || '';
+        const original = resetBtn.textContent;
+        try {
+            if (!password || !otp) throw new Error('New password aur OTP required hain.');
+            resetBtn.disabled = true;
+            resetBtn.textContent = 'Resetting...';
+            const response = await fetch(`${API_BASE_URL}/admin-password/forgot/reset`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password, otp })
+            });
+            const result = await parseJsonResponse(response, 'Password could not be reset.');
+            if (!response.ok || result?.success === false) throw new Error(result?.message || 'Password could not be reset.');
+            setStatus(result.message || 'Password updated successfully.');
+            document.getElementById('password').value = '';
+            document.getElementById('forgotAdminNewPassword').value = '';
+            document.getElementById('forgotAdminOtp').value = '';
+        } catch (error) {
+            setStatus(error.message || 'Password could not be reset.');
+        } finally {
+            resetBtn.disabled = false;
+            resetBtn.textContent = original;
+        }
+    });
 }
 
 // =======================================================
@@ -5446,6 +9196,29 @@ function getTeacherSalaries() {
 
 function saveTeacherSalaries(salaries) {
     localStorage.setItem(STORAGE_KEY_TEACHER_SALARIES, JSON.stringify(salaries));
+    fetch(`${API_BASE_URL}/teacher-salaries`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ salaries })
+    }).catch((error) => console.warn('Teacher salary payments could not be saved to DB:', error.message));
+}
+
+async function loadTeacherSalariesFromSQL() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/teacher-salaries`);
+        const result = await parseJsonResponse(response, 'Teacher salary payments could not be loaded.');
+        if (!response.ok || result?.success === false) {
+            throw new Error(result?.message || 'Teacher salary payments could not be loaded.');
+        }
+        const salaries = result?.salaries && typeof result.salaries === 'object' && !Array.isArray(result.salaries)
+            ? result.salaries
+            : {};
+        localStorage.setItem(STORAGE_KEY_TEACHER_SALARIES, JSON.stringify(salaries));
+        return salaries;
+    } catch (error) {
+        console.warn('Teacher salary payments DB load skipped:', error.message);
+        return getTeacherSalaries();
+    }
 }
 
 function getSalaryPaymentRecord(salaries, entityType, entityId, monthKey) {
@@ -5506,7 +9279,7 @@ function getSalaryBreakdown(entry, monthKey) {
 }
 
 function buildSalaryRoster() {
-    const teachers = getData(STORAGE_KEY_TEACHERS).map((teacher) => ({
+    const teachers = getArrayData(STORAGE_KEY_TEACHERS).map((teacher) => ({
         id: teacher.id,
         entityType: 'teacher',
         roleLabel: 'Teacher',
@@ -5578,6 +9351,7 @@ function toggleSalaryPayment(entityId, monthKey, entityType = 'teacher') {
     }
 
     saveTeacherSalaries(salaries);
+    window.dispatchEvent(new CustomEvent('salary_payment_update', { detail: { entityId, monthKey, entityType } }));
     if (typeof renderTeacherSalaries === 'function') {
         renderTeacherSalaries();
     }

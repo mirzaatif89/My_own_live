@@ -113,12 +113,40 @@
     const pageRegistry = {
         'dashboard.html': { moduleKey: 'dashboard', defaultHome: 'dashboard.html', label: 'Dashboard', icon: 'layout-dashboard' },
         'students.html': { moduleKey: 'students', defaultHome: 'students.html', label: 'Students', icon: 'users' },
+        'families.html': { moduleKey: 'families', defaultHome: 'dashboard.html', label: 'Families', icon: 'home' },
+        'student_scheduling.html': { moduleKey: 'student_scheduling', defaultHome: 'dashboard.html', label: 'Student Scheduling', icon: 'calendar-clock' },
+        'assignments.html': { moduleKey: 'student_scheduling', defaultHome: 'dashboard.html', label: 'Assignments', icon: 'upload' },
+        'assignment_uploading.html': { moduleKey: 'student_scheduling', defaultHome: 'dashboard.html', label: 'Upload Assignments', icon: 'file-up' },
+        'student_timetable.html': { moduleKey: 'student_scheduling', defaultHome: 'dashboard.html', label: 'Class Timetable', icon: 'calendar-clock' },
+        'student_diary.html': { moduleKey: 'student_scheduling', defaultHome: 'dashboard.html', label: 'Class Diary', icon: 'book-open' },
+        'student_leave_requests.html': { moduleKey: 'student_scheduling', defaultHome: 'dashboard.html', label: 'Leave Requests', icon: 'calendar-check' },
+        'student_courses.html': { moduleKey: 'student_scheduling', defaultHome: 'dashboard.html', label: 'Class Course', icon: 'library' },
+        'quiz_uploading.html': { moduleKey: 'student_scheduling', defaultHome: 'dashboard.html', label: 'Quiz Uploading', icon: 'circle-help' },
+        'lecture_uploading.html': { moduleKey: 'student_scheduling', defaultHome: 'dashboard.html', label: 'Lecture Uploading', icon: 'presentation' },
+        'banners.html': { moduleKey: 'banners', defaultHome: 'dashboard.html', label: 'Banners', icon: 'image' },
         'teachers.html': { moduleKey: 'teachers', defaultHome: 'dashboard.html', label: 'Teachers', icon: 'book-open' },
+        'stuck_off.html': { moduleKey: 'students', defaultHome: 'dashboard.html', label: 'Stuck Off', icon: 'user-x' },
+        'teacher_scheduling.html': { moduleKey: 'teacher_scheduling', defaultHome: 'dashboard.html', label: 'Teacher Scheduling', icon: 'calendar-days' },
+        'teacher_timetable.html': { moduleKey: 'teacher_scheduling', defaultHome: 'dashboard.html', label: 'Teacher Timetable', icon: 'calendar-days' },
+        'teacher_assigned_classes.html': { moduleKey: 'teacher_scheduling', defaultHome: 'dashboard.html', label: 'Assigned Classes', icon: 'school' },
+        'teacher_leave_requests.html': { moduleKey: 'teacher_scheduling', defaultHome: 'dashboard.html', label: 'Teacher Leave Requests', icon: 'calendar-check' },
         'staff.html': { moduleKey: 'staff', defaultHome: 'dashboard.html', label: 'Staff', icon: 'briefcase' },
         'classes.html': { moduleKey: 'classes', defaultHome: 'dashboard.html', label: 'Classes', icon: 'school' },
+        'set_fee.html': { moduleKey: 'fees', defaultHome: 'dashboard.html', label: 'Set Fees', icon: 'badge-dollar-sign' },
         'fees.html': { moduleKey: 'fees', defaultHome: 'dashboard.html', label: 'Fees', icon: 'credit-card' },
-        'set_fees.html': { moduleKey: 'fees', defaultHome: 'dashboard.html', label: 'Set Fees', icon: 'settings-2' },
         'fee_challan.html': { moduleKey: 'fee_challan', defaultHome: 'dashboard.html', label: 'Fee Challan', icon: 'file-text' },
+        'remaining_charges.html': { moduleKey: 'fees', defaultHome: 'dashboard.html', label: 'Remaining Charges', icon: 'circle-dollar-sign' },
+        'payment_history.html': { moduleKey: 'fees', defaultHome: 'dashboard.html', label: 'Payment Statement', icon: 'receipt-text' },
+        'fee_logos.html': { moduleKey: 'fees', defaultHome: 'dashboard.html', label: 'Logos', icon: 'image' },
+        'bills.html': { moduleKey: 'bills', defaultHome: 'dashboard.html', label: 'Bills', icon: 'receipt' },
+        'library.html': { moduleKey: 'library', defaultHome: 'dashboard.html', label: 'Library', icon: 'library' },
+        'cafe.html': { moduleKey: 'cafe', defaultHome: 'dashboard.html', label: 'Cafe', icon: 'coffee' },
+        'transport.html': { moduleKey: 'transport', defaultHome: 'dashboard.html', label: 'Transport', icon: 'bus' },
+        'certificate.html': { moduleKey: 'certificate', defaultHome: 'dashboard.html', label: 'Certificate', icon: 'award' },
+        'complain_box.html': { moduleKey: 'complain_box', defaultHome: 'dashboard.html', label: 'Complain Box', icon: 'message-square' },
+        'diary.html': { moduleKey: 'diary', defaultHome: 'dashboard.html', label: 'Diary', icon: 'book-open' },
+        'visitor_books.html': { moduleKey: 'visitor_books', defaultHome: 'dashboard.html', label: 'Visitor Books', icon: 'clipboard-list' },
+        'annual_charges.html': { moduleKey: 'annual_charges', defaultHome: 'dashboard.html', label: 'Annual Charges', icon: 'receipt' },
         'teacher_salaries.html': { moduleKey: 'teacher_salaries', defaultHome: 'dashboard.html', label: 'Salaries', icon: 'wallet' },
         'student_attendance.html': { moduleKey: 'student_attendance', defaultHome: 'dashboard.html', label: 'Student Attendance', icon: 'calendar-check' },
         'teacher_attendance.html': { moduleKey: 'teacher_attendance', defaultHome: 'dashboard.html', label: 'Teacher Attendance', icon: 'clipboard-check' },
@@ -127,20 +155,24 @@
         'notifications.html': { moduleKey: 'notifications', defaultHome: 'dashboard.html', label: 'Notifications', icon: 'bell' },
         'special_notices.html': { moduleKey: 'special_notices', defaultHome: 'dashboard.html', label: 'Special Notices', icon: 'megaphone' },
         'exams.html': { moduleKey: 'exams', defaultHome: 'dashboard.html', label: 'Exams', icon: 'clipboard-list' },
+        'exam_schedule.html': { moduleKey: 'exams', defaultHome: 'dashboard.html', label: 'Exam Schedule', icon: 'calendar-days' },
+        'exam_result.html': { moduleKey: 'exams', defaultHome: 'dashboard.html', label: 'Result', icon: 'file-badge' },
+        'exam_result_history.html': { moduleKey: 'exams', defaultHome: 'dashboard.html', label: 'Student Result History', icon: 'history' },
         'revenue.html': { moduleKey: 'revenue', defaultHome: 'dashboard.html', label: 'Revenue', icon: 'trending-up' },
         'settings.html': { moduleKey: 'settings', defaultHome: 'dashboard.html', label: 'Settings', icon: 'settings' },
         'permissions.html': { moduleKey: 'permissions', defaultHome: 'dashboard.html', label: 'Permissions', icon: 'shield' },
         'designation-permissions.html': { moduleKey: 'permissions', defaultHome: 'dashboard.html', label: 'Designation Permissions', icon: 'shield-check' },
         'branch_registration.html': { moduleKey: 'branch_registration', defaultHome: 'dashboard.html', label: 'Branch Registration', icon: 'building-2' },
         'aboutme.html': { moduleKey: 'aboutme', defaultHome: 'dashboard.html', label: 'About Us', icon: 'info' },
-        'student_portal.html': { moduleKey: 'student_portal', defaultHome: 'student_portal.html', label: 'Student Portal', icon: 'graduation-cap' }
+        'student_portal.html': { moduleKey: 'student_portal', defaultHome: 'student_portal.html', label: 'Student Portal', icon: 'graduation-cap' },
+        'teacher_portal.html': { moduleKey: 'teacher_portal', defaultHome: 'teacher_portal.html', label: 'Teacher Portal', icon: 'book-user' }
     };
-    const portalPages = new Set(['student_portal.html']);
+    const portalPages = new Set();
     const routeToPageMap = Object.keys(pageRegistry).reduce((acc, pageName) => {
         const cleanKey = pageName.replace(/\.html$/i, '').toLowerCase();
         acc[cleanKey] = pageName;
         return acc;
-    }, { login: 'index.html', index: 'index.html' });
+    }, { login: 'login.html', index: 'index.html', home: 'index.html' });
 
     function normalizePageName(pageValue = '') {
         const rawValue = String(pageValue || '').trim().toLowerCase();
@@ -169,13 +201,14 @@
 
     function toRoutePath(pageName = '') {
         const normalizedPage = normalizePageName(pageName);
-        if (normalizedPage === 'index.html') return '/login';
-        if (pageRegistry[normalizedPage]) return `/${normalizedPage.replace(/\.html$/i, '')}`;
-        return `/${String(pageName || '').replace(/^\/+/, '') || 'login'}`;
+        if (normalizedPage === 'index.html') return '/';
+        if (normalizedPage === 'login.html') return '/login';
+        if (normalizedPage.endsWith('.html')) return normalizedPage;
+        return String(pageName || 'login.html').replace(/^\/+/, '');
     }
 
     const currentPage = normalizePageName(window.location.pathname);
-    const publicPages = new Set(['index.html']);
+    const publicPages = new Set(['index.html', 'login.html']);
 
     const defaultPermissions = {
         loginAccess: {
@@ -190,8 +223,8 @@
             Admin: 'superadmin',
             Principal: 'admin',
             Branch: 'computer_operator',
-            Teacher: 'computer_operator',
-            Student: 'computer_operator',
+            Teacher: 'teacher',
+            Student: 'student',
             Staff: 'computer_operator'
         },
         groups: {
@@ -206,11 +239,24 @@
                 permissions: {
                     dashboard: 'manage',
                     students: 'manage',
+                    families: 'manage',
+                    student_scheduling: 'manage',
+                    banners: 'manage',
                     teachers: 'manage',
+                    teacher_scheduling: 'manage',
                     staff: 'manage',
                     classes: 'manage',
+                    set_fee: 'manage',
                     fees: 'manage',
                     fee_challan: 'manage',
+                    library: 'manage',
+                    cafe: 'manage',
+                    transport: 'manage',
+                    certificate: 'manage',
+                    complain_box: 'manage',
+                    diary: 'manage',
+                    visitor_books: 'manage',
+                    annual_charges: 'manage',
                     teacher_salaries: 'manage',
                     student_attendance: 'manage',
                     teacher_attendance: 'manage',
@@ -219,11 +265,14 @@
                     notifications: 'manage',
                     special_notices: 'manage',
                     exams: 'manage',
+                    bills: 'manage',
                     revenue: 'view',
                     settings: 'view',
                     branch_registration: 'view',
                     aboutme: 'view',
-                    permissions: 'view'
+                    permissions: 'view',
+                    student_portal: 'manage',
+                    teacher_portal: 'manage'
                 }
             },
             computer_operator: {
@@ -232,14 +281,49 @@
                 permissions: {
                     dashboard: 'view',
                     students: 'manage',
+                    banners: 'none',
                     teachers: 'view',
                     staff: 'view',
                     classes: 'view',
                     fees: 'view',
                     fee_challan: 'manage',
+                    library: 'view',
+                    cafe: 'view',
+                    transport: 'view',
+                    certificate: 'view',
+                    complain_box: 'view',
+                    diary: 'view',
+                    visitor_books: 'view',
+                    annual_charges: 'view',
                     student_attendance: 'edit',
                     exams: 'view',
                     notifications: 'view',
+                    aboutme: 'view'
+                }
+            },
+            teacher: {
+                name: 'Teachers',
+                homePage: 'teacher_portal.html',
+                permissions: {
+                    teacher_portal: 'manage',
+                    students: 'view',
+                    classes: 'view',
+                    student_attendance: 'edit',
+                    student_attendance_report: 'view',
+                    exams: 'view',
+                    special_notices: 'view',
+                    aboutme: 'view'
+                }
+            },
+            student: {
+                name: 'Students',
+                homePage: 'student_portal.html',
+                permissions: {
+                    student_portal: 'manage',
+                    fees: 'view',
+                    fee_challan: 'view',
+                    exams: 'view',
+                    special_notices: 'view',
                     aboutme: 'view'
                 }
             }
@@ -343,7 +427,7 @@
             window.location.protocol === 'file:';
 
         const backendUrl = isLocalhost
-            ? (window.location.protocol === 'file:' ? 'http://localhost:3000' : `${window.location.protocol}//${window.location.hostname}:3000`)
+            ? (window.location.protocol === 'file:' ? 'http://localhost:3000' : window.location.origin)
             : (window.ENV_BACKEND_URL || window.location.origin);
 
         return `${backendUrl}/api`;
@@ -367,10 +451,90 @@
         callback();
     }
 
+    const WELCOME_SESSION_KEY = 'eduCore_welcome_payload';
+
+    function escapeWelcomeText(value) {
+        return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        }[char]));
+    }
+
+    function getWelcomeSchoolName() {
+        try {
+            const settings = JSON.parse(localStorage.getItem('eduCore_settings') || '{}') || {};
+            return String(settings.schoolName || settings.schoolTitle || 'Myownschool').trim() || 'Myownschool';
+        } catch (_error) {
+            return 'Myownschool';
+        }
+    }
+
+    function showWelcomeAnimationIfNeeded() {
+        if (document.getElementById('loginForm')) return;
+        if (!sessionStorage.getItem('eduCore_token')) return;
+
+        let payload = null;
+        try {
+            payload = JSON.parse(sessionStorage.getItem(WELCOME_SESSION_KEY) || 'null');
+        } catch (_error) {
+            payload = null;
+        }
+
+        if (!payload || !payload.at) return;
+        if (Date.now() - Number(payload.at) > 5 * 60 * 1000) {
+            sessionStorage.removeItem(WELCOME_SESSION_KEY);
+            return;
+        }
+
+        sessionStorage.removeItem(WELCOME_SESSION_KEY);
+        if (document.getElementById('eduWelcomeOverlay')) return;
+
+        const displayName = String(payload.displayName || loggedInUser?.fullName || loggedInUser?.username || 'User').trim() || 'User';
+        const schoolName = String(payload.schoolName || getWelcomeSchoolName()).trim() || 'Myownschool';
+        const logoSrc = 'images/logo.jpeg';
+        const overlay = document.createElement('div');
+        overlay.id = 'eduWelcomeOverlay';
+        overlay.className = 'edu-welcome-overlay';
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-modal', 'true');
+        overlay.innerHTML = `
+            <div class="edu-welcome-card">
+                <div class="edu-welcome-glow" aria-hidden="true"></div>
+                <div class="edu-welcome-icon edu-welcome-logo-wrap">
+                    <img class="edu-welcome-logo" src="${escapeWelcomeText(logoSrc)}" alt="${escapeWelcomeText(schoolName)} logo">
+                </div>
+                <h2 class="edu-welcome-title">Welcome, ${escapeWelcomeText(displayName)}</h2>
+                <p class="edu-welcome-subtitle">Welcome ${escapeWelcomeText(displayName)} in ${escapeWelcomeText(schoolName)}.</p>
+                <div class="edu-welcome-divider" aria-hidden="true"></div>
+                <button type="button" class="edu-welcome-skip">Get Started</button>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        const close = () => {
+            if (!overlay.classList.contains('active')) return;
+            overlay.classList.add('closing');
+            window.setTimeout(() => overlay.remove(), 240);
+        };
+
+        overlay.addEventListener('click', (event) => {
+            if (event.target === overlay) close();
+        });
+        overlay.querySelector('.edu-welcome-skip')?.addEventListener('click', close);
+        overlay.classList.add('active');
+        window.setTimeout(close, 2400);
+    }
+
     function getHomePage(user, permissions) {
         const group = getGroupConfig(user, permissions);
         const registryEntry = pageRegistry[currentPage];
         if (user?.role === 'Admin' && group?.homePage) return group.homePage;
+        if (user?.role === 'Student') return 'student_portal.html';
+        if (user?.role === 'Teacher') return 'teacher_portal.html';
         if (group && group.homePage) {
             const homeEntry = pageRegistry[group.homePage];
             if (!homeEntry || group.permissions?.[homeEntry.moduleKey] !== 'none') {
@@ -386,7 +550,8 @@
         if (user?.role === 'Admin') return 'dashboard.html';
         if (user?.role === 'Student') return 'student_portal.html';
         if (user?.role === 'Branch') return 'students.html';
-        if (user?.role === 'Teacher' || user?.role === 'Staff' || user?.role === 'Principal') return 'dashboard.html';
+        if (user?.role === 'Teacher') return 'teacher_portal.html';
+        if (user?.role === 'Staff' || user?.role === 'Principal') return 'dashboard.html';
         return 'index.html';
     }
 
@@ -418,6 +583,8 @@
         }
 
         if (user.role === 'Admin') return true;
+        if (user.role === 'Student' && pageName === 'student_portal.html') return true;
+        if (user.role === 'Teacher' && pageName === 'teacher_portal.html') return true;
         return getModuleAccess(user, permissions, pageName) !== 'none';
     }
 
@@ -471,6 +638,179 @@
                     .filter((item) => item.style.display !== 'none');
                 if (!visibleLinks.length) dropdown.style.display = 'none';
             });
+        });
+    }
+
+    function renderRequestedSidebarSequence(user, permissions) {
+        if (!user || !authToken || publicPages.has(currentPage)) return;
+        if (user.role === 'Student' || user.role === 'Teacher') return;
+
+        runWhenReady(() => {
+            const navLinks = document.querySelector('.sidebar .nav-links');
+            if (!navLinks || navLinks.dataset.requestedSidebarSequence === 'true') return;
+
+            const schedulingNavPages = {
+                'student_scheduling.html': new Set([
+                    'student_scheduling.html',
+                    'assignments.html',
+                    'assignment_uploading.html',
+                    'student_timetable.html',
+                    'student_diary.html',
+                    'student_leave_requests.html',
+                    'student_courses.html',
+                    'quiz_uploading.html',
+                    'lecture_uploading.html',
+                    'exam_schedule.html',
+                    'stuck_off.html'
+                ]),
+                'teacher_scheduling.html': new Set([
+                    'teacher_scheduling.html',
+                    'teacher_timetable.html',
+                    'teacher_assigned_classes.html',
+                    'teacher_leave_requests.html'
+                ])
+            };
+            const isActivePage = (pageName, hash = '') => {
+                const normalizedPage = normalizePageName(pageName);
+                const activePages = schedulingNavPages[normalizedPage];
+                if (activePages ? !activePages.has(currentPage) : normalizedPage !== currentPage) return false;
+                return !hash || window.location.hash === hash;
+            };
+            const canShowPage = (pageName) => pageRegistry[normalizePageName(pageName)] && canAccessPage(user, permissions, pageName);
+            const canShowAny = (children = []) => children.some((child) => child.type === 'dropdown' ? canShowAny(child.children) : canShowPage(child.page));
+            const hasActiveChild = (children = []) => children.some((child) => (
+                child.type === 'dropdown' ? hasActiveChild(child.children) : isActivePage(child.page, child.hash)
+            ));
+
+            const navItems = [
+                { type: 'link', page: 'dashboard.html', label: 'Dashboard', icon: 'layout-dashboard' },
+                { type: 'link', page: 'banners.html', label: 'Banners', icon: 'image' },
+                { type: 'link', page: 'classes.html', label: 'Classes', icon: 'school' },
+                { type: 'link', page: 'students.html', label: 'Students', icon: 'users' },
+                { type: 'link', page: 'student_scheduling.html', label: 'Students Scheduling', icon: 'calendar-clock' },
+                { type: 'link', page: 'families.html', label: 'Families', icon: 'home' },
+                { type: 'link', page: 'teachers.html', label: 'Teachers', icon: 'book-open' },
+                { type: 'link', page: 'teacher_scheduling.html', label: 'Teachers Scheduling', icon: 'calendar-days' },
+                { type: 'link', page: 'staff.html', label: 'Staff', icon: 'briefcase' },
+                {
+                    type: 'dropdown',
+                    label: 'Attendance',
+                    icon: 'clipboard-check',
+                    children: [
+                        { page: 'student_attendance.html', label: 'Student Attendance', icon: 'users' },
+                        { page: 'teacher_attendance.html', hash: '#teacher', label: 'Teacher Attendance', icon: 'user-check' },
+                        { page: 'teacher_attendance.html', hash: '#staff', label: 'Staff Attendance', icon: 'briefcase-business' }
+                    ]
+                },
+                {
+                    type: 'dropdown',
+                    label: 'Fee Structure',
+                    icon: 'credit-card',
+                    children: [
+                        { page: 'set_fee.html', label: 'Set Fees', icon: 'badge-dollar-sign' },
+                        { page: 'fees.html', label: 'Fees', icon: 'credit-card' },
+                        { page: 'fee_challan.html', label: 'Fee Challan', icon: 'file-text' },
+                        { page: 'remaining_charges.html', label: 'Remaining Charges', icon: 'circle-dollar-sign' },
+                        { page: 'payment_history.html', label: 'Payment Statement', icon: 'receipt-text' },
+                        { page: 'annual_charges.html', label: 'Annual Charges', icon: 'receipt' }
+                    ]
+                },
+                {
+                    type: 'dropdown',
+                    label: 'Examination',
+                    icon: 'clipboard-list',
+                    children: [
+                        { page: 'exam_result.html', label: 'Results', icon: 'file-badge' },
+                        { page: 'exam_result_history.html', label: 'Result History', icon: 'history' },
+                        { page: 'exams.html', label: 'Result Cards', icon: 'badge-check' }
+                    ]
+                },
+                {
+                    type: 'dropdown',
+                    label: 'Finance',
+                    icon: 'landmark',
+                    children: [
+                        { page: 'revenue.html', label: 'Revenue', icon: 'trending-up' },
+                        { page: 'teacher_salaries.html', label: 'Salaries', icon: 'wallet' },
+                        { page: 'bills.html', label: 'Bills', icon: 'receipt' }
+                    ]
+                },
+                { type: 'link', page: 'notifications.html', label: 'Notifications', icon: 'bell-ring' },
+                {
+                    type: 'dropdown',
+                    label: 'Permissions',
+                    icon: 'shield',
+                    children: [
+                        { page: 'permissions.html', label: 'Permissions', icon: 'shield' },
+                        { page: 'designation-permissions.html', label: 'Designation Permissions', icon: 'shield-check' }
+                    ]
+                },
+                { type: 'link', page: 'library.html', label: 'Library', icon: 'library' },
+                { type: 'link', page: 'complain_box.html', label: 'Complain Box', icon: 'message-square' },
+                { type: 'link', page: 'branch_registration.html', label: 'Branch Registration', icon: 'building-2' },
+                { type: 'link', page: 'visitor_books.html', label: 'Visitor Records', icon: 'clipboard-list' },
+                { type: 'link', page: 'certificate.html', label: 'Certificates', icon: 'award' },
+                { type: 'link', page: 'cafe.html', label: 'Cafe Records', icon: 'coffee' },
+                { type: 'link', page: 'transport.html', label: 'Transport', icon: 'bus' },
+                { type: 'link', page: 'aboutme.html', label: 'About', icon: 'info' },
+                { type: 'logout', label: 'Logout', icon: 'log-out' }
+            ];
+
+            const buildLink = (item, className = 'nav-item') => {
+                if (!canShowPage(item.page)) return '';
+                const href = `${toRoutePath(item.page)}${item.hash || ''}`;
+                return `
+                    <a href="${href}" class="${className}${isActivePage(item.page, item.hash) ? ' active' : ''}">
+                        <i data-lucide="${item.icon}"></i>
+                        <span>${item.label}</span>
+                    </a>
+                `;
+            };
+
+            const buildDropdown = (item, nested = false, dataName = 'requested-sidebar-dropdown') => {
+                const visibleChildren = item.children.filter((child) => child.type === 'dropdown' ? canShowAny(child.children) : canShowPage(child.page));
+                if (!visibleChildren.length) return '';
+                const open = hasActiveChild(visibleChildren);
+                const toggleClass = nested ? 'nav-subitem nav-dropdown-toggle' : 'nav-item nav-dropdown-toggle';
+                return `
+                    <div class="nav-dropdown${open ? ' open' : ''}" data-${dataName}="true">
+                        <button type="button" class="${toggleClass}${open ? ' active' : ''}">
+                            <span class="nav-item-main">
+                                <i data-lucide="${item.icon}"></i>
+                                <span>${item.label}</span>
+                            </span>
+                            <i data-lucide="chevron-down" class="dropdown-chevron"></i>
+                        </button>
+                        <div class="nav-submenu">
+                            ${visibleChildren.map((child) => buildItem(child, true)).join('')}
+                        </div>
+                    </div>
+                `;
+            };
+
+            const buildItem = (item, nested = false) => {
+                if (item.type === 'link' || item.page) return buildLink(item, nested ? 'nav-subitem' : 'nav-item');
+                if (item.type === 'logout') {
+                    return `
+                        <a href="#" class="nav-item" onclick="logoutUser(event)">
+                            <i data-lucide="${item.icon}"></i>
+                            <span>${item.label}</span>
+                        </a>
+                    `;
+                }
+                return buildDropdown(item, nested);
+            };
+
+            navLinks.innerHTML = navItems.map((item) => buildItem(item)).join('');
+
+            navLinks.dataset.requestedSidebarSequence = 'true';
+            navLinks.querySelectorAll('[data-requested-sidebar-dropdown] > .nav-dropdown-toggle').forEach((toggle) => {
+                toggle.addEventListener('click', () => {
+                    toggle.closest('.nav-dropdown')?.classList.toggle('open');
+                });
+            });
+
+            if (window.lucide && window.lucide.createIcons) window.lucide.createIcons();
         });
     }
 
@@ -777,7 +1117,7 @@
         return `
             <aside class="sidebar" data-portal-sidebar>
                 <div class="logo-section">
-                    <i data-lucide="graduation-cap"></i> Apexiums School System
+                    <img class="sidebar-logo-img" src="images/logo.jpeg" alt="Myownschool logo">
                 </div>
                 <div class="portal-sidebar-user">
                     <strong>${escapeHtml(displayName)}</strong>
@@ -936,6 +1276,7 @@
 
     (async () => {
         const permissions = await fetchPermissionsConfig();
+        renderRequestedSidebarSequence(loggedInUser, permissions);
         applyNavPermissions(loggedInUser, permissions);
         applySignedInUserLabels(loggedInUser);
         renderDashboardPermissionCards(loggedInUser, permissions);
@@ -956,9 +1297,11 @@
 
         if (!canAccessPage(loggedInUser, permissions, currentPage)) {
             redirectToAllowedHome(loggedInUser, permissions);
+            return;
         }
 
         startActiveSessionTracking();
+        runWhenReady(showWelcomeAnimationIfNeeded);
     })();
 })();
 

@@ -4,17 +4,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manage Students - My own Science school</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Manage Students - Myownschool</title>
+    <link rel="icon" type="image/png" href="images/logo.jpeg">
+    <link rel="stylesheet" href="style.css?v=20260603-kids-roots-jand-brand">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         /* Specific Basic Styles for the Form Modal/Section */
         .form-container {
             background: var(--surface-color);
-            padding: 2rem;
-            border-radius: var(--radius-lg);
-            margin-bottom: 2rem;
+            padding: 1.15rem;
+            border-radius: 8px;
+            margin-bottom: 1.15rem;
             border: 1px solid var(--border-color);
             display: none;
             /* Hidden by default */
@@ -27,19 +28,118 @@
 
         .form-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1.5rem;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 0.85rem 1rem;
+            margin-bottom: 1rem;
+            align-items: start;
+        }
+
+        #studentFormContainer h3 {
+            margin-bottom: 0.95rem !important;
+            font-size: 1.05rem;
+        }
+
+        #studentForm .input-group {
+            min-width: 0;
+            margin-bottom: 0.65rem;
+        }
+
+        #studentForm .input-group label {
+            margin-bottom: 0.32rem;
+            min-height: 16px;
+            font-size: 0.78rem;
+            line-height: 1.25;
+        }
+
+        #studentForm .input-group input,
+        #studentForm .input-group select,
+        #studentForm .password-field {
+            width: 100% !important;
+            min-height: 36px !important;
+            height: 36px !important;
+            border-radius: 8px !important;
+            font-size: 0.88rem;
+            box-sizing: border-box;
+        }
+
+        #studentForm .input-group input,
+        #studentForm .input-group select {
+            padding: 0.42rem 0.65rem !important;
+        }
+
+        #studentForm .input-group textarea {
+            width: 100% !important;
+            min-height: 58px !important;
+            padding: 0.42rem 0.65rem !important;
+            border-radius: 8px !important;
+            font-size: 0.88rem;
+        }
+
+        #studentForm .profile-image-picker {
+            height: 36px;
+            min-height: 36px;
+            border-radius: 8px;
+        }
+
+        #studentForm .profile-image-action {
+            font-size: 0.78rem;
+            padding: 0 0.65rem;
+        }
+
+        #studentForm .profile-image-action i,
+        #studentForm .profile-image-action svg {
+            width: 13px;
+            height: 13px;
+        }
+
+        #studentForm .student-family-section {
+            grid-column: 1 / -1;
+            margin-top: 0.15rem;
+            padding: 0.85rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: #f8fafc;
+        }
+
+        #studentForm .student-family-section h4 {
+            margin: 0 0 0.75rem;
+            color: var(--text-primary);
+            font-size: 0.92rem;
+        }
+
+        #studentForm .student-family-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 0.85rem 1rem;
+        }
+
+        #studentForm .student-family-grid .input-group {
+            margin-bottom: 0;
+        }
+
+        .student-toolbar .search-bar,
+        .student-filter-group input,
+        .student-filter-group select,
+        .admin-records-select {
+            min-height: 42px !important;
+            height: 42px !important;
+            padding: 0.58rem 0.85rem !important;
+            border-radius: 8px !important;
+            font-size: 0.86rem;
         }
 
         .action-btn {
-            padding: 0.4rem 0.8rem;
+            padding: 0.5rem 0.9rem;
             font-size: 0.85rem;
             border-radius: var(--radius-md);
             cursor: pointer;
             border: none;
             display: inline-flex;
             align-items: center;
-            gap: 0.3rem;
+            justify-content: center;
+            gap: 0.4rem;
+            min-height: 34px;
+            height: auto;
             transition: var(--transition);
         }
 
@@ -87,7 +187,7 @@
         .student-toolbar {
             display: flex;
             justify-content: space-between;
-            align-items: end;
+            align-items: center;
             gap: 1rem;
             margin-bottom: 1.5rem;
             flex-wrap: wrap;
@@ -95,20 +195,42 @@
 
         .student-toolbar-left {
             display: flex;
-            align-items: end;
+            align-items: center;
             gap: 1rem;
             flex-wrap: wrap;
+            flex: 1 1 auto;
         }
 
         .student-stat {
             font-weight: 700;
             color: var(--text-secondary);
             min-width: 140px;
-            padding-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            height: 42px;
+        }
+
+        .student-toolbar .btn-primary {
+            min-height: 42px !important;
+            height: 42px !important;
+            padding: 0.58rem 1.5rem !important;
+            display: inline-flex;
+        }
+
+        .student-print-btn {
+            min-height: 42px !important;
+            height: 42px !important;
+            padding: 0.58rem 1.25rem !important;
         }
 
         .student-filter-group {
+            flex: 0 1 260px;
+            width: 260px;
             min-width: 260px;
+        }
+
+        .student-search-group {
+            max-width: none;
         }
 
         .student-filter-group label {
@@ -122,11 +244,20 @@
         .student-filter-group input,
         .student-filter-group select {
             width: 100%;
-            padding: 0.9rem 1rem;
+            min-height: 42px;
+            height: 42px;
+            padding: 0.58rem 0.85rem;
             border: 1px solid var(--border-color);
-            border-radius: 0.75rem;
+            border-radius: var(--radius-md);
             background: white;
             font: inherit;
+        }
+
+        #studentPrintMode {
+            min-height: 42px !important;
+            height: 42px !important;
+            padding: 0.58rem 0.85rem !important;
+            border-radius: var(--radius-md) !important;
         }
 
         .student-filter-group .student-multifilter {
@@ -135,9 +266,11 @@
 
         .student-filter-group .student-multifilter-trigger {
             width: 100%;
-            padding: 0.9rem 1rem;
+            min-height: 42px;
+            height: 42px;
+            padding: 0.58rem 0.85rem;
             border: 1px solid var(--border-color);
-            border-radius: 0.75rem;
+            border-radius: var(--radius-md);
             background: white;
             font: inherit;
             cursor: pointer;
@@ -220,6 +353,72 @@
             box-shadow: 0 0 0 3px rgba(32, 176, 164, 0.12);
         }
 
+        .admin-records-panel {
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 1.25rem;
+            margin: 0 0 1.5rem;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .admin-records-head {
+            display: flex;
+            align-items: end;
+            justify-content: space-between;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .admin-records-select {
+            min-width: min(100%, 280px);
+            padding: 0.85rem 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            background: #fff;
+            font: inherit;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .admin-record-section {
+            display: none;
+            margin-top: 1rem;
+        }
+
+        .admin-record-section.active {
+            display: block;
+        }
+
+        .admin-record-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 0.85rem;
+        }
+
+        .admin-record-table th,
+        .admin-record-table td {
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.75rem;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        .admin-record-table th {
+            color: var(--text-secondary);
+            font-size: 0.78rem;
+            text-transform: uppercase;
+        }
+
+        .admin-record-empty {
+            padding: 1rem;
+            border: 1px dashed var(--border-color);
+            border-radius: var(--radius-md);
+            color: var(--text-secondary);
+            background: #f8fafc;
+            margin-top: 0.85rem;
+        }
+
         .student-filter-group .student-multifilter.disabled .student-multifilter-trigger {
             background: #f8fafc;
             cursor: not-allowed;
@@ -238,19 +437,15 @@
             margin-bottom: 0.05rem;
         }
 
-        .student-print-fields-group {
-            min-width: 210px;
-        }
-
         .student-name-cell {
             display: flex;
             align-items: center;
-            gap: 0.7rem;
+            gap: 0.85rem;
         }
 
         .student-avatar {
-            width: 32px;
-            height: 32px;
+            width: 44px;
+            height: 44px;
             border-radius: 50%;
             background: rgba(32, 176, 164, 0.12);
             color: var(--primary-color);
@@ -258,6 +453,7 @@
             align-items: center;
             justify-content: center;
             font-weight: 700;
+            font-size: 0.9rem;
             flex-shrink: 0;
             overflow: hidden;
         }
@@ -267,6 +463,141 @@
             height: 100%;
             object-fit: cover;
             display: block;
+        }
+
+        .profile-image-picker {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 42px;
+            min-height: 42px;
+            padding: 0;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            background: white;
+            box-shadow: none;
+            overflow: hidden;
+        }
+
+        .profile-image-picker:hover {
+            border-color: var(--primary-color);
+            background: white;
+        }
+
+        .profile-image-preview {
+            position: absolute;
+            left: 0.85rem;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: rgba(32, 176, 164, 0.12);
+            color: var(--primary-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 0.78rem;
+            overflow: hidden;
+            flex: 0 0 auto;
+        }
+
+        .profile-image-preview:empty {
+            display: none;
+        }
+
+        .profile-image-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .profile-image-content {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            min-width: 0;
+            padding-left: 0;
+        }
+
+        .profile-image-content strong {
+            display: none;
+        }
+
+        .profile-image-content span {
+            display: none;
+        }
+
+        .profile-image-action {
+            position: absolute;
+            inset: 0;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 0.4rem;
+            width: 100%;
+            max-width: 100%;
+            height: 100%;
+            min-height: 0;
+            margin-top: 0;
+            padding: 0 0.85rem;
+            border: 0;
+            border-radius: 0;
+            background: transparent;
+            color: var(--text-primary);
+            font-weight: 700;
+            font-size: 0.82rem;
+            line-height: 1;
+            text-align: center;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .profile-image-action:hover {
+            background: transparent;
+            color: var(--primary-color);
+        }
+
+        .profile-image-action i,
+        .profile-image-action svg {
+            display: block;
+            width: 14px;
+            height: 14px;
+            flex: 0 0 auto;
+        }
+
+        .profile-image-action span {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+        }
+
+        .profile-image-picker input[type="file"] {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        @media (max-width: 640px) {
+            .profile-image-picker {
+                text-align: center;
+            }
+
+            .profile-image-action {
+                margin-left: 0;
+                margin-right: 0;
+            }
         }
 
         .login-details {
@@ -283,7 +614,7 @@
             display: flex;
             align-items: center;
             gap: 0.75rem;
-            min-width: 170px;
+            min-width: 0;
         }
 
         .student-name-text {
@@ -294,41 +625,6 @@
 
         .cell-compact {
             line-height: 1.45;
-        }
-
-        .student-th-with-search {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.25rem;
-            white-space: nowrap;
-        }
-
-        .student-column-search-btn {
-            width: 18px;
-            height: 18px;
-            border: 0;
-            border-radius: 50%;
-            background: transparent;
-            color: var(--primary-color);
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0;
-            vertical-align: middle;
-        }
-
-        .student-column-search-btn:hover,
-        .student-column-search-btn:focus {
-            background: rgba(32, 176, 164, 0.12);
-            color: var(--primary-color);
-            outline: none;
-        }
-
-        .student-column-search-btn i {
-            width: 11px;
-            height: 11px;
-            stroke-width: 2.4;
         }
 
         .student-search-overlay {
@@ -446,6 +742,44 @@
             font: inherit;
         }
 
+        .student-search-control {
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            width: 100%;
+            min-height: 42px;
+            height: 42px;
+            padding: 0 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            background: #ffffff;
+        }
+
+        .student-search-control i {
+            width: 17px;
+            height: 17px;
+            color: var(--primary-color);
+            flex: 0 0 auto;
+        }
+
+        .student-filter-group .student-search-control input {
+            border: 0;
+            border-radius: 0;
+            padding: 0.58rem 0;
+            min-width: 0;
+            background: transparent;
+        }
+
+        .student-filter-group .student-search-control input:focus {
+            border-color: transparent;
+            box-shadow: none;
+        }
+
+        .student-search-control:focus-within {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(32, 176, 164, 0.12);
+        }
+
         .student-search-actions {
             display: flex;
             justify-content: flex-end;
@@ -458,6 +792,107 @@
             min-width: 95px;
         }
 
+        .student-table-container {
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-sm);
+            width: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        #studentsTable {
+            width: 100% !important;
+            table-layout: auto !important;
+            border-collapse: collapse;
+            margin: 0;
+            padding: 0;
+        }
+
+        #studentsTable th {
+            padding: 0.65rem 0.6rem !important;
+            vertical-align: middle;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            overflow-wrap: unset !important;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+            background: #fcfdfe;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        #studentsTable td {
+            padding: 0.75rem 0.6rem !important;
+            vertical-align: middle;
+        }
+
+        #studentsTable th:nth-child(1),
+        #studentsTable td:nth-child(1) {
+            width: 8%;
+        }
+
+        #studentsTable th:nth-child(2),
+        #studentsTable td:nth-child(2) {
+            width: 7%;
+        }
+
+        #studentsTable th:nth-child(3),
+        #studentsTable td:nth-child(3) {
+            width: 18%;
+        }
+
+        #studentsTable th:nth-child(4),
+        #studentsTable td:nth-child(4) {
+            width: 12%;
+        }
+
+        #studentsTable th:nth-child(5),
+        #studentsTable td:nth-child(5) {
+            width: 9%;
+        }
+
+        #studentsTable th:nth-child(6),
+        #studentsTable td:nth-child(6) {
+            width: 9%;
+        }
+
+        #studentsTable th:nth-child(7),
+        #studentsTable td:nth-child(7) {
+            width: 10%;
+        }
+
+        #studentsTable th:nth-child(8),
+        #studentsTable td:nth-child(8) {
+            width: 8%;
+        }
+
+        #studentsTable th:nth-child(9),
+        #studentsTable td:nth-child(9) {
+            width: 8%;
+            text-align: center;
+        }
+
+        #studentsTable th:nth-child(10),
+        #studentsTable td:nth-child(10) {
+            width: 11%;
+            text-align: center;
+        }
+
+        #studentsTable .table-action-wrap {
+            justify-content: center;
+        }
+
+        #studentsTable .table-action-select {
+            width: 86px;
+            min-height: 34px;
+        }
+
         @media (max-width: 900px) {
             .student-toolbar,
             .student-toolbar-left {
@@ -465,8 +900,11 @@
             }
 
             .student-filter-group,
+            .student-search-group,
             .student-stat {
                 min-width: 100%;
+                width: 100%;
+                max-width: none;
             }
 
             .student-print-btn,
@@ -541,8 +979,8 @@
         }
 
             .student-avatar {
-                width: 22px !important;
-                height: 22px !important;
+                width: 30px !important;
+                height: 30px !important;
                 font-size: 11px !important;
             }
 
@@ -619,193 +1057,6 @@
             display: flex;
             justify-content: flex-end;
         }
-
-        @media (max-width: 1400px) {
-            .main-content {
-                padding: 1.55rem 2rem !important;
-            }
-
-            .student-toolbar {
-                align-items: flex-end;
-                gap: 0.75rem;
-                flex-wrap: nowrap;
-            }
-
-            .student-toolbar-left {
-                flex: 1 1 auto;
-                gap: 0.75rem;
-                flex-wrap: nowrap;
-                min-width: 0;
-            }
-
-            .student-stat {
-                flex: 0 0 132px;
-                min-width: 132px;
-                font-size: 0.9rem;
-                white-space: nowrap;
-            }
-
-            .student-filter-group {
-                min-width: 0;
-                flex: 1 1 180px;
-            }
-
-            .student-print-fields-group {
-                flex: 0 1 190px;
-            }
-
-            .student-filter-group input,
-            .student-filter-group select,
-            .student-filter-group .student-multifilter-trigger {
-                padding: 0.74rem 0.9rem;
-                border-radius: 0.62rem;
-            }
-
-            .student-print-btn {
-                flex: 0 0 152px;
-                min-width: 152px;
-                padding: 0.67rem 0.95rem;
-                white-space: nowrap;
-            }
-
-            .student-toolbar > .btn-primary {
-                flex: 0 0 176px;
-                min-width: 176px;
-                padding: 0.75rem 1rem;
-                white-space: nowrap;
-            }
-
-            #studentsTable {
-                table-layout: fixed !important;
-                width: 100% !important;
-                min-width: 100% !important;
-            }
-
-            #studentsTable th,
-            #studentsTable td {
-                min-width: 0 !important;
-                padding: 0.62rem 0.46rem !important;
-                font-size: 0.76rem !important;
-                overflow-wrap: normal !important;
-                word-break: normal !important;
-            }
-
-            #studentsTable th:nth-child(1),
-            #studentsTable td:nth-child(1) {
-                width: 10%;
-            }
-
-            #studentsTable th:nth-child(2),
-            #studentsTable td:nth-child(2) {
-                width: 8.5%;
-            }
-
-            #studentsTable th:nth-child(3),
-            #studentsTable td:nth-child(3) {
-                width: 15%;
-            }
-
-            #studentsTable th:nth-child(4),
-            #studentsTable td:nth-child(4) {
-                width: 14.5%;
-            }
-
-            #studentsTable th:nth-child(5),
-            #studentsTable td:nth-child(5) {
-                width: 8%;
-            }
-
-            #studentsTable th:nth-child(6),
-            #studentsTable td:nth-child(6) {
-                width: 9%;
-            }
-
-            #studentsTable th:nth-child(7),
-            #studentsTable td:nth-child(7) {
-                width: 9.5%;
-            }
-
-            #studentsTable th:nth-child(8),
-            #studentsTable td:nth-child(8) {
-                width: 7%;
-            }
-
-            #studentsTable th:nth-child(9),
-            #studentsTable td:nth-child(9) {
-                width: 9.5%;
-            }
-
-            #studentsTable th:nth-child(10),
-            #studentsTable td:nth-child(10) {
-                width: 9%;
-            }
-
-            .student-th-with-search {
-                display: grid;
-                grid-template-columns: minmax(0, auto) 18px;
-                align-items: center;
-                justify-content: start;
-                column-gap: 0.22rem;
-                white-space: normal;
-                line-height: 1.1;
-                max-width: 100%;
-            }
-
-            #studentsTable th:nth-child(9) .student-th-with-search,
-            #studentsTable th:nth-child(10) {
-                justify-content: center;
-            }
-
-            #studentsTable th:nth-child(1),
-            #studentsTable th:nth-child(2) {
-                font-size: 0.72rem !important;
-            }
-
-            .student-column-search-btn {
-                flex: 0 0 18px;
-            }
-
-            .student-name-cell {
-                min-width: 0;
-                gap: 0.45rem;
-            }
-
-            .student-avatar {
-                width: 28px;
-                height: 28px;
-            }
-
-            .table-action-select {
-                width: 76px;
-                padding: 0.38rem 0.42rem;
-                font-size: 0.72rem;
-            }
-
-            #studentsTable .status-badge {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                white-space: nowrap;
-                min-width: 68px;
-                padding: 0.28rem 0.5rem;
-                font-size: 0.72rem;
-            }
-
-            #studentsTable th:nth-child(9),
-            #studentsTable td:nth-child(9),
-            #studentsTable th:nth-child(10),
-            #studentsTable td:nth-child(10) {
-                text-align: center;
-                white-space: nowrap !important;
-            }
-        }
-
-        @media (max-width: 1180px) {
-            .student-toolbar,
-            .student-toolbar-left {
-                flex-wrap: wrap;
-            }
-        }
     </style>
 </head>
 
@@ -814,11 +1065,7 @@
     <div class="dashboard-container">
         <aside class="sidebar">
             <div class="logo-section">
-                <i data-lucide="graduation-cap" style="font-size: 2.5rem; margin-bottom: 0.5rem;"></i>
-                <div style="display: flex; flex-direction: column; align-items: center; gap: 0;">
-                    <span style="font-size: 1rem; line-height: 1.2;">Apexiums School</span>
-                    <span style="font-size: 1rem; line-height: 1.2;">System</span>
-                </div>
+                <img class="sidebar-logo-img" src="images/logo.jpeg" alt="Myownschool logo">
             </div>
 
             <nav class="nav-links">
@@ -893,22 +1140,6 @@
         <main class="main-content">
             <header class="header">
                 <h1>Student Management</h1>
-                <div class="header-actions">
-                    <div class="notification-bell" id="notificationBell">
-                        <i data-lucide="bell" size="22"></i>
-                        <span class="notification-badge" id="notifBadge">0</span>
-
-                        <div class="notif-panel" id="notificationPanel">
-                            <div class="notif-header">
-                                <h4>Notifications</h4>
-                                <button class="clear-notif" onclick="clearAllNotifications(event)">Clear All</button>
-                            </div>
-                            <div class="notif-list" id="notificationList">
-                                <!-- Notifications added via JS -->
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </header>
 
             <div class="student-toolbar">
@@ -916,9 +1147,14 @@
                     <div class="student-stat">
                         Total Students: <span id="totalStudentCount" style="color: var(--primary-color);">0</span>
                     </div>
-                    <div class="student-filter-group">
-                        <label for="studentSearchInput">Search Student</label>
-                        <input type="text" id="studentSearchInput" placeholder="Search by name, roll no, or student ID">
+                    <div class="student-filter-group student-search-group">
+                        <label for="studentSearchInput">Search</label>
+                        <div class="student-search-control">
+                            <i data-lucide="search"></i>
+                            <input type="text" id="studentSearchInput" placeholder="Search"
+                                oninput="runStudentSearchFromInput(this)"
+                                onkeydown="if(event.key==='Enter'){event.preventDefault();runStudentSearchFromInput(this);}">
+                        </div>
                     </div>
                     <div class="student-filter-group">
                         <label for="studentQuickFilterTrigger">Quick Filter</label>
@@ -940,17 +1176,6 @@
                             <option value="outer">Outer Student List</option>
                         </select>
                     </div>
-                    <div class="student-filter-group student-print-fields-group">
-                        <label for="studentPrintFieldsTrigger">Print Fields</label>
-                        <div class="student-multifilter" id="studentPrintFieldsMulti">
-                            <button class="student-multifilter-trigger" type="button" id="studentPrintFieldsTrigger"
-                                aria-haspopup="listbox" aria-expanded="false">
-                                Default Fields
-                            </button>
-                            <div class="student-multifilter-menu" id="studentPrintFieldsMenu" role="listbox"
-                                aria-multiselectable="true"></div>
-                        </div>
-                    </div>
                     <button class="btn btn-outline student-print-btn" type="button" onclick="printStudentsList()">
                         <i data-lucide="printer"></i> Print Students
                     </button>
@@ -963,14 +1188,29 @@
             <!-- Add/Edit Form -->
             <div id="studentFormContainer" class="form-container">
                 <h3 style="margin-bottom: 1.5rem;" id="formTitle">Add New Student</h3>
-                <form id="studentForm">
+                <form id="studentForm" onsubmit="handleStudentFormSubmit(event); return false;">
                     <input type="hidden" id="studentId"> <!-- Hidden ID for Editing -->
+                    <input type="hidden" id="feeFrequency" value="Monthly">
 
                     <div class="form-grid">
                         <div class="input-group">
+                            <label>Profile Image</label>
+                            <div class="profile-image-picker">
+                                <div class="profile-image-preview" id="studentPhotoPreview"></div>
+                                <div class="profile-image-content">
+                                    <strong>Student photo</strong>
+                                    <span>Upload JPG or PNG image for the student profile.</span>
+                                    <label class="profile-image-action" for="studentProfileImage">
+                                        <i data-lucide="image-plus"></i>
+                                        <span>Choose Image</span>
+                                    </label>
+                                </div>
+                                <input type="file" id="studentProfileImage" accept="image/*">
+                            </div>
+                        </div>
+                        <div class="input-group">
                             <label>Student ID</label>
-                            <input type="text" id="studentCode" readonly
-                                style="background-color: #f8fafc; color: var(--text-secondary); cursor: not-allowed;">
+                            <input type="text" id="studentCode" placeholder="STU-001" readonly>
                         </div>
                         <div class="input-group">
                             <label>Full Name</label>
@@ -996,18 +1236,42 @@
                             </select>
                         </div>
                         <div class="input-group">
+                            <label>Monthly Fee (PKR)</label>
+                            <input type="number" id="monthlyFee" placeholder="Select class to load fee or enter custom fee"
+                                min="0" step="1"
+                                style="background-color: #fff; color: var(--text-primary);">
+                        </div>
+                        <div class="input-group">
+                            <label>Zero Fee Reason</label>
+                            <input type="text" id="zeroFeeReason" placeholder="Reason if student is studying free">
+                        </div>
+                        <div class="input-group">
+                            <label>Remaining Amount (PKR)</label>
+                            <input type="number" id="remainingAmount" placeholder="0" min="0" step="1"
+                                style="background-color: #fff; color: var(--text-primary);">
+                        </div>
+                        <div class="input-group">
                             <label>Campus Name</label>
                             <select id="campusName" required
                                 style="width: 100%; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); background-color: #f8fafc;">
                                 <option value="">Select Campus</option>
-                                <option value="Main Campus">Main Campus</option>
-                                <option value="Ali campus">Ali campus</option>
-                                <option value="Fatima Campus">Fatima Campus</option>
                             </select>
                         </div>
                         <div class="input-group">
                             <label>Contact (Phone)</label>
                             <input type="tel" id="parentPhone" required>
+                        </div>
+                        <div class="input-group">
+                            <label>Address</label>
+                            <input type="text" id="studentAddress" placeholder="Student address">
+                        </div>
+                        <div class="input-group">
+                            <label>Guardian Name</label>
+                            <input type="text" id="guardianName" placeholder="e.g. Muhammad Ahmed">
+                        </div>
+                        <div class="input-group">
+                            <label>Guardian Contact Number</label>
+                            <input type="tel" id="guardianContact" placeholder="e.g. 03001234567">
                         </div>
                         <div class="input-group">
                             <label>Email</label>
@@ -1031,37 +1295,43 @@
                             <label>Form B No</label>
                             <input type="text" id="formB">
                         </div>
+                        <div class="input-group">
+                            <label>Fingerprint</label>
+                            <input type="text" id="studentFingerprintData" placeholder="Fingerprint">
+                        </div>
+                        <section class="student-family-section" aria-label="Family details">
+                            <h4>Family</h4>
+                            <div class="student-family-grid">
+                                <div class="input-group">
+                                    <label>Family Name</label>
+                                    <input type="text" id="studentFamilyName" placeholder="e.g. Ahmed Family">
+                                </div>
+                                <div class="input-group">
+                                    <label>Family No.</label>
+                                    <input type="text" id="studentFamilyNo" placeholder="Family number">
+                                </div>
+                                <div class="input-group">
+                                    <label>Family Contact</label>
+                                    <input type="tel" id="studentFamilyContact" placeholder="e.g. 03001234567">
+                                </div>
+                                <div class="input-group">
+                                    <label>Family Added Time</label>
+                                    <input type="datetime-local" id="studentFamilyAddedTime" readonly style="background-color: #f8fafc; color: var(--text-secondary); cursor: not-allowed;">
+                                </div>
+                            </div>
+                        </section>
 
                     </div>
 
                     <div class="action-steps">
-                        <div class="action-step-btn" id="btnSetFee" onclick="toggleStepPanel('feePanel')">
-                            <i data-lucide="credit-card"></i>
-                            <span>Set Fee</span>
+                        <div class="action-step-btn" id="btnCreateCreds" onclick="toggleStepPanel('credPanel')">
+                            <i data-lucide="key"></i>
+                            <span>Create Username & Password</span>
                         </div>
                         <button type="submit" class="action-step-btn btn-save-activate">
                             <i data-lucide="check-circle"></i>
                             <span>Save & Activate Student</span>
                         </button>
-                    </div>
-
-                    <!-- Fee Panel -->
-                    <div id="feePanel" class="step-panel">
-                        <h4 style="margin-bottom: 1rem; color: var(--primary-color);">Set Student Fee</h4>
-                        <div class="form-grid">
-                            <div class="input-group">
-                                <label>Monthly Fee (PKR)</label>
-                                <input type="number" id="monthlyFee" placeholder="e.g. 5000">
-                            </div>
-                            <div class="input-group">
-                                <label>Fee Frequency</label>
-                                <select id="feeFrequency"
-                                    style="width: 100%; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: white;">
-                                    <option value="Monthly">Monthly</option>
-                                    <option value="Yearly">Yearly</option>
-                                </select>
-                            </div>
-                        </div>
                     </div>
 
                     <!-- Credentials Panel -->
@@ -1077,7 +1347,8 @@
                                 <div class="password-field">
                                     <input type="password" id="studentPassword" placeholder="Assign password">
                                     <button type="button" class="password-toggle" data-toggle-password="studentPassword"
-                                        aria-label="Show password" aria-pressed="false">
+                                        onclick="togglePasswordVisibility('studentPassword', this)"
+                                        aria-label="Show password" aria-pressed="false" title="Show password">
                                         <i data-lucide="eye"></i>
                                     </button>
                                 </div>
@@ -1095,19 +1366,19 @@
             </div>
 
             <!-- Students List -->
-            <div class="table-container">
+            <div class="table-container student-table-container">
                 <table id="studentsTable">
                     <thead>
                         <tr>
-                            <th><span class="student-th-with-search">Student ID <button type="button" class="student-column-search-btn" title="Search Student ID" onclick="openStudentColumnSearch('studentCode', 'Student ID')"><i data-lucide="search"></i></button></span></th>
-                            <th><span class="student-th-with-search">Roll No <button type="button" class="student-column-search-btn" title="Search Roll No" onclick="openStudentColumnSearch('rollNo', 'Roll No')"><i data-lucide="search"></i></button></span></th>
-                            <th><span class="student-th-with-search">Name <button type="button" class="student-column-search-btn" title="Search Name" onclick="openStudentColumnSearch('fullName', 'Name')"><i data-lucide="search"></i></button></span></th>
-                            <th><span class="student-th-with-search">Father Name <button type="button" class="student-column-search-btn" title="Search Father Name" onclick="openStudentColumnSearch('fatherName', 'Father Name')"><i data-lucide="search"></i></button></span></th>
-                            <th><span class="student-th-with-search">DOB <button type="button" class="student-column-search-btn" title="Search DOB" onclick="openStudentColumnSearch('dob', 'DOB')"><i data-lucide="search"></i></button></span></th>
-                            <th><span class="student-th-with-search">Class <button type="button" class="student-column-search-btn" title="Search Class" onclick="openStudentColumnSearch('classGrade', 'Class')"><i data-lucide="search"></i></button></span></th>
-                            <th><span class="student-th-with-search">Campus <button type="button" class="student-column-search-btn" title="Search Campus" onclick="openStudentColumnSearch('campusName', 'Campus')"><i data-lucide="search"></i></button></span></th>
-                            <th><span class="student-th-with-search">Gender <button type="button" class="student-column-search-btn" title="Search Gender" onclick="openStudentColumnSearch('gender', 'Gender')"><i data-lucide="search"></i></button></span></th>
-                            <th><span class="student-th-with-search">Status <button type="button" class="student-column-search-btn" title="Search Status" onclick="openStudentColumnSearch('status', 'Status')"><i data-lucide="search"></i></button></span></th>
+                            <th>Student ID</th>
+                            <th>Roll No</th>
+                            <th>Name</th>
+                            <th>Father Name</th>
+                            <th>DOB</th>
+                            <th>Class</th>
+                            <th>Campus</th>
+                            <th>Gender</th>
+                            <th>Fee Status</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -1181,6 +1452,9 @@
                 <div class="student-view-item"><strong>Gender</strong><span id="viewStudentGender">-</span></div>
                 <div class="student-view-item"><strong>Status</strong><span id="viewStudentStatus">-</span></div>
                 <div class="student-view-item"><strong>Parent Phone</strong><span id="viewStudentPhone">-</span></div>
+                <div class="student-view-item"><strong>Address</strong><span id="viewStudentAddress">-</span></div>
+                <div class="student-view-item"><strong>Guardian Name</strong><span id="viewStudentGuardianName">-</span></div>
+                <div class="student-view-item"><strong>Guardian Contact</strong><span id="viewStudentGuardianContact">-</span></div>
                 <div class="student-view-item"><strong>Email</strong><span id="viewStudentEmail">-</span></div>
                 <div class="student-view-item"><strong>Username</strong><span id="viewStudentUsername">-</span></div>
             </div>
@@ -1190,9 +1464,24 @@
         </div>
     </div>
 
-    <script src="auth.js"></script>
-    <script src="script.js"></script>
+    <script src="auth.js?v=20260520-sidebar-requested-order"></script>
+    <script src="script.js?v=20260708-zero-fee-student"></script>
     <script>
+        window.togglePasswordVisibility = window.togglePasswordVisibility || function (targetId, toggleBtn) {
+            const input = document.getElementById(targetId);
+            if (!input) return false;
+            const show = input.type === 'password';
+            input.type = show ? 'text' : 'password';
+            if (toggleBtn) {
+                toggleBtn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+                toggleBtn.setAttribute('aria-pressed', show ? 'true' : 'false');
+                toggleBtn.setAttribute('title', show ? 'Hide password' : 'Show password');
+                toggleBtn.innerHTML = '<i data-lucide="' + (show ? 'eye-off' : 'eye') + '"></i>';
+            }
+            if (window.lucide && window.lucide.createIcons) window.lucide.createIcons();
+            input.focus({ preventScroll: true });
+            return false;
+        };
         // Init Icons
         lucide.createIcons();
     </script>
