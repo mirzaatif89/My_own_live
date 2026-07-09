@@ -2,17 +2,17 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 :root {
-    --primary-color: #20b0a4;
-    --primary-dark: #0f766e;
+    --primary-color: #2b6cb0;
+    --primary-dark: #1e4f85;
     --secondary-color: #5f6b7a;
-    --accent-color: #5eead4;
-    --bg-color: #f2fbfa;
+    --accent-color: #63b3ed;
+    --bg-color: #f3f8fc;
     --surface-color: #ffffff;
-    --text-primary: #16323f;
+    --text-primary: #17324d;
     --text-secondary: #5f6b7a;
     --success-color: #10b981;
     --danger-color: #ef4444;
-    --border-color: #d6efeb;
+    --border-color: #d5e4f2;
     --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
     --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
     --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
@@ -96,8 +96,8 @@ ul {
     display: flex;
     height: 100vh;
     width: 100%;
-    background: rgba(32, 176, 164, 0.08);
-    /* Light teal background */
+    background: rgba(43, 108, 176, 0.08);
+    /* Light blue background */
     align-items: center;
     justify-content: center;
 }
@@ -128,7 +128,7 @@ ul {
 .login-icon-circle {
     width: min(270px, 100%);
     min-height: 86px;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.22), rgba(15, 118, 110, 0.14));
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.22), rgba(30, 79, 133, 0.14));
     border: 1px solid rgba(255, 255, 255, 0.28);
     border-radius: 8px;
     display: grid;
@@ -147,8 +147,8 @@ ul {
     width: 46px;
     height: 46px;
     border-radius: 8px;
-    background-color: #ecfeff;
-    background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M8 15.5L20 9L32 15.5L20 22L8 15.5Z' fill='%230f766e'/%3E%3Cpath d='M13 19V25.5C13 27.8 16.1 30 20 30C23.9 30 27 27.8 27 25.5V19' stroke='%23115e59' stroke-width='2.2' stroke-linecap='round'/%3E%3Cpath d='M32 16V24' stroke='%2320b0a4' stroke-width='2.2' stroke-linecap='round'/%3E%3Ccircle cx='32' cy='26.5' r='2.4' fill='%2320b0a4'/%3E%3C/svg%3E");
+    background-color: #eff6ff;
+    background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M8 15.5L20 9L32 15.5L20 22L8 15.5Z' fill='%231e4f85'/%3E%3Cpath d='M13 19V25.5C13 27.8 16.1 30 20 30C23.9 30 27 27.8 27 25.5V19' stroke='%23173f6b' stroke-width='2.2' stroke-linecap='round'/%3E%3Cpath d='M32 16V24' stroke='%232b6cb0' stroke-width='2.2' stroke-linecap='round'/%3E%3Ccircle cx='32' cy='26.5' r='2.4' fill='%232b6cb0'/%3E%3C/svg%3E");
     background-position: center;
     background-repeat: no-repeat;
     background-size: 39px 39px;
@@ -251,7 +251,7 @@ ul {
 .input-group input:focus {
     outline: none;
     border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(32, 176, 164, 0.2);
+    box-shadow: 0 0 0 3px rgba(43, 108, 176, 0.2);
 }
 
 .remember-me {
@@ -406,7 +406,7 @@ ul {
 
 .sidebar {
     width: 244px;
-    background: linear-gradient(180deg, #115e59 0%, #0b3f3b 100%);
+    background: linear-gradient(180deg, #1e4f85 0%, #123b65 100%);
     border-right: 1px solid rgba(255, 255, 255, 0.08);
     display: flex;
     flex-direction: column;
@@ -428,9 +428,9 @@ ul {
     min-height: 62px;
     padding: 0.6rem 0.72rem;
     margin-bottom: 1.55rem;
-    border: 1px solid rgba(153, 246, 228, 0.24);
+    border: 1px solid rgba(147, 197, 253, 0.24);
     border-radius: 8px;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.11), rgba(20, 184, 166, 0.09));
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.11), rgba(43, 108, 176, 0.09));
     color: #ffffff;
     text-align: left;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 12px 28px rgba(0, 0, 0, 0.12);
@@ -441,8 +441,8 @@ ul {
     width: 36px;
     height: 36px;
     border-radius: 8px;
-    background-color: #ecfeff;
-    background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M8 15.5L20 9L32 15.5L20 22L8 15.5Z' fill='%230f766e'/%3E%3Cpath d='M13 19V25.5C13 27.8 16.1 30 20 30C23.9 30 27 27.8 27 25.5V19' stroke='%23115e59' stroke-width='2.2' stroke-linecap='round'/%3E%3Cpath d='M32 16V24' stroke='%2320b0a4' stroke-width='2.2' stroke-linecap='round'/%3E%3Ccircle cx='32' cy='26.5' r='2.4' fill='%2320b0a4'/%3E%3C/svg%3E");
+    background-color: #eff6ff;
+    background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M8 15.5L20 9L32 15.5L20 22L8 15.5Z' fill='%231e4f85'/%3E%3Cpath d='M13 19V25.5C13 27.8 16.1 30 20 30C23.9 30 27 27.8 27 25.5V19' stroke='%23173f6b' stroke-width='2.2' stroke-linecap='round'/%3E%3Cpath d='M32 16V24' stroke='%232b6cb0' stroke-width='2.2' stroke-linecap='round'/%3E%3Ccircle cx='32' cy='26.5' r='2.4' fill='%232b6cb0'/%3E%3C/svg%3E");
     background-position: center;
     background-repeat: no-repeat;
     background-size: 31px 31px;
@@ -607,7 +607,7 @@ ul {
     width: 40px;
     height: 40px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #5eead4 0%, #14b8a6 100%);
+    background: linear-gradient(135deg, #63b3ed 0%, #2b6cb0 100%);
     color: white;
     display: flex;
     align-items: center;
@@ -871,7 +871,7 @@ ul {
     position: absolute;
     inset: 0 0 auto 0;
     height: 3px;
-    background: linear-gradient(90deg, #20b0a4 0%, #14b8a6 100%);
+    background: linear-gradient(90deg, #2b6cb0 0%, #3b82c4 100%);
 }
 
 .card:hover {
@@ -915,7 +915,7 @@ ul {
     width: 40px;
     height: 40px;
     border-radius: 50%;
-    background-color: rgba(32, 176, 164, 0.12);
+    background-color: rgba(43, 108, 176, 0.12);
     color: var(--primary-color);
     display: flex;
     align-items: center;
@@ -1440,14 +1440,14 @@ tbody tr:hover {
 /* Hover state matching input glow */
 .action-step-btn:hover {
     border-color: var(--primary-color);
-    box-shadow: 0 0 0 4px rgba(32, 176, 164, 0.1);
+    box-shadow: 0 0 0 4px rgba(43, 108, 176, 0.1);
 }
 
 /* Active state - Styled like an active input field */
 .action-step-btn.active {
     border-color: var(--primary-color);
-    background: rgba(32, 176, 164, 0.03);
-    box-shadow: 0 0 0 4px rgba(32, 176, 164, 0.15);
+    background: rgba(43, 108, 176, 0.03);
+    box-shadow: 0 0 0 4px rgba(43, 108, 176, 0.15);
 }
 
 .action-step-btn.active i,
@@ -1471,7 +1471,7 @@ tbody tr:hover {
 .action-step-btn.btn-save-activate:hover {
     background: var(--primary-dark);
     border-color: var(--primary-dark);
-    box-shadow: 0 4px 12px rgba(32, 176, 164, 0.25);
+    box-shadow: 0 4px 12px rgba(43, 108, 176, 0.25);
     transform: translateY(-1px);
 }
 
@@ -1550,7 +1550,7 @@ tbody tr:hover {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: rgba(32, 176, 164, 0.12);
+    background: rgba(43, 108, 176, 0.12);
     color: var(--primary-dark);
 }
 
@@ -1585,7 +1585,7 @@ tbody tr:hover {
     font: inherit;
     font-weight: 800;
     cursor: pointer;
-    box-shadow: 0 10px 24px rgba(32, 176, 164, 0.24);
+    box-shadow: 0 10px 24px rgba(43, 108, 176, 0.24);
 }
 
 .app-popup-button.secondary {
@@ -1605,7 +1605,7 @@ tbody tr:hover {
 }
 
 .app-popup-button:focus-visible {
-    outline: 3px solid rgba(32, 176, 164, 0.28);
+    outline: 3px solid rgba(43, 108, 176, 0.28);
     outline-offset: 3px;
 }
 
@@ -1675,7 +1675,7 @@ tbody tr:hover {
     justify-content: center;
     padding: 1.25rem;
     background:
-        radial-gradient(circle at 12% 15%, rgba(32, 176, 164, 0.34), rgba(32, 176, 164, 0) 55%),
+        radial-gradient(circle at 12% 15%, rgba(43, 108, 176, 0.34), rgba(43, 108, 176, 0) 55%),
         radial-gradient(circle at 88% 18%, rgba(59, 130, 246, 0.28), rgba(59, 130, 246, 0) 55%),
         radial-gradient(circle at 50% 100%, rgba(14, 165, 233, 0.18), rgba(14, 165, 233, 0) 60%),
         linear-gradient(135deg, rgba(15, 23, 42, 0.58), rgba(15, 23, 42, 0.35));
@@ -1724,7 +1724,7 @@ tbody tr:hover {
 .edu-welcome-card::before {
     top: -130px;
     left: -90px;
-    background: radial-gradient(circle at 30% 30%, rgba(32, 176, 164, 0.55), rgba(32, 176, 164, 0));
+    background: radial-gradient(circle at 30% 30%, rgba(43, 108, 176, 0.55), rgba(43, 108, 176, 0));
     animation: eduWelcomeBlob 2.8s ease-in-out infinite alternate;
 }
 
@@ -1743,16 +1743,16 @@ tbody tr:hover {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(32, 176, 164, 0.12);
+    background: rgba(43, 108, 176, 0.12);
     color: var(--primary-color);
-    border: 1px solid rgba(32, 176, 164, 0.24);
+    border: 1px solid rgba(43, 108, 176, 0.24);
     position: relative;
     animation: eduWelcomeIconPop 900ms ease-out both;
 }
 
 .edu-welcome-logo-wrap {
     background: #ffffff;
-    border-color: rgba(32, 176, 164, 0.32);
+    border-color: rgba(43, 108, 176, 0.32);
     box-shadow: 0 14px 32px rgba(15, 23, 42, 0.16);
     padding: 10px;
 }
@@ -1771,8 +1771,8 @@ tbody tr:hover {
     width: 92px;
     height: 92px;
     border-radius: 999px;
-    border: 1px solid rgba(32, 176, 164, 0.25);
-    box-shadow: 0 0 0 10px rgba(32, 176, 164, 0.08);
+    border: 1px solid rgba(43, 108, 176, 0.25);
+    box-shadow: 0 0 0 10px rgba(43, 108, 176, 0.08);
     opacity: 0;
     animation: eduWelcomeRing 1.4s ease-out infinite;
     pointer-events: none;
@@ -1809,7 +1809,7 @@ tbody tr:hover {
     inset: -2px;
     pointer-events: none;
     background:
-        radial-gradient(circle at 20% 10%, rgba(32, 176, 164, 0.45), rgba(32, 176, 164, 0) 45%),
+        radial-gradient(circle at 20% 10%, rgba(43, 108, 176, 0.45), rgba(43, 108, 176, 0) 45%),
         radial-gradient(circle at 80% 0%, rgba(59, 130, 246, 0.35), rgba(59, 130, 246, 0) 50%);
     opacity: 0;
     animation: eduWelcomeGlow 900ms ease-out both;
@@ -1830,7 +1830,7 @@ tbody tr:hover {
     left: -40%;
     height: 100%;
     width: 40%;
-    background: linear-gradient(90deg, rgba(32, 176, 164, 0), rgba(32, 176, 164, 0.9), rgba(59, 130, 246, 0.9), rgba(59, 130, 246, 0));
+    background: linear-gradient(90deg, rgba(43, 108, 176, 0), rgba(43, 108, 176, 0.9), rgba(99, 179, 237, 0.9), rgba(99, 179, 237, 0));
     animation: eduWelcomeSweep 1000ms ease-out both;
 }
 
@@ -2517,7 +2517,7 @@ button {
 .table-action-select:focus {
     outline: none;
     border-color: var(--primary-color);
-    box-shadow: 0 0 0 2px rgba(32, 176, 164, 0.16);
+    box-shadow: 0 0 0 2px rgba(43, 108, 176, 0.16);
 }
 
 /* Student table readability fix: keep name/father columns from collapsing */
