@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Exam Result - Apexiums School</title>
+    <title>Exam Result - MyOwn School</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -13,13 +13,7 @@
 <body>
     <div class="dashboard-container">
         <aside class="sidebar">
-            <div class="logo-section">
-                <i data-lucide="graduation-cap" style="font-size: 2.5rem; margin-bottom: 0.5rem;"></i>
-                <div style="display: flex; flex-direction: column; align-items: center; gap: 0;">
-                    <span style="font-size: 1rem; line-height: 1.2;">Apexiums School</span>
-                    <span style="font-size: 1rem; line-height: 1.2;">System</span>
-                </div>
-            </div>
+            <div class="logo-section" aria-label="MyOwn School Jand"></div>
 
             <nav class="nav-links">
                 <a href="dashboard.html" class="nav-item">
@@ -154,7 +148,7 @@
                             <div class="result-form-section">
                                 <h4>Date Sheet Header</h4>
                                 <div class="result-form-fields">
-                                    <label>School Name<input type="text" id="dateSheetSchoolName" value="Apexiums School" placeholder="Enter school name"></label>
+                                    <label>School Name<input type="text" id="dateSheetSchoolName" value="MyOwn School" placeholder="Enter school name"></label>
                                     <label>Exam Title<input type="text" id="dateSheetExamTitle" placeholder="Enter exam title"></label>
                                     <label>Session<input type="text" id="dateSheetSession" placeholder="Enter session"></label>
                                     <label>Target Class / Group<input type="text" id="dateSheetClassGroup" placeholder="Enter class / group"></label>
@@ -196,7 +190,7 @@
                                     <div class="date-sheet-header-top">
                                         <img class="date-sheet-logo" src="images/logo.jpeg" alt="School logo">
                                         <div>
-                                            <h2 id="previewDateSheetSchoolName">Apexiums School</h2>
+                                            <h2 id="previewDateSheetSchoolName">MyOwn School</h2>
                                             <p id="previewDateSheetCampus"></p>
                                         </div>
                                         <img class="date-sheet-logo" src="images/logo.jpeg" alt="School logo">
@@ -237,11 +231,11 @@
                     <div class="exam-builder-header">
                         <div>
                             <h3>Result Card Details</h3>
-                            <p>Fill out the form, review the preview, then print the card.</p>
+                            <p>Select a student, enter marks, then upload the result into the saved archive.</p>
                         </div>
                         <div class="exam-builder-actions">
                             <button type="button" class="btn btn-outline" id="saveResultCardBtn">
-                                <i data-lucide="save" size="16"></i> Save Result
+                                <i data-lucide="upload-cloud" size="16"></i> Upload Result
                             </button>
                             <button type="button" class="btn btn-outline" id="resetResultCardBtn">
                                 <i data-lucide="rotate-ccw" size="16"></i> Reset
@@ -259,8 +253,8 @@
                         <div class="result-form-section">
                             <h4>School Header</h4>
                             <div class="result-form-fields">
-                                <label>School Name<input type="text" id="schoolName" value="Apexiums School" placeholder="Enter school name"></label>
-                                <label>Campus / Branch<input type="text" id="campusName" placeholder="Enter campus / branch"></label>
+                                <label>School Name<input type="text" id="schoolName" value="MyOwn School" placeholder="Enter school name"></label>
+                                <label>Campus / Branch<select id="campusName"></select></label>
                                 <label>Contact Line<input type="text" id="schoolContact" placeholder="Enter contact line"></label>
                                 <label>Term Title<input type="text" id="termTitle" placeholder="Enter term title"></label>
                                 <input type="hidden" id="leftLogoUrl">
@@ -268,7 +262,7 @@
                                     <i data-lucide="shield-check" size="18"></i>
                                     <div>
                                         <strong>Fixed Result Card Logo</strong>
-                                        <span>The Apexiums logo at images/logo.jpeg will print on every result card.</span>
+                                        <span>The MyOwn School logo at images/logo.jpeg will print on every result card.</span>
                                     </div>
                                 </div>
                             </div>
@@ -277,12 +271,22 @@
                         <div class="result-form-section">
                             <h4>Student Info</h4>
                             <div class="result-form-fields">
-                                <label>Student ID / Code
+                                <label>Campus
+                                    <select id="resultCampusFilter"></select>
+                                </label>
+                                <label>Class
+                                    <select id="resultClassFilter"></select>
+                                </label>
+                                <label>Student
+                                    <select id="resultStudentSelect"></select>
+                                </label>
+                                <label>Student ID
                                     <div class="inline-field-action">
-                                        <input type="text" id="studentLookupId" placeholder="Enter student ID, student code, or roll number">
+                                        <input type="text" id="studentLookupId" placeholder="Enter student ID, code, or roll number">
                                         <button type="button" class="btn btn-outline" id="loadStudentResultBtn">Load Student</button>
                                     </div>
                                 </label>
+                                <label>Roll Number<input type="text" id="studentRollNo" placeholder="Student roll number"></label>
                                 <label>Student Name<input type="text" id="studentName" placeholder="Enter student name"></label>
                                 <label>Father's Name<input type="text" id="fatherName" placeholder="Enter father's name"></label>
                                 <label>Grade / Class<input type="text" id="studentGrade" placeholder="Enter grade / class"></label>
@@ -341,13 +345,24 @@
                             <div class="result-card-topbar">
                                 <div class="result-logo-box"><img id="previewLeftLogo" alt="Left school logo"></div>
                                 <div class="result-school-center">
-                                    <h2 id="previewSchoolName">Apexiums School</h2>
+                                    <h2 id="previewSchoolName">MyOwn School</h2>
                                     <p id="previewCampusName"></p>
                                     <p id="previewSchoolContact"></p>
                                 </div>
                             </div>
 
                             <div class="result-term-title" id="previewTermTitle"></div>
+
+                            <div class="student-meta-row">
+                                <div class="meta-field">
+                                    <span>Student ID:</span>
+                                    <strong id="previewStudentId"></strong>
+                                </div>
+                                <div class="meta-field">
+                                    <span>Roll No:</span>
+                                    <strong id="previewRollNo"></strong>
+                                </div>
+                            </div>
 
                             <div class="student-meta-row">
                                 <div class="meta-field">
@@ -458,8 +473,26 @@
                         </div>
                     </div>
 
+                    <div class="result-schedule-panel">
+                        <div>
+                            <h4>Portal Result Schedule</h4>
+                            <p>Select campus and class, then set the date when those students can view saved results in their portals.</p>
+                        </div>
+                        <div class="result-schedule-fields">
+                            <label>Campus<select id="resultScheduleCampus"></select></label>
+                            <label>Class<select id="resultScheduleClass"></select></label>
+                            <label>Show On Portal From<input type="date" id="resultPublishDate"></label>
+                            <button type="button" class="btn btn-primary" id="saveResultScheduleBtn">
+                                <i data-lucide="calendar-check" size="16"></i> Set Schedule
+                            </button>
+                        </div>
+                        <div class="result-schedule-list" id="resultScheduleList"></div>
+                    </div>
+
                     <div class="result-history-toolbar">
                         <input type="text" id="resultHistorySearch" placeholder="Search by student name, ID, class, or term">
+                        <select id="resultHistoryCampusFilter"></select>
+                        <select id="resultHistoryClassFilter"></select>
                     </div>
 
                     <div class="table-container result-history-table-wrap">
@@ -467,7 +500,9 @@
                             <thead>
                                 <tr>
                                     <th>Student</th>
-                                    <th>Student ID / Code</th>
+                                    <th>Student ID</th>
+                                    <th>Roll No</th>
+                                    <th>Campus</th>
                                     <th>Class</th>
                                     <th>Term</th>
                                     <th>Total Marks</th>
@@ -626,17 +661,91 @@
         }
 
         .result-history-toolbar {
+            display: grid;
+            grid-template-columns: minmax(220px, 1fr) minmax(160px, 220px) minmax(160px, 220px);
+            gap: 0.75rem;
             margin-top: 1.25rem;
             margin-bottom: 1rem;
         }
 
-        .result-history-toolbar input {
+        .result-history-toolbar input,
+        .result-history-toolbar select {
             width: 100%;
             border: 1px solid var(--border-color);
             border-radius: 12px;
             padding: 0.85rem 0.95rem;
             font: inherit;
             background: #fff;
+        }
+
+        .result-schedule-panel {
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            background: #f8fafc;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+
+        .result-schedule-panel h4 {
+            margin: 0 0 0.35rem;
+        }
+
+        .result-schedule-panel p {
+            margin: 0;
+            color: var(--text-secondary);
+        }
+
+        .result-schedule-fields {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0.8rem;
+            align-items: end;
+            margin-top: 1rem;
+        }
+
+        .result-schedule-fields label {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .result-schedule-fields select,
+        .result-schedule-fields input {
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 0.8rem 0.9rem;
+            font: inherit;
+            background: #fff;
+            width: 100%;
+        }
+
+        .result-schedule-list {
+            display: grid;
+            gap: 0.6rem;
+            margin-top: 1rem;
+        }
+
+        .result-schedule-item {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            align-items: center;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            background: #fff;
+            padding: 0.8rem 0.9rem;
+        }
+
+        .result-schedule-item strong {
+            display: block;
+        }
+
+        .result-schedule-item span {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
         }
 
         .result-history-table-wrap {
@@ -764,6 +873,7 @@
         }
 
         .result-form-fields input,
+        .result-form-fields select,
         .result-form-fields textarea,
         .dynamic-row input {
             border: 1px solid var(--border-color);
@@ -1179,6 +1289,8 @@
             .result-form-fields,
             .dynamic-row,
             .behavior-editor .dynamic-row,
+            .result-history-toolbar,
+            .result-schedule-fields,
             .student-meta-row,
             .remarks-signatures,
             .performance-grid,
@@ -1626,6 +1738,7 @@
         const RESULT_CARD_STORAGE_KEY = 'APEXIUMS_RESULT_CARD_V1';
         const RESULT_CARD_ARCHIVE_LEGACY_KEY = 'APEXIUMS_RESULT_CARD_ARCHIVE_V1';
         const RESULT_CARD_ARCHIVE_KEY = 'APEXIUMS_RESULT_CARD_ARCHIVE_V2';
+        const RESULT_PUBLISH_SCHEDULE_KEY = 'APEXIUMS_RESULT_PUBLISH_SCHEDULE_V1';
         const RESULT_CARD_STUDENT_KEY = 'eduCore_students';
         const defaultScheduleRows = [];
         const defaultSubjects = [];
@@ -1683,6 +1796,71 @@
 
         function saveResultArchive(records) {
             localStorage.setItem(RESULT_CARD_ARCHIVE_KEY, JSON.stringify(records));
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            })[char]);
+        }
+
+        function normalizeResultValue(value) {
+            return String(value || '').trim().toLowerCase();
+        }
+
+        function normalizeResultClass(value) {
+            return normalizeResultValue(value).replace(/\bclass\b/g, '').replace(/[^a-z0-9]/g, '');
+        }
+
+        function readResultStudents() {
+            try {
+                const students = JSON.parse(localStorage.getItem(RESULT_CARD_STUDENT_KEY) || '[]');
+                return Array.isArray(students) ? students : [];
+            } catch (error) {
+                return [];
+            }
+        }
+
+        function getStudentCampus(student = {}) {
+            return student.campusName || student.campus || student.branchName || '';
+        }
+
+        function getStudentClass(student = {}) {
+            return student.classGrade || student.className || student.grade || '';
+        }
+
+        function getStudentLookup(student = {}) {
+            return student.studentCode || student.rollNo || student.id || '';
+        }
+
+        function getStudentInternalId(student = {}) {
+            return student.id || student.profileId || '';
+        }
+
+        function getUniqueValues(values) {
+            return Array.from(new Set(values.map((value) => String(value || '').trim()).filter(Boolean)));
+        }
+
+        function ensureSelectOption(select, value) {
+            if (!select || !value) return;
+            if (![...select.options].some((option) => option.value === value)) {
+                select.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`);
+            }
+        }
+
+        function setSelectOptions(selectId, values, placeholder = 'Select') {
+            const select = document.getElementById(selectId);
+            if (!select) return;
+            const currentValue = select.value;
+            const options = getUniqueValues(values);
+            select.innerHTML = `<option value="">${escapeHtml(placeholder)}</option>` + options.map((value) => (
+                `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`
+            )).join('');
+            if (currentValue && options.includes(currentValue)) select.value = currentValue;
         }
 
         function clearLegacyResultArchive() {
@@ -1776,7 +1954,7 @@
 
         function refreshDateSheetPreview() {
             const rows = readScheduleRows();
-            document.getElementById('previewDateSheetSchoolName').textContent = document.getElementById('dateSheetSchoolName').value || 'Apexiums School';
+            document.getElementById('previewDateSheetSchoolName').textContent = document.getElementById('dateSheetSchoolName').value || 'MyOwn School';
             document.getElementById('previewDateSheetExamTitle').textContent = document.getElementById('dateSheetExamTitle').value || '';
             document.getElementById('previewDateSheetSession').textContent = document.getElementById('dateSheetSession').value || '';
             document.getElementById('previewDateSheetClassGroup').textContent = document.getElementById('dateSheetClassGroup').value || '';
@@ -1872,6 +2050,7 @@
                 schoolContact: document.getElementById('schoolContact').value,
                 termTitle: document.getElementById('termTitle').value,
                 studentLookupId: document.getElementById('studentLookupId').value,
+                studentRollNo: document.getElementById('studentRollNo').value,
                 studentName: document.getElementById('studentName').value,
                 fatherName: document.getElementById('fatherName').value,
                 studentGrade: document.getElementById('studentGrade').value,
@@ -1890,9 +2069,13 @@
             return {
                 id: document.getElementById('studentLookupId').value.trim() || `result-${Date.now()}`,
                 studentLookupId: document.getElementById('studentLookupId').value.trim(),
+                studentId: document.getElementById('studentLookupId').value.trim(),
+                rollNo: document.getElementById('studentRollNo').value.trim(),
+                studentRollNo: document.getElementById('studentRollNo').value.trim(),
                 studentName: document.getElementById('studentName').value.trim(),
                 fatherName: document.getElementById('fatherName').value.trim(),
                 studentGrade: document.getElementById('studentGrade').value.trim(),
+                classGrade: document.getElementById('studentGrade').value.trim(),
                 positionGrade: document.getElementById('positionGrade').value.trim(),
                 teacherRemarks: document.getElementById('teacherRemarks').value.trim(),
                 teacherSignature: document.getElementById('teacherSignature').value.trim(),
@@ -1911,6 +2094,11 @@
 
         function applyResultRecord(record = {}) {
             fillFormState(record);
+            ensureSelectOption(document.getElementById('resultCampusFilter'), record.campusName || '');
+            ensureSelectOption(document.getElementById('resultClassFilter'), record.studentGrade || record.classGrade || '');
+            document.getElementById('resultCampusFilter').value = record.campusName || '';
+            document.getElementById('resultClassFilter').value = record.studentGrade || record.classGrade || '';
+            populateResultStudentSelect();
             renderDynamicEditors(record);
             refreshResultCardPreview();
         }
@@ -1933,8 +2121,11 @@
             }
 
             saveResultArchive(archive);
+            populateResultPageSelectors();
             renderResultHistoryList();
-            alert('Result card saved successfully.');
+            toggleExamSection('resultHistoryCard');
+            document.getElementById('resultHistoryCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            alert('Result uploaded and saved successfully.');
         }
 
         function loadResultFromArchive(recordId, termTitle) {
@@ -1974,21 +2165,105 @@
             };
         }
 
+        function loadResultPublishSchedules() {
+            try {
+                const schedules = JSON.parse(localStorage.getItem(RESULT_PUBLISH_SCHEDULE_KEY) || '[]');
+                return Array.isArray(schedules) ? schedules : [];
+            } catch (error) {
+                return [];
+            }
+        }
+
+        function saveResultPublishSchedules(schedules) {
+            localStorage.setItem(RESULT_PUBLISH_SCHEDULE_KEY, JSON.stringify(schedules));
+        }
+
+        function getResultScheduleForRecord(record = {}) {
+            const campus = normalizeResultValue(record.campusName);
+            const className = normalizeResultClass(record.studentGrade || record.classGrade);
+            return loadResultPublishSchedules().find((item) => (
+                normalizeResultValue(item.campusName) === campus &&
+                normalizeResultClass(item.classGrade) === className
+            )) || null;
+        }
+
+        function getResultPublishStatus(record = {}) {
+            const schedule = getResultScheduleForRecord(record);
+            if (!schedule?.publishDate) return 'Not scheduled';
+            const today = new Date().toISOString().slice(0, 10);
+            return schedule.publishDate <= today ? `Published ${schedule.publishDate}` : `Scheduled ${schedule.publishDate}`;
+        }
+
+        function renderResultScheduleList() {
+            const container = document.getElementById('resultScheduleList');
+            if (!container) return;
+            const schedules = loadResultPublishSchedules();
+            container.innerHTML = schedules.length ? schedules.map((item) => `
+                <div class="result-schedule-item">
+                    <div>
+                        <strong>${escapeHtml(item.campusName || '-')} / ${escapeHtml(item.classGrade || '-')}</strong>
+                        <span>Portal show date: ${escapeHtml(item.publishDate || '-')}</span>
+                    </div>
+                    <button type="button" class="btn btn-outline result-schedule-delete" data-schedule-id="${escapeHtml(item.id || '')}">Delete</button>
+                </div>
+            `).join('') : '<div class="empty-state-note">No portal result schedule has been set yet.</div>';
+        }
+
+        function saveResultPortalSchedule() {
+            const campusName = document.getElementById('resultScheduleCampus')?.value.trim() || '';
+            const classGrade = document.getElementById('resultScheduleClass')?.value.trim() || '';
+            const publishDate = document.getElementById('resultPublishDate')?.value || '';
+
+            if (!campusName || !classGrade || !publishDate) {
+                alert('Select campus, class, and portal show date first.');
+                return;
+            }
+
+            const schedules = loadResultPublishSchedules();
+            const existingIndex = schedules.findIndex((item) => (
+                normalizeResultValue(item.campusName) === normalizeResultValue(campusName) &&
+                normalizeResultClass(item.classGrade) === normalizeResultClass(classGrade)
+            ));
+            const record = {
+                id: `${normalizeResultValue(campusName)}__${normalizeResultClass(classGrade)}`,
+                campusName,
+                classGrade,
+                publishDate,
+                updatedAt: new Date().toISOString()
+            };
+
+            if (existingIndex >= 0) schedules[existingIndex] = { ...schedules[existingIndex], ...record };
+            else schedules.unshift(record);
+
+            saveResultPublishSchedules(schedules);
+            renderResultScheduleList();
+            renderResultHistoryList(document.getElementById('resultHistorySearch')?.value || '');
+            alert('Portal result schedule saved.');
+        }
+
         function renderResultHistoryList(searchTerm = '') {
             const body = document.getElementById('resultHistoryTableBody');
             const emptyState = document.getElementById('resultHistoryEmptyState');
             if (!body || !emptyState) return;
 
             const normalizedTerm = String(searchTerm || '').trim().toLowerCase();
+            const campusFilter = normalizeResultValue(document.getElementById('resultHistoryCampusFilter')?.value || '');
+            const classFilter = normalizeResultClass(document.getElementById('resultHistoryClassFilter')?.value || '');
             const rows = loadResultArchive().filter((item) => {
                 const haystack = [
                     item.studentName,
                     item.studentLookupId,
+                    item.rollNo,
+                    item.studentRollNo,
+                    item.campusName,
                     item.studentGrade,
                     item.termTitle
                 ].join(' ').toLowerCase();
 
-                return !normalizedTerm || haystack.includes(normalizedTerm);
+                if (normalizedTerm && !haystack.includes(normalizedTerm)) return false;
+                if (campusFilter && normalizeResultValue(item.campusName) !== campusFilter) return false;
+                if (classFilter && normalizeResultClass(item.studentGrade || item.classGrade) !== classFilter) return false;
+                return true;
             });
 
             body.innerHTML = rows.map((item) => {
@@ -1997,13 +2272,15 @@
                     <tr>
                         <td>${item.studentName || '-'}</td>
                         <td>${item.studentLookupId || '-'}</td>
+                        <td>${item.rollNo || item.studentRollNo || '-'}</td>
+                        <td>${item.campusName || '-'}</td>
                         <td>${item.studentGrade || '-'}</td>
                         <td>${item.termTitle || '-'}</td>
                         <td>${summary.totalMarks}</td>
                         <td>${summary.obtainedMarks}</td>
                         <td>${summary.percentage}</td>
                         <td>${summary.positionGrade}</td>
-                        <td>${summary.passStatus}</td>
+                        <td>${summary.passStatus}<br><small>${escapeHtml(getResultPublishStatus(item))}</small></td>
                         <td>${formatArchiveDate(item.updatedAt)}</td>
                         <td>
                             <div class="result-history-actions">
@@ -2053,12 +2330,14 @@
         }
 
         function fillFormState(savedState = {}) {
+            ensureSelectOption(document.getElementById('campusName'), savedState.campusName || '');
             [
                 'schoolName', 'campusName', 'schoolContact', 'termTitle',
-                'studentLookupId', 'studentName', 'fatherName', 'studentGrade', 'positionGrade',
+                'studentLookupId', 'studentRollNo', 'studentName', 'fatherName', 'studentGrade', 'positionGrade',
                 'teacherRemarks', 'teacherSignature', 'principalSignature', 'parentSignature'
             ].forEach((id) => {
-                if (savedState[id]) document.getElementById(id).value = savedState[id];
+                const value = id === 'studentRollNo' ? (savedState[id] || savedState.rollNo) : savedState[id];
+                if (value) document.getElementById(id).value = value;
             });
         }
 
@@ -2086,16 +2365,70 @@
 
         function applyBranchDetailsToResultCard(campusName) {
             const branchDetails = getResultBranchContactDetails(campusName);
-            document.getElementById('campusName').value = branchDetails.campusLabel;
+            const campusSelect = document.getElementById('campusName');
+            const campusLabel = String(campusName || '').trim() || branchDetails.campusLabel;
+            ensureSelectOption(campusSelect, campusLabel);
+            campusSelect.value = campusLabel;
             document.getElementById('schoolContact').value = branchDetails.contactLine;
+        }
+
+        function populateResultPageSelectors() {
+            const students = readResultStudents();
+            const archived = loadResultArchive();
+            const campuses = getUniqueValues([
+                ...students.map(getStudentCampus),
+                ...archived.map((record) => record.campusName)
+            ]);
+            const classes = getUniqueValues([
+                ...students.map(getStudentClass),
+                ...archived.map((record) => record.studentGrade || record.classGrade)
+            ]);
+
+            setSelectOptions('campusName', campuses, 'Select campus');
+            setSelectOptions('resultCampusFilter', campuses, 'All campuses');
+            setSelectOptions('resultClassFilter', classes, 'All classes');
+            setSelectOptions('resultScheduleCampus', campuses, 'Select campus');
+            setSelectOptions('resultScheduleClass', classes, 'Select class');
+            setSelectOptions('resultHistoryCampusFilter', campuses, 'All campuses');
+            setSelectOptions('resultHistoryClassFilter', classes, 'All classes');
+            populateResultStudentSelect();
+        }
+
+        function populateResultStudentSelect() {
+            const select = document.getElementById('resultStudentSelect');
+            if (!select) return;
+            const campusFilter = normalizeResultValue(document.getElementById('resultCampusFilter')?.value || '');
+            const classFilter = normalizeResultClass(document.getElementById('resultClassFilter')?.value || '');
+            const students = readResultStudents().filter((student) => {
+                if (campusFilter && normalizeResultValue(getStudentCampus(student)) !== campusFilter) return false;
+                if (classFilter && normalizeResultClass(getStudentClass(student)) !== classFilter) return false;
+                return true;
+            });
+
+            select.innerHTML = '<option value="">Select student</option>' + students.map((student) => {
+                const value = getStudentLookup(student);
+                const label = `${student.fullName || student.name || value || 'Student'} - ID: ${student.studentCode || value || '-'} - Roll: ${student.rollNo || '-'} - ${getStudentClass(student) || '-'} - ${getStudentCampus(student) || '-'}`;
+                return `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`;
+            }).join('');
+        }
+
+        function syncStudentFiltersFromStudent(student = {}) {
+            const campus = getStudentCampus(student);
+            const className = getStudentClass(student);
+            ensureSelectOption(document.getElementById('resultCampusFilter'), campus);
+            ensureSelectOption(document.getElementById('resultClassFilter'), className);
+            document.getElementById('resultCampusFilter').value = campus || '';
+            document.getElementById('resultClassFilter').value = className || '';
+            populateResultStudentSelect();
+            ensureSelectOption(document.getElementById('resultStudentSelect'), getStudentLookup(student));
+            document.getElementById('resultStudentSelect').value = getStudentLookup(student) || '';
         }
 
         function findStudentForResultCard(query) {
             const normalizedQuery = String(query || '').trim().toLowerCase();
             if (!normalizedQuery) return null;
 
-            const students = JSON.parse(localStorage.getItem(RESULT_CARD_STUDENT_KEY) || '[]');
-            return students.find((student) => {
+            return readResultStudents().find((student) => {
                 const candidates = [
                     student.id,
                     student.studentCode,
@@ -2115,12 +2448,21 @@
                 return;
             }
 
-            document.getElementById('studentLookupId').value = student.id || student.studentCode || student.rollNo || lookupValue;
-            document.getElementById('studentName').value = student.fullName || '';
+            document.getElementById('studentLookupId').value = student.studentCode || lookupValue;
+            document.getElementById('studentRollNo').value = student.rollNo || '';
+            document.getElementById('studentName').value = student.fullName || student.name || '';
             document.getElementById('fatherName').value = student.fatherName || '';
-            document.getElementById('studentGrade').value = student.classGrade || '';
-            applyBranchDetailsToResultCard(student.campusName);
+            document.getElementById('studentGrade').value = getStudentClass(student);
+            syncStudentFiltersFromStudent(student);
+            applyBranchDetailsToResultCard(getStudentCampus(student));
             refreshResultCardPreview();
+        }
+
+        function loadSelectedStudentIntoResultCard() {
+            const selectedId = document.getElementById('resultStudentSelect')?.value || '';
+            if (!selectedId) return;
+            document.getElementById('studentLookupId').value = selectedId;
+            loadStudentIntoResultCard();
         }
 
         function updateLogo(logoId, value) {
@@ -2153,20 +2495,20 @@
         }
 
         function removeStudentIdFieldsFromResultCard() {
-            document.querySelectorAll('#previewStudentId, #previewStudentCode, #previewRollNo, .result-student-id, .result-student-code, .result-roll-no').forEach((element) => {
-                element.remove();
-            });
+            // Student ID and roll number are part of the printable result card.
         }
 
         function refreshResultCardPreview() {
             const subjects = readSubjectRows();
             const behaviors = readBehaviorRows();
 
-            document.getElementById('previewSchoolName').textContent = document.getElementById('schoolName').value || 'Apexiums School';
+            document.getElementById('previewSchoolName').textContent = document.getElementById('schoolName').value || 'MyOwn School';
             document.getElementById('previewCampusName').textContent = document.getElementById('campusName').value || '';
             document.getElementById('previewSchoolContact').textContent = document.getElementById('schoolContact').value || '';
             document.getElementById('previewTermTitle').textContent = document.getElementById('termTitle').value || '';
             updateLogo('previewLeftLogo', STATIC_RESULT_LOGO);
+            document.getElementById('previewStudentId').textContent = document.getElementById('studentLookupId').value || '';
+            document.getElementById('previewRollNo').textContent = document.getElementById('studentRollNo').value || '';
             document.getElementById('previewStudentName').textContent = document.getElementById('studentName').value || '';
             document.getElementById('previewFatherName').textContent = document.getElementById('fatherName').value || '';
             document.getElementById('previewStudentGrade').textContent = document.getElementById('studentGrade').value || '';
@@ -2217,13 +2559,15 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             clearLegacyResultArchive();
-            toggleExamSection('resultBuilderCard');
+            const initialSectionId = window.location.hash === '#resultHistoryCard' ? 'resultHistoryCard' : 'resultBuilderCard';
+            toggleExamSection(initialSectionId);
             const dateSheetState = loadDateSheetState();
             const savedState = loadResultCardState();
             renderScheduleRows(dateSheetState);
             fillDateSheetForm(dateSheetState);
             refreshDateSheetPreview();
             renderDynamicEditors(savedState);
+            populateResultPageSelectors();
             fillFormState(savedState);
             refreshResultCardPreview();
             document.querySelectorAll('.exam-module-card').forEach((card) => {
@@ -2244,6 +2588,17 @@
             });
             document.getElementById('resetDateSheetBtn').addEventListener('click', resetDateSheet);
             document.getElementById('resultCardForm').addEventListener('input', refreshResultCardPreview);
+            document.getElementById('resultCampusFilter')?.addEventListener('change', () => {
+                populateResultStudentSelect();
+            });
+            document.getElementById('resultClassFilter')?.addEventListener('change', () => {
+                populateResultStudentSelect();
+            });
+            document.getElementById('resultStudentSelect')?.addEventListener('change', loadSelectedStudentIntoResultCard);
+            document.getElementById('campusName')?.addEventListener('change', () => {
+                applyBranchDetailsToResultCard(document.getElementById('campusName').value);
+                refreshResultCardPreview();
+            });
             document.getElementById('loadStudentResultBtn').addEventListener('click', loadStudentIntoResultCard);
             document.getElementById('studentLookupId').addEventListener('keydown', (event) => {
                 if (event.key === 'Enter') {
@@ -2254,6 +2609,21 @@
             document.getElementById('saveResultCardBtn').addEventListener('click', saveCurrentResultToArchive);
             document.getElementById('resultHistorySearch').addEventListener('input', (event) => {
                 renderResultHistoryList(event.target.value);
+            });
+            document.getElementById('resultHistoryCampusFilter')?.addEventListener('change', () => {
+                renderResultHistoryList(document.getElementById('resultHistorySearch')?.value || '');
+            });
+            document.getElementById('resultHistoryClassFilter')?.addEventListener('change', () => {
+                renderResultHistoryList(document.getElementById('resultHistorySearch')?.value || '');
+            });
+            document.getElementById('saveResultScheduleBtn')?.addEventListener('click', saveResultPortalSchedule);
+            document.getElementById('resultScheduleList')?.addEventListener('click', (event) => {
+                const button = event.target.closest('.result-schedule-delete');
+                if (!button) return;
+                const scheduleId = button.dataset.scheduleId || '';
+                saveResultPublishSchedules(loadResultPublishSchedules().filter((item) => String(item.id) !== String(scheduleId)));
+                renderResultScheduleList();
+                renderResultHistoryList(document.getElementById('resultHistorySearch')?.value || '');
             });
             document.getElementById('resultHistoryTableBody').addEventListener('click', (event) => {
                 const button = event.target.closest('.result-history-btn');
@@ -2288,6 +2658,7 @@
                 printSection('print-result', 'bw');
             });
             document.getElementById('resetResultCardBtn').addEventListener('click', resetResultCard);
+            renderResultScheduleList();
             renderResultHistoryList();
             lucide.createIcons();
         });

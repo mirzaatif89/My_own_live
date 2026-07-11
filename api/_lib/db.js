@@ -167,6 +167,22 @@ function defineSpecialNoticeModel(db) {
     });
 }
 
+function defineMessageModel(db) {
+    return db.define('Message', {
+        id: { type: DataTypes.STRING, primaryKey: true },
+        subject: { type: DataTypes.STRING, allowNull: false },
+        body: { type: DataTypes.TEXT('long'), allowNull: false },
+        targetRole: { type: DataTypes.STRING, allowNull: false },
+        targetScope: { type: DataTypes.STRING, allowNull: false },
+        campusName: { type: DataTypes.STRING, allowNull: true },
+        classGrade: { type: DataTypes.STRING, allowNull: true },
+        recipientId: { type: DataTypes.STRING, allowNull: true },
+        recipientName: { type: DataTypes.STRING, allowNull: true },
+        senderName: { type: DataTypes.STRING, allowNull: true },
+        createdAtLabel: DataTypes.STRING
+    });
+}
+
 function defineAppSettingModel(db) {
     return db.define('AppSetting', {
         settingKey: { type: DataTypes.STRING, primaryKey: true },
@@ -289,6 +305,19 @@ async function ensureLegacySchema(db) {
         groupKey: { type: DataTypes.STRING, allowNull: true },
         role: { type: DataTypes.STRING, allowNull: true }
     });
+
+    await ensureTableColumns(db, 'Messages', {
+        subject: { type: DataTypes.STRING, allowNull: false },
+        body: { type: DataTypes.TEXT('long'), allowNull: false },
+        targetRole: { type: DataTypes.STRING, allowNull: false },
+        targetScope: { type: DataTypes.STRING, allowNull: false },
+        campusName: { type: DataTypes.STRING, allowNull: true },
+        classGrade: { type: DataTypes.STRING, allowNull: true },
+        recipientId: { type: DataTypes.STRING, allowNull: true },
+        recipientName: { type: DataTypes.STRING, allowNull: true },
+        senderName: { type: DataTypes.STRING, allowNull: true },
+        createdAtLabel: { type: DataTypes.STRING, allowNull: true }
+    });
 }
 
 async function getDb() {
@@ -322,6 +351,7 @@ async function getDb() {
             defineTeacherAttendanceModel(db);
             defineAppSettingModel(db);
             defineSpecialNoticeModel(db);
+            defineMessageModel(db);
 
             await db.sync();
             await ensureLegacySchema(db);

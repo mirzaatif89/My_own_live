@@ -94,6 +94,7 @@ const MODULE_KEYS = [
     'student_attendance_report',
     'teacher_attendance_report',
     'notifications',
+    'messages',
     'special_notices',
     'exams',
     'revenue',
@@ -119,6 +120,7 @@ const ALLOWED_HOME_PAGES = new Set([
     'student_attendance_report.html',
     'teacher_attendance_report.html',
     'notifications.html',
+    'messages.html',
     'special_notices.html',
     'exams.html',
     'revenue.html',
@@ -181,6 +183,7 @@ const defaultPermissions = {
                 student_attendance_report: 'view',
                 teacher_attendance_report: 'view',
                 notifications: 'manage',
+                messages: 'manage',
                 special_notices: 'manage',
                 exams: 'manage',
                 revenue: 'view',
@@ -204,6 +207,7 @@ const defaultPermissions = {
                 student_attendance: 'edit',
                 exams: 'view',
                 notifications: 'view',
+                messages: 'view',
                 aboutme: 'view'
             })
         }
@@ -1135,6 +1139,164 @@ app.post('/api/class-fees', authenticateToken, async (req, res) => {
     }
 });
 
+function normalizeMessageRole(value) {
+    const role = String(value || '').trim().toLowerCase();
+    if (role === 'student') return 'Student';
+    if (role === 'teacher') return 'Teacher';
+    if (role === 'staff') return 'Staff';
+    return '';
+}
+
+function normalizeMessageScope(value) {
+    const scope = String(value || '').trim().toLowerCase();
+    return ['all', 'campus', 'class', 'individual'].includes(scope) ? scope : '';
+}
+
+function normalizeComparable(value) {
+    return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function formatMessageRecord(record) {
+    const raw = record && typeof record.toJSON === 'function' ? record.toJSON() : record;
+    return {
+        ...raw,
+        targetRole: normalizeMessageRole(raw?.targetRole),
+        targetScope: normalizeMessageScope(raw?.targetScope) || 'all'
+    };
+}
+
+async function getUserMessageProfile(user = {}) {
+    const role = normalizeMessageRole(user.role);
+    const id = String(user.id || '').trim();
+    if (!role || !id) return { role, id };
+
+    if (role === 'Student') {
+        const student = await sequelize.models.Student.findByPk(id);
+        return {
+            role,
+            id,
+            username: user.username || student?.username || '',
+            fullName: student?.fullName || user.fullName || '',
+            campusName: student?.campusName || user.campusName || '',
+            classGrade: student?.classGrade || ''
+        };
+    }
+
+    if (role === 'Teacher') {
+        const teacher = await sequelize.models.Teacher.findByPk(id);
+        return {
+            role,
+            id,
+            username: user.username || teacher?.username || '',
+            fullName: teacher?.fullName || user.fullName || '',
+            campusName: teacher?.campusName || user.campusName || ''
+        };
+    }
+
+    const staff = await sequelize.models.Staff.findByPk(id);
+    return {
+        role,
+        id,
+        username: user.username || staff?.username || '',
+        fullName: staff?.fullName || user.fullName || '',
+        campusName: user.campusName || ''
+    };
+}
+
+function messageMatchesProfile(message = {}, profile = {}) {
+    if (normalizeMessageRole(message.targetRole) !== profile.role) return false;
+    const scope = normalizeMessageScope(message.targetScope) || 'all';
+    if (scope === 'all') return true;
+    if (scope === 'campus') {
+        return normalizeComparable(message.campusName) && normalizeComparable(message.campusName) === normalizeComparable(profile.campusName);
+    }
+    if (scope === 'class') {
+        return profile.role === 'Student'
+            && normalizeComparable(message.campusName) === normalizeComparable(profile.campusName)
+            && normalizeComparable(message.classGrade) === normalizeComparable(profile.classGrade);
+    }
+    if (scope === 'individual') {
+        const target = normalizeComparable(message.recipientId);
+        return target && [profile.id, profile.username].map(normalizeComparable).includes(target);
+    }
+    return false;
+}
+
+app.get('/api/messages', authenticateToken, async (req, res) => {
+    if (!sequelize) return res.status(503).json({ success: false, message: 'Database offline' });
+
+    try {
+        const role = normalizeMessageRole(req.user?.role);
+        let records = await sequelize.models.Message.findAll({ order: [['createdAt', 'DESC']] });
+        let messages = records.map(formatMessageRecord);
+
+        if (!['Admin', 'Principal'].includes(String(req.user?.role || ''))) {
+            const profile = await getUserMessageProfile(req.user);
+            messages = messages.filter((message) => messageMatchesProfile(message, profile));
+        } else if (req.query.role) {
+            const targetRole = normalizeMessageRole(req.query.role);
+            messages = targetRole ? messages.filter((message) => message.targetRole === targetRole) : messages;
+        }
+
+        res.json({ success: true, role, messages });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+app.post('/api/messages', authenticateToken, async (req, res) => {
+    if (!sequelize) return res.status(503).json({ success: false, message: 'Database offline' });
+    if (!['Admin', 'Principal'].includes(String(req.user?.role || ''))) {
+        return res.status(403).json({ success: false, message: 'Admin access required.' });
+    }
+
+    try {
+        const payload = req.body || {};
+        const targetRole = normalizeMessageRole(payload.targetRole);
+        const targetScope = normalizeMessageScope(payload.targetScope);
+        const subject = String(payload.subject || '').trim();
+        const body = String(payload.body || '').trim();
+        const campusName = String(payload.campusName || '').trim();
+        const classGrade = String(payload.classGrade || '').trim();
+        const recipientId = String(payload.recipientId || '').trim();
+
+        if (!targetRole || !targetScope || !subject || !body) {
+            return res.status(400).json({ success: false, message: 'Role, scope, subject, and message are required.' });
+        }
+        if (targetScope === 'campus' && !campusName) {
+            return res.status(400).json({ success: false, message: 'Select campus for campus message.' });
+        }
+        if (targetScope === 'class' && (!campusName || !classGrade || targetRole !== 'Student')) {
+            return res.status(400).json({ success: false, message: 'Class messages require Student role, campus, and class.' });
+        }
+        if (targetScope === 'individual' && !recipientId) {
+            return res.status(400).json({ success: false, message: 'Select a recipient for individual message.' });
+        }
+
+        const message = {
+            id: payload.id || `MSG-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            subject,
+            body,
+            targetRole,
+            targetScope,
+            campusName: campusName || null,
+            classGrade: classGrade || null,
+            recipientId: recipientId || null,
+            recipientName: String(payload.recipientName || '').trim() || null,
+            senderName: req.user.fullName || req.user.username || 'Admin',
+            createdAtLabel: new Date().toLocaleString('en-GB')
+        };
+
+        await sequelize.models.Message.create(message);
+        const records = await sequelize.models.Message.findAll({ order: [['createdAt', 'DESC']] });
+        const messages = records.map(formatMessageRecord);
+        io.emit('messages_update', messages);
+        res.json({ success: true, message: formatMessageRecord(message), messages });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
 function normalizeNoticeTargets(targetPortals) {
     const allowedTargets = new Set(['student', 'teacher', 'staff']);
     const targets = Array.isArray(targetPortals) ? targetPortals : [];
@@ -1260,6 +1422,7 @@ app.post('/api/reset-data', authenticateToken, async (req, res) => {
             'StudentAttendance',
             'TeacherAttendance',
             'SpecialNotice',
+            'Message',
             'ClassFee',
             'Student',
             'Teacher',
@@ -1280,6 +1443,7 @@ app.post('/api/reset-data', authenticateToken, async (req, res) => {
         io.emit('teachers_update', []);
         io.emit('staff_update', []);
         io.emit('special_notices_update', []);
+        io.emit('messages_update', []);
 
         res.json({ success: true, message: 'System data has been reset.' });
     } catch (err) {
@@ -2599,6 +2763,22 @@ function defineSpecialNoticeModel(db) {
     });
 }
 
+function defineMessageModel(db) {
+    return db.define('Message', {
+        id: { type: DataTypes.STRING, primaryKey: true },
+        subject: { type: DataTypes.STRING, allowNull: false },
+        body: { type: DataTypes.TEXT('long'), allowNull: false },
+        targetRole: { type: DataTypes.STRING, allowNull: false },
+        targetScope: { type: DataTypes.STRING, allowNull: false },
+        campusName: { type: DataTypes.STRING, allowNull: true },
+        classGrade: { type: DataTypes.STRING, allowNull: true },
+        recipientId: { type: DataTypes.STRING, allowNull: true },
+        recipientName: { type: DataTypes.STRING, allowNull: true },
+        senderName: { type: DataTypes.STRING, allowNull: true },
+        createdAtLabel: DataTypes.STRING
+    });
+}
+
 function normalizeAttendanceStatus(status) {
     if (status === 'P') return 'Present';
     if (status === 'A') return 'Absent';
@@ -2928,6 +3108,19 @@ async function ensureLegacySchema() {
         groupKey: { type: DataTypes.STRING, allowNull: true },
         role: { type: DataTypes.STRING, allowNull: true }
     });
+
+    await ensureTableColumns('Messages', {
+        subject: { type: DataTypes.STRING, allowNull: false },
+        body: { type: DataTypes.TEXT('long'), allowNull: false },
+        targetRole: { type: DataTypes.STRING, allowNull: false },
+        targetScope: { type: DataTypes.STRING, allowNull: false },
+        campusName: { type: DataTypes.STRING, allowNull: true },
+        classGrade: { type: DataTypes.STRING, allowNull: true },
+        recipientId: { type: DataTypes.STRING, allowNull: true },
+        recipientName: { type: DataTypes.STRING, allowNull: true },
+        senderName: { type: DataTypes.STRING, allowNull: true },
+        createdAtLabel: { type: DataTypes.STRING, allowNull: true }
+    });
 }
 
 async function startServer() {
@@ -2962,6 +3155,7 @@ async function startServer() {
         defineStudentAttendanceModel(sequelize);
         defineTeacherAttendanceModel(sequelize);
         defineSpecialNoticeModel(sequelize);
+        defineMessageModel(sequelize);
 
         // Avoid Sequelize's repeated ALTER-based index churn on MySQL.
         // Missing legacy columns are handled separately in ensureLegacySchema().

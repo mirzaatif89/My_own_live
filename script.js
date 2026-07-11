@@ -2484,10 +2484,26 @@ function isSidebarItemVisible(navLinks, item) {
         itemRect.left >= navRect.left && itemRect.right <= navRect.right;
 }
 
+function centerSidebarItem(navLinks, item) {
+    if (!navLinks || !item) return;
+    const navRect = navLinks.getBoundingClientRect();
+    const itemRect = item.getBoundingClientRect();
+
+    if (itemRect.width && navRect.width && navLinks.scrollWidth > navLinks.clientWidth) {
+        const itemCenter = itemRect.left - navRect.left + navLinks.scrollLeft + (itemRect.width / 2);
+        navLinks.scrollLeft = Math.max(0, itemCenter - (navLinks.clientWidth / 2));
+    }
+
+    if (itemRect.height && navRect.height && navLinks.scrollHeight > navLinks.clientHeight) {
+        const itemCenter = itemRect.top - navRect.top + navLinks.scrollTop + (itemRect.height / 2);
+        navLinks.scrollTop = Math.max(0, itemCenter - (navLinks.clientHeight / 2));
+    }
+}
+
 function keepActiveSidebarItemVisible(navLinks) {
     const activeItem = getActiveSidebarItem(navLinks);
     if (!activeItem || isSidebarItemVisible(navLinks, activeItem)) return;
-    activeItem.scrollIntoView({ block: 'center', inline: 'nearest' });
+    centerSidebarItem(navLinks, activeItem);
 }
 
 let sidebarScrollRestoreUntil = 0;
@@ -2569,6 +2585,11 @@ function restoreSidebarScrollPosition(savedPosition = readSidebarScrollPosition(
                 navLinks.getBoundingClientRect().top -
                 Number(savedPosition.itemTop);
             navLinks.scrollLeft = Number(savedPosition.left) || 0;
+            return;
+        }
+
+        if (targetLink) {
+            centerSidebarItem(navLinks, targetLink);
             return;
         }
 
@@ -3368,6 +3389,7 @@ function renderAdminSidebarSequence() {
     });
 
     if (window.lucide) window.lucide.createIcons();
+    keepActiveSidebarItemVisible(navLinks);
 }
 
 function ensureSchedulingNav() {
@@ -3988,6 +4010,21 @@ function saveBills(bills) {
     localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(bills));
 }
 
+function getScopedBills() {
+    const bills = getBills();
+    return typeof getGlobalCampusFilteredRecords === 'function' ? getGlobalCampusFilteredRecords(bills) : bills;
+}
+
+function getCurrentBillCampusName(existing = {}) {
+    if (existing?.campusName || existing?.branchName || existing?.campus) {
+        return existing.campusName || existing.branchName || existing.campus;
+    }
+    const selectedCampus = typeof getGlobalCampusFilterForCurrentUser === 'function'
+        ? getGlobalCampusFilterForCurrentUser()
+        : (localStorage.getItem('eduCore_dashboard_campus_filter') || 'all');
+    return selectedCampus === 'all' ? '' : selectedCampus;
+}
+
 let isHistoryView = false;
 
 // Function called when a card is clicked
@@ -4067,7 +4104,7 @@ function renderFinance(term = '') {
         return;
     }
 
-    const bills = getBills();
+    const bills = getScopedBills();
     let filtered = [];
 
     if (isHistoryView) {
@@ -4210,6 +4247,7 @@ document.addEventListener('submit', function (e) {
         const idField = document.getElementById('billId');
         const isEdit = idField.value !== '';
 
+        const existingBill = isEdit ? getBills().find(b => b.id === idField.value) : null;
         const newBill = {
             id: isEdit ? idField.value : generateUniqueRecordId('BILL'),
             category: currentCategory,
@@ -4217,6 +4255,7 @@ document.addEventListener('submit', function (e) {
             date: document.getElementById('billDate').value,
             status: document.getElementById('billStatus').value,
             note: document.getElementById('billNote').value,
+            campusName: getCurrentBillCampusName(existingBill),
             invoice: document.getElementById('invoiceImgPreview').src || null
         };
 
@@ -4368,6 +4407,36 @@ function getCurrentDashboardFeeMonth() {
     return new Date().toLocaleString('en-US', { month: 'long' });
 }
 
+function getCurrentDashboardFeeMonthKey() {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function getDashboardPaymentMonthKeys(value = '') {
+    const raw = String(value || '').trim();
+    if (!raw) return [];
+
+    const exactMonth = raw.match(/^(\d{4})-(\d{2})$/);
+    if (exactMonth) return [`${exactMonth[1]}-${exactMonth[2]}`];
+
+    const parsed = new Date(raw.replace(',', ' 1,'));
+    if (!Number.isNaN(parsed.getTime())) {
+        return [`${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}`];
+    }
+
+    const monthNames = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    const lowered = raw.toLowerCase();
+    const yearMatch = lowered.match(/\b(20\d{2})\b/);
+    const fallbackYear = yearMatch ? Number(yearMatch[1]) : new Date().getFullYear();
+    return monthNames
+        .map((month, index) => ({ month, index }))
+        .filter(({ month }) => lowered.includes(month.toLowerCase()) || lowered.includes(month.slice(0, 3).toLowerCase()))
+        .map(({ index }) => `${fallbackYear}-${String(index + 1).padStart(2, '0')}`);
+}
+
 function getDashboardFeeStatusRevenue(students = []) {
     const currentMonth = getCurrentDashboardFeeMonth();
     let monthlyFeesData = {};
@@ -4408,6 +4477,53 @@ function getDashboardFeeStatusRevenue(students = []) {
 
         return summary;
     }, { total: 0, paidStudents: 0, month: currentMonth });
+}
+
+async function getDashboardBackendFeeStatusRevenue(students = []) {
+    const currentMonth = getCurrentDashboardFeeMonth();
+    const currentMonthKey = getCurrentDashboardFeeMonthKey();
+    const studentList = Array.isArray(students) ? students : [];
+    const studentMap = new Map(studentList.map((student) => [String(student?.id || ''), student]));
+    const rollMap = new Map(studentList
+        .filter((student) => String(student?.rollNo || '').trim())
+        .map((student) => [String(student.rollNo).trim().toLowerCase(), student]));
+    const nameRollMap = new Map(studentList
+        .filter((student) => String(student?.fullName || '').trim() || String(student?.rollNo || '').trim())
+        .map((student) => [
+            `${String(student.fullName || '').trim().toLowerCase()}|${String(student.rollNo || '').trim().toLowerCase()}|${String(student.classGrade || '').trim().toLowerCase()}`,
+            student
+        ]));
+    const summary = { total: 0, paidStudents: 0, month: currentMonth };
+    const paidStudentIds = new Set();
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/fees/payments`);
+        const result = await parseJsonResponse(response, 'Fee payments could not be loaded.');
+        if (!response.ok || result?.success === false) throw new Error(result?.message || 'Fee payments could not be loaded.');
+        const payments = Array.isArray(result?.payments) ? result.payments : [];
+
+        payments.forEach((payment) => {
+            const status = String(payment?.status || '').toLowerCase();
+            if (!['paid', 'partial'].includes(status)) return;
+            const studentId = String(payment?.studentId || '');
+            const matchedStudent = studentMap.get(studentId) ||
+                rollMap.get(String(payment?.rollNo || '').trim().toLowerCase()) ||
+                nameRollMap.get(`${String(payment?.studentName || '').trim().toLowerCase()}|${String(payment?.rollNo || '').trim().toLowerCase()}|${String(payment?.classGrade || '').trim().toLowerCase()}`);
+            if (!matchedStudent) return;
+            const monthKeys = getDashboardPaymentMonthKeys(payment?.feeMonth || '');
+            if (monthKeys.length && !monthKeys.includes(currentMonthKey)) return;
+            const amount = Math.max(Number(payment?.amount || 0), 0);
+            if (!(amount > 0)) return;
+            summary.total += amount / Math.max(monthKeys.length || 1, 1);
+            paidStudentIds.add(String(matchedStudent.id || studentId || `${payment?.studentName || ''}|${payment?.rollNo || ''}`));
+        });
+
+        summary.paidStudents = paidStudentIds.size;
+        return summary;
+    } catch (error) {
+        console.warn('Dashboard fee payments could not be loaded:', error.message);
+        return null;
+    }
 }
 
 function getDashboardCampusKey(value = '') {
@@ -4469,7 +4585,7 @@ async function populateDashboardCampusFilter() {
     }
 }
 
-function updateDashboardRevenueStats(studentsForDashboard) {
+async function updateDashboardRevenueStats(studentsForDashboard) {
     const amountEl = document.getElementById('dashRevenue');
     const detailEl = document.getElementById('dashRevenueDetail');
     if (!amountEl && !detailEl) return;
@@ -4477,7 +4593,9 @@ function updateDashboardRevenueStats(studentsForDashboard) {
     const students = Array.isArray(studentsForDashboard)
         ? studentsForDashboard
         : getDashboardCampusFilteredRecords(getArrayData(STORAGE_KEY_STUDENTS));
-    const feeSummary = getDashboardFeeStatusRevenue(students);
+    const localSummary = getDashboardFeeStatusRevenue(students);
+    const backendSummary = await getDashboardBackendFeeStatusRevenue(students);
+    const feeSummary = backendSummary && backendSummary.total > 0 ? backendSummary : localSummary;
     const selectedCampus = getSelectedDashboardCampus();
     const campusLabel = selectedCampus === 'all' ? '' : ` in ${selectedCampus}`;
 
@@ -5812,6 +5930,32 @@ async function sendStaffCustomEmailFromEncoded(encodedPayload) {
     return sendCustomEmailToRecord(staffMember, 'Staff member');
 }
 
+function openIndividualMessageFromEncoded(encodedPayload, role) {
+    const person = decodeRowPayload(encodedPayload);
+    const recipientId = String(person?.id || person?.studentCode || person?.employeeCode || person?.username || '').trim();
+    const prefill = {
+        role,
+        scope: 'individual',
+        recipientId,
+        recipientName: String(person?.fullName || person?.name || person?.username || '').trim(),
+        campusName: String(person?.campusName || person?.branchName || person?.campus || '').trim(),
+        classGrade: String(person?.classGrade || '').trim()
+    };
+    try {
+        sessionStorage.setItem('eduCore_message_prefill', JSON.stringify(prefill));
+    } catch (_error) {}
+
+    const params = new URLSearchParams({
+        role,
+        scope: 'individual'
+    });
+    if (recipientId) params.set('recipientId', recipientId);
+    if (prefill.recipientName) params.set('recipientName', prefill.recipientName);
+    if (prefill.campusName) params.set('campusName', prefill.campusName);
+    if (prefill.classGrade) params.set('classGrade', prefill.classGrade);
+    window.location.href = `messages.html?${params.toString()}`;
+}
+
 function handleStudentActionSelect(selectElement, encodedPayload, studentId, isBranchUser = 0) {
     const action = String(selectElement?.value || '').trim().toLowerCase();
     if (!action) return;
@@ -5830,6 +5974,11 @@ function handleStudentActionSelect(selectElement, encodedPayload, studentId, isB
 
     if (action === 'email') {
         sendStudentCustomEmailFromEncoded(encodedPayload);
+        return;
+    }
+
+    if (action === 'message') {
+        openIndividualMessageFromEncoded(encodedPayload, 'Student');
         return;
     }
 
@@ -5891,6 +6040,11 @@ function handleTeacherActionSelect(selectElement, encodedPayload, teacherId) {
 
     if (action === 'email') {
         sendTeacherCustomEmailFromEncoded(encodedPayload);
+        return;
+    }
+
+    if (action === 'message') {
+        openIndividualMessageFromEncoded(encodedPayload, 'Teacher');
         return;
     }
 
@@ -6142,7 +6296,7 @@ function parseStudentQuickFilterValues(values) {
 function isStudentZeroFee(student) {
     const remaining = Number(student?.remainingAmount || student?.dueBalance || student?.balance || 0) || 0;
     const feeStatus = String(student?.feesStatus || '').trim().toLowerCase();
-    return feeStatus === 'paid' && remaining === 0;
+    return feeStatus === 'zero fee student' || student?.freeStudy === true || student?.freeStudy === 'true' || (feeStatus === 'paid' && remaining === 0);
 }
 
 function getStudentClassSortRank(className) {
@@ -6344,7 +6498,8 @@ function createStudentQuickFilterMenuItem(optionElement) {
 
 function getStudentStatusLabel(student) {
     if (isStudentStuckOff(student)) return 'Stuck Off';
-    return isStudentTerminated(student) ? 'Terminated' : (student?.feesStatus || 'Pending');
+    const status = String(student?.feesStatus || '').trim();
+    return isStudentTerminated(student) ? 'Terminated' : (status || 'Pending');
 }
 
 function getStudentColumnSearchText(student, field) {
@@ -6537,9 +6692,10 @@ function renderStudents(term = '') {
         filtered.forEach(s => {
             const terminated = isStudentTerminated(s);
             const statusLabel = getStudentStatusLabel(s);
+            const normalizedFeeStatus = String(s.feesStatus || '').trim().toLowerCase();
             let statusClass = terminated
                 ? 'status-failed'
-                : (s.feesStatus === 'Paid' ? 'status-paid' : (s.feesStatus === 'Late' ? 'status-failed' : 'status-pending'));
+                : (['paid', 'zero fee student'].includes(normalizedFeeStatus) ? 'status-paid' : (normalizedFeeStatus === 'late' ? 'status-failed' : 'status-pending'));
             const encodedStudent = encodeURIComponent(JSON.stringify(s));
             const tr = document.createElement('tr');
             tr.innerHTML = `
@@ -6560,6 +6716,7 @@ function renderStudents(term = '') {
                         <option value="">Actions</option>
                         <option value="view">View</option>
                         <option value="print_admission">Print Admission Form</option>
+                        <option value="message">Message</option>
                         ${s.email ? '<option value="email">Send Email</option>' : ''}
                         ${canEditStudents ? '<option value="edit">Edit</option>' : ''}
                         ${canEditStudents ? (terminated ? '<option value="reactivate">Reactivate</option>' : '<option value="stuckoff">Stuck-Off</option>') : ''}
@@ -8025,6 +8182,7 @@ function renderTeachers(term = '') {
                             <option value="">Actions</option>
                             <option value="attendance">Attendance</option>
                             <option value="schedule">Schedule</option>
+                            <option value="message">Message</option>
                             ${t.email ? '<option value="email">Send Email</option>' : ''}
                             <option value="edit">Edit</option>
                             <option value="stuckoff">Stuck-Off</option>
@@ -8446,6 +8604,7 @@ function renderStaff(term = '') {
                 </td>
                 <td>PKR ${s.salary}</td>
                 <td>
+                    <button class="action-btn btn-view" onclick="openIndividualMessageFromEncoded('${encodedStaff}', 'Staff')"><i data-lucide="message-circle" width="14"></i> Message</button>
                     ${s.email ? `<button class="action-btn btn-view" onclick="sendStaffCustomEmailFromEncoded('${encodedStaff}')"><i data-lucide="mail" width="14"></i> Email</button>` : ''}
                     <button class="action-btn btn-edit" onclick='editStaff(${JSON.stringify(s)})'><i data-lucide="edit-2" width="14"></i> Edit</button>
                     <button class="action-btn btn-delete" onclick="deleteStaff('${s.id}')"><i data-lucide="trash-2" width="14"></i></button>
@@ -9301,7 +9460,7 @@ function buildSalaryRoster() {
         searchableText: `${member.fullName || ''} ${member.designation || ''} staff`.toLowerCase()
     }));
 
-    return [...teachers, ...staff].filter((entry) => entry.salary > 0);
+    return getGlobalCampusFilteredRecords([...teachers, ...staff]).filter((entry) => entry.salary > 0);
 }
 
 function getMonthlySalarySummary(monthKey) {

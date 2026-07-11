@@ -2460,6 +2460,9 @@
             <button type="button" class="student-action-btn" data-student-action-target="studentSubmitAssignmentSection">
                 <i data-lucide="upload"></i> Submit Assignment
             </button>
+            <button type="button" class="student-action-btn" data-student-action-target="studentMessagesSection">
+                <i data-lucide="message-circle"></i> Messages
+            </button>
             <button type="button" class="student-action-btn" data-student-action-target="studentComplaintSection">
                 <i data-lucide="message-square"></i> Complain Box
             </button>
@@ -2598,7 +2601,7 @@
                 </thead>
                 <tbody id="studentResultBody"></tbody>
             </table>
-            <div class="empty-note" id="studentResultEmpty">No result card has been added for you yet.</div>
+            <div class="empty-note" id="studentResultEmpty">No published result card is available for you yet.</div>
 
             <h4>Result History</h4>
             <table class="panel-table">
@@ -2613,7 +2616,7 @@
                 </thead>
                 <tbody id="studentResultHistoryBody"></tbody>
             </table>
-            <div class="empty-note" id="studentResultHistoryEmpty">No result history found.</div>
+            <div class="empty-note" id="studentResultHistoryEmpty">No published result history found.</div>
         </section>
 
         <section class="panel-card student-portal-section" id="studentLeaveSection" style="display:none; margin-bottom: 1.25rem;">
@@ -2750,6 +2753,12 @@
             </form>
         </section>
 
+        <section class="panel-card student-portal-section" id="studentMessagesSection" style="display:none; margin-bottom: 1.25rem;">
+            <h3>Messages</h3>
+            <div class="portal-content-list" id="studentMessageList"></div>
+            <div class="empty-note" id="studentMessageEmpty">No messages received yet.</div>
+        </section>
+
         <section class="panel-card student-portal-section complaint-panel-card" id="studentComplaintSection" style="display:none; margin-bottom: 1.25rem;">
             <h3>Complain Box</h3>
             <form id="studentComplaintForm">
@@ -2831,6 +2840,7 @@
         const STORAGE_KEY_SETTINGS = 'eduCore_settings';
         const STORAGE_KEY_SPECIAL_NOTICES = 'eduCore_special_notices';
         const RESULT_ARCHIVE_KEY = 'APEXIUMS_RESULT_CARD_ARCHIVE_V2';
+        const RESULT_PUBLISH_SCHEDULE_KEY = 'APEXIUMS_RESULT_PUBLISH_SCHEDULE_V1';
         const DATE_SHEET_KEY = 'APEXIUMS_DATE_SHEET_V1';
         let loadedDateSheetRecord = null;
         const STUDENT_ATTENDANCE_KEY = 'eduCore_student_attendance';
@@ -4620,6 +4630,15 @@
             }
         }
 
+        function loadResultPublishSchedules() {
+            try {
+                const schedules = JSON.parse(localStorage.getItem(RESULT_PUBLISH_SCHEDULE_KEY) || '[]');
+                return Array.isArray(schedules) ? schedules : [];
+            } catch (error) {
+                return [];
+            }
+        }
+
         function normalizeLoose(value) {
             return String(value || '').trim().toLowerCase();
         }
@@ -4647,6 +4666,21 @@
 
         function getResultRecordClass(record = {}, student = {}) {
             return record.studentGrade || record.classGrade || record.className || student.classGrade || '';
+        }
+
+        function getResultRecordCampus(record = {}, student = {}) {
+            return record.campusName || record.campus || student.campusName || '';
+        }
+
+        function isResultPublishedForStudent(record = {}, student = {}) {
+            const recordCampus = normalizeLoose(getResultRecordCampus(record, student));
+            const recordClass = normalizeResultClass(getResultRecordClass(record, student));
+            const today = new Date().toISOString().slice(0, 10);
+            const schedule = loadResultPublishSchedules().find((item) => (
+                normalizeLoose(item.campusName) === recordCampus &&
+                normalizeResultClass(item.classGrade) === recordClass
+            ));
+            return Boolean(schedule?.publishDate && schedule.publishDate <= today);
         }
 
         function getResultRecordRollCandidates(record = {}, student = {}) {
@@ -4683,6 +4717,7 @@
                 const belongsToStudent = identityCandidates.includes(recordLookup);
 
                 if (!belongsToStudent) return false;
+                if (!isResultPublishedForStudent(record, student)) return false;
                 if (lookupFilter && !identityCandidates.includes(lookupFilter) && recordName !== lookupFilter) return false;
                 if (dateFilter && getResultRecordDate(record) !== dateFilter) return false;
                 if (classFilter && normalizeResultClass(getResultRecordClass(record, student)) !== normalizeResultClass(classFilter)) return false;
@@ -4726,7 +4761,7 @@
                 historyEmpty.textContent = 'Select class and enter roll number to view result history.';
                 historyEmpty.style.display = 'block';
             }
-            if (resultEmpty) resultEmpty.textContent = 'Select class and enter roll number to view your result.';
+            if (resultEmpty) resultEmpty.textContent = 'Select class and enter roll number to view your published result.';
             studentResultHistory = [];
             applyStudentResult(null);
         }
@@ -4832,7 +4867,7 @@
                 rollNo: rollValue
             });
             if (!matches.length) {
-                alert('No saved result card was found for this class and roll number.');
+                alert('No published result card was found for this class and roll number.');
                 renderStudentResultHistory(student, {
                     classGrade: classValue,
                     rollNo: rollValue
@@ -5452,6 +5487,41 @@
             return students.find((student) => student.id === loggedInUser.id);
         }
 
+        function renderStudentMessages(messages = []) {
+            const list = document.getElementById('studentMessageList');
+            const empty = document.getElementById('studentMessageEmpty');
+            if (!list || !empty) return;
+            if (!messages.length) {
+                list.innerHTML = '';
+                empty.style.display = 'block';
+                return;
+            }
+            empty.style.display = 'none';
+            list.innerHTML = messages.map((item) => `
+                <div class="portal-content-item">
+                    <div class="portal-content-meta">${escapeHtml(item.createdAtLabel || '')}${item.senderName ? ` - ${escapeHtml(item.senderName)}` : ''}</div>
+                    <div class="portal-content-title">${escapeHtml(item.subject || 'Message')}</div>
+                    <p>${escapeHtml(item.body || '')}</p>
+                </div>
+            `).join('');
+        }
+
+        async function loadStudentMessages() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/messages`, {
+                    headers: { Authorization: `Bearer ${authToken}` }
+                });
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok || !result?.success) {
+                    throw new Error(result?.message || 'Messages could not be loaded.');
+                }
+                renderStudentMessages(result.messages || []);
+            } catch (error) {
+                console.warn('Student messages could not be loaded:', error.message);
+                renderStudentMessages([]);
+            }
+        }
+
         async function loadStudentProfile() {
             try {
                 const response = await fetch(`${API_BASE_URL}/student/me`, {
@@ -5469,6 +5539,7 @@
                 await loadExecutedDateSheet();
                 await mergeStudentFeePaymentsIntoMonthlyStore();
                 applyStudentData(student);
+                await loadStudentMessages();
                 await loadStudentLeaveRequests(student);
                 return;
             } catch (error) {
@@ -5480,6 +5551,7 @@
                     await loadExecutedDateSheet();
                     await mergeStudentFeePaymentsIntoMonthlyStore();
                     applyStudentData(fallbackStudent);
+                    await loadStudentMessages();
                     await loadStudentLeaveRequests(fallbackStudent);
                     return;
                 }

@@ -373,6 +373,10 @@
                     </p>
                 </div>
                 <div class="revenue-toolbar">
+                    <label for="revenueCampusFilter">Campus</label>
+                    <select class="month-picker" id="revenueCampusFilter" aria-label="Select revenue campus">
+                        <option value="all">All Campuses</option>
+                    </select>
                     <label for="revenueMonthPicker">Month</label>
                     <input class="month-picker" id="revenueMonthPicker" type="month" aria-label="Select revenue month">
                 </div>
@@ -580,6 +584,7 @@
             selectedRevenueDateKey = getTodayDateKey();
             initRevenueMonthPicker();
             initRevenueDatePicker();
+            initRevenueCampusFilter();
             document.getElementById('revenueMonthPicker')?.addEventListener('change', (event) => {
                 selectedRevenueMonthKey = String(event.target.value || getCurrentMonthMeta().monthKey);
                 updateRevenueReport();
@@ -594,6 +599,56 @@
             setTimeout(updateRevenueReport, 400);
             setTimeout(updateRevenueReport, 1200);
         });
+
+        async function initRevenueCampusFilter() {
+            const select = document.getElementById('revenueCampusFilter');
+            if (!select) return;
+
+            const user = typeof getLoggedInUser === 'function' ? getLoggedInUser() : null;
+            const branchCampus = user?.role === 'Branch' && user.campusName ? String(user.campusName).trim() : '';
+            const savedValue = typeof getGlobalCampusFilterForCurrentUser === 'function'
+                ? getGlobalCampusFilterForCurrentUser()
+                : (localStorage.getItem('eduCore_dashboard_campus_filter') || 'all');
+
+            let campuses = [];
+            try {
+                campuses = typeof loadRegisteredCampusNames === 'function' ? await loadRegisteredCampusNames() : [];
+            } catch (_error) {
+                campuses = [];
+            }
+
+            if (branchCampus && !campuses.includes(branchCampus)) campuses.unshift(branchCampus);
+            select.innerHTML = '<option value="all">All Campuses</option>';
+            campuses.forEach((campusName) => {
+                const option = document.createElement('option');
+                option.value = campusName;
+                option.textContent = campusName;
+                select.appendChild(option);
+            });
+
+            if (branchCampus) {
+                select.value = branchCampus;
+                select.disabled = true;
+                if (typeof setSavedGlobalCampusFilter === 'function') setSavedGlobalCampusFilter(branchCampus);
+            } else {
+                select.value = Array.from(select.options).some((option) => option.value === savedValue) ? savedValue : 'all';
+                if (typeof setSavedGlobalCampusFilter === 'function') setSavedGlobalCampusFilter(select.value || 'all');
+            }
+
+            if (!select.dataset.revenueCampusBound) {
+                select.dataset.revenueCampusBound = 'true';
+                select.addEventListener('change', () => {
+                    if (typeof setSavedGlobalCampusFilter === 'function') {
+                        setSavedGlobalCampusFilter(select.value || 'all');
+                    } else {
+                        localStorage.setItem('eduCore_dashboard_campus_filter', select.value || 'all');
+                    }
+                    updateRevenueReport();
+                });
+            }
+
+            updateRevenueReport();
+        }
 
         function scheduleRevenueRefresh(delay = 150) {
             clearTimeout(revenueRefreshTimer);
@@ -752,6 +807,43 @@
             }
         }
 
+        function revenueMatchesSelectedCampus(record = {}) {
+            return typeof recordMatchesGlobalCampus === 'function' ? recordMatchesGlobalCampus(record) : true;
+        }
+
+        function getRevenueScopedStudents() {
+            const students = getData(STORAGE_KEY_STUDENTS);
+            return typeof getGlobalCampusFilteredRecords === 'function' ? getGlobalCampusFilteredRecords(students) : students;
+        }
+
+        function attachRevenuePaymentCampus(payments = [], students = getData(STORAGE_KEY_STUDENTS)) {
+            const studentList = Array.isArray(students) ? students : [];
+            const studentMap = new Map(studentList.map((student) => [String(student.id || ''), student]));
+            const rollMap = new Map(studentList
+                .filter((student) => String(student?.rollNo || '').trim())
+                .map((student) => [String(student.rollNo).trim().toLowerCase(), student]));
+            const nameRollMap = new Map(studentList
+                .filter((student) => String(student?.fullName || '').trim() || String(student?.rollNo || '').trim())
+                .map((student) => [
+                    `${String(student.fullName || '').trim().toLowerCase()}|${String(student.rollNo || '').trim().toLowerCase()}|${String(student.classGrade || '').trim().toLowerCase()}`,
+                    student
+                ]));
+            return (Array.isArray(payments) ? payments : []).map((payment) => {
+                const student = studentMap.get(String(payment?.studentId || '')) ||
+                    rollMap.get(String(payment?.rollNo || '').trim().toLowerCase()) ||
+                    nameRollMap.get(`${String(payment?.studentName || '').trim().toLowerCase()}|${String(payment?.rollNo || '').trim().toLowerCase()}|${String(payment?.classGrade || '').trim().toLowerCase()}`) ||
+                    {};
+                return {
+                    ...payment,
+                    campusName: payment?.campusName || student.campusName || student.branchName || student.campus || ''
+                };
+            });
+        }
+
+        function getRevenueScopedPayments(payments = [], students = getData(STORAGE_KEY_STUDENTS)) {
+            return attachRevenuePaymentCampus(payments, students).filter(revenueMatchesSelectedCampus);
+        }
+
         function normalizeRevenueBillMonthKey(bill) {
             const dateValue = bill?.billDate || bill?.date || bill?.paidAt || bill?.createdAt || '';
             const parsed = new Date(dateValue);
@@ -761,6 +853,7 @@
 
         function getPaidBillsAmount(monthKey = '') {
             return readRevenueBills()
+                .filter(revenueMatchesSelectedCampus)
                 .filter((bill) => String(bill.status || '').toLowerCase() === 'paid')
                 .filter((bill) => !monthKey || normalizeRevenueBillMonthKey(bill) === monthKey)
                 .reduce((total, bill) => total + Math.max(Number(bill.amount || 0), 0), 0);
@@ -768,8 +861,15 @@
 
         function getAllSalaryTransfers() {
             const salaries = typeof getTeacherSalaries === 'function' ? getTeacherSalaries() : {};
+            const roster = typeof buildSalaryRoster === 'function' ? buildSalaryRoster() : [];
+            const allowedKeys = new Set();
+            roster.forEach((entry) => {
+                allowedKeys.add(`${entry.entityType}_${entry.id}_`);
+                if (entry.entityType === 'teacher') allowedKeys.add(`${entry.id}_`);
+            });
             return Object.entries(salaries || {}).reduce((total, [key, payment]) => {
                 if (!/20\d{2}-\d{2}$/.test(String(key || ''))) return total;
+                if (allowedKeys.size && !Array.from(allowedKeys).some((prefix) => String(key).startsWith(prefix))) return total;
                 return total + Math.max(Number(payment?.amount || 0), 0);
             }, 0);
         }
@@ -806,10 +906,11 @@
 
         async function updateRevenueReport() {
             const currentMonthMeta = getMonthMetaFromKey(selectedRevenueMonthKey || getCurrentMonthMeta().monthKey);
-            const students = getData(STORAGE_KEY_STUDENTS);
+            const allStudents = getData(STORAGE_KEY_STUDENTS);
+            const students = getRevenueScopedStudents();
             const monthlyFeesData = JSON.parse(localStorage.getItem(STORAGE_KEY_MONTHLY_FEES)) || {};
             const salarySummary = getMonthlySalarySummary(currentMonthMeta.monthKey);
-            const feePayments = await fetchCollectedFeePayments();
+            const feePayments = getRevenueScopedPayments(await fetchCollectedFeePayments(), allStudents);
             renderDailyFeeCollection(feePayments);
             const monthDisplay = document.getElementById('currentMonthDisplay');
             if (monthDisplay) monthDisplay.innerText = `${currentMonthMeta.monthName} ${currentMonthMeta.year}`;

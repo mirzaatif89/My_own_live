@@ -158,6 +158,24 @@
             flex-wrap: wrap;
         }
 
+        .statement-row-actions .btn {
+            min-height: 34px;
+            min-width: 92px;
+            padding: 0.42rem 0.7rem;
+            border-radius: 8px;
+            font-size: 0.86rem;
+            line-height: 1;
+            gap: 0.35rem;
+            white-space: nowrap;
+        }
+
+        .statement-row-actions .btn i,
+        .statement-row-actions .btn svg {
+            width: 16px;
+            height: 16px;
+            flex: 0 0 auto;
+        }
+
         @media (max-width: 760px) {
             .statement-toolbar {
                 grid-template-columns: 1fr;
@@ -377,6 +395,17 @@
             return String(value || '').trim().toLowerCase();
         }
 
+        function getPaymentStatementSelectedCampus() {
+            if (typeof getGlobalCampusFilterForCurrentUser === 'function') return getGlobalCampusFilterForCurrentUser();
+            return String(localStorage.getItem('eduCore_dashboard_campus_filter') || 'all').trim() || 'all';
+        }
+
+        function paymentStatementCampusMatches(campusName = '') {
+            const selectedCampus = getPaymentStatementSelectedCampus();
+            if (!selectedCampus || selectedCampus === 'all') return true;
+            return normalizedFilterValue(campusName || 'Main Campus') === normalizedFilterValue(selectedCampus);
+        }
+
         function getStatementStudentKey(row = {}) {
             return String(row.studentId || `${row.student}|${row.fatherName}|${row.rollNo}` || '').trim();
         }
@@ -428,17 +457,30 @@
             const payments = Array.isArray(result?.payments) ? result.payments : [];
             const students = Array.isArray(studentsResult) ? studentsResult : (studentsResult.students || []);
             const studentMap = new Map(students.map((student) => [String(student.id || ''), student]));
+            const rollMap = new Map(students
+                .filter((student) => String(student?.rollNo || '').trim())
+                .map((student) => [String(student.rollNo).trim().toLowerCase(), student]));
+            const nameRollMap = new Map(students
+                .filter((student) => String(student?.fullName || '').trim() || String(student?.rollNo || '').trim())
+                .map((student) => [
+                    `${String(student.fullName || '').trim().toLowerCase()}|${String(student.rollNo || '').trim().toLowerCase()}|${String(student.classGrade || '').trim().toLowerCase()}`,
+                    student
+                ]));
             paymentStatementRows = payments
                 .filter((payment) => Number(payment.amount || 0) > 0)
                 .map((payment) => {
                     const rawDate = payment.paidAt || payment.paymentDateLabel || payment.createdAt;
-                    const studentRecord = studentMap.get(String(payment.studentId || '')) || {};
+                    const studentRecord = studentMap.get(String(payment.studentId || '')) ||
+                        rollMap.get(String(payment.rollNo || '').trim().toLowerCase()) ||
+                        nameRollMap.get(`${String(payment.studentName || '').trim().toLowerCase()}|${String(payment.rollNo || '').trim().toLowerCase()}|${String(payment.classGrade || '').trim().toLowerCase()}`) ||
+                        {};
                     return {
                         studentId: payment.studentId || '',
                         student: payment.studentName || studentRecord.fullName || '-',
                         fatherName: payment.fatherName || studentRecord.fatherName || studentRecord.parentName || '-',
                         classGrade: payment.classGrade || studentRecord.classGrade || '-',
                         rollNo: payment.rollNo || studentRecord.rollNo || '-',
+                        campusName: payment.campusName || studentRecord.campusName || studentRecord.branchName || studentRecord.campus || 'Main Campus',
                         month: payment.feeMonth || '-',
                         date: normalizeHistoryDate(rawDate),
                         dateKey: normalizeDateInput(rawDate),
@@ -449,6 +491,7 @@
                         sortTime: historySortTime(rawDate)
                     };
                 })
+                .filter((row) => paymentStatementCampusMatches(row.campusName))
                 .sort((a, b) => b.sortTime - a.sortTime);
             [...paymentStatementRows]
                 .sort((a, b) => a.sortTime - b.sortTime || String(a.challanNumber).localeCompare(String(b.challanNumber)))

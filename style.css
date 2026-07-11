@@ -156,7 +156,7 @@ ul {
 }
 
 .login-icon-circle::after {
-    content: "Myownschool\A Jand";
+    content: "MyOwn School\A Jand";
     white-space: pre-line;
     color: #ffffff;
     font-size: 1.16rem;
@@ -450,7 +450,7 @@ ul {
 }
 
 .sidebar .logo-section::after {
-    content: "Myownschool\A Jand";
+    content: "MyOwn School\A Jand";
     color: #ffffff;
     font-size: 0.9rem;
     font-weight: 800;
@@ -510,6 +510,37 @@ ul {
     width: 18px;
     height: 18px;
     flex: 0 0 18px;
+    color: var(--admin-icon-color, currentColor);
+}
+
+.dashboard-container .nav-item:nth-child(1) { --admin-icon-color: #256bb3; }
+.dashboard-container .nav-item:nth-child(2) { --admin-icon-color: #10b981; }
+.dashboard-container .nav-item:nth-child(3) { --admin-icon-color: #8b5cf6; }
+.dashboard-container .nav-item:nth-child(4) { --admin-icon-color: #0891b2; }
+.dashboard-container .nav-item:nth-child(5) { --admin-icon-color: #f59e0b; }
+.dashboard-container .nav-item:nth-child(6) { --admin-icon-color: #db2777; }
+.dashboard-container .nav-item:nth-child(7) { --admin-icon-color: #14b8a6; }
+.dashboard-container .nav-item:nth-child(8) { --admin-icon-color: #ea580c; }
+.dashboard-container .nav-item:nth-child(9) { --admin-icon-color: #6366f1; }
+.dashboard-container .nav-item:nth-child(10) { --admin-icon-color: #16a34a; }
+.dashboard-container .nav-item:nth-child(11) { --admin-icon-color: #d97706; }
+.dashboard-container .nav-item:nth-child(12) { --admin-icon-color: #7c3aed; }
+.dashboard-container .nav-item:nth-child(13) { --admin-icon-color: #0ea5e9; }
+.dashboard-container .nav-item:nth-child(14) { --admin-icon-color: #ef4444; }
+.dashboard-container .nav-dropdown:nth-child(1) > .nav-item { --admin-icon-color: #256bb3; }
+.dashboard-container .nav-dropdown:nth-child(2) > .nav-item { --admin-icon-color: #10b981; }
+.dashboard-container .nav-dropdown:nth-child(3) > .nav-item { --admin-icon-color: #8b5cf6; }
+.dashboard-container .nav-dropdown:nth-child(4) > .nav-item { --admin-icon-color: #f59e0b; }
+.dashboard-container .nav-dropdown:nth-child(5) > .nav-item { --admin-icon-color: #db2777; }
+.dashboard-container .nav-dropdown:nth-child(6) > .nav-item { --admin-icon-color: #14b8a6; }
+.dashboard-container .nav-dropdown:nth-child(7) > .nav-item { --admin-icon-color: #ea580c; }
+.dashboard-container .nav-dropdown:nth-child(8) > .nav-item { --admin-icon-color: #6366f1; }
+.dashboard-container .nav-dropdown:nth-child(9) > .nav-item { --admin-icon-color: #16a34a; }
+.dashboard-container .nav-dropdown:nth-child(10) > .nav-item { --admin-icon-color: #d97706; }
+
+.dashboard-container .nav-item:hover svg,
+.dashboard-container .nav-item.active svg {
+    color: #ffffff;
 }
 
 .nav-dropdown {
@@ -573,6 +604,18 @@ ul {
 .nav-subitem svg {
     width: 16px;
     height: 16px;
+    color: var(--admin-sub-icon-color, currentColor);
+}
+
+.dashboard-container .nav-subitem:nth-child(1) { --admin-sub-icon-color: #10b981; }
+.dashboard-container .nav-subitem:nth-child(2) { --admin-sub-icon-color: #256bb3; }
+.dashboard-container .nav-subitem:nth-child(3) { --admin-sub-icon-color: #f59e0b; }
+.dashboard-container .nav-subitem:nth-child(4) { --admin-sub-icon-color: #8b5cf6; }
+.dashboard-container .nav-subitem:nth-child(5) { --admin-sub-icon-color: #db2777; }
+
+.dashboard-container .nav-subitem:hover svg,
+.dashboard-container .nav-subitem.active svg {
+    color: #ffffff;
 }
 
 .nav-submenu .nav-dropdown-toggle {
@@ -921,6 +964,41 @@ ul {
     align-items: center;
     justify-content: center;
     opacity: 0.8;
+}
+
+.dashboard-container .card:nth-child(1) .card-icon {
+    background-color: rgba(37, 107, 179, 0.12);
+    color: #256bb3;
+}
+
+.dashboard-container .card:nth-child(2) .card-icon {
+    background-color: rgba(139, 92, 246, 0.12);
+    color: #8b5cf6;
+}
+
+.dashboard-container .card:nth-child(3) .card-icon {
+    background-color: rgba(16, 185, 129, 0.12);
+    color: #10b981;
+}
+
+.dashboard-container .card:nth-child(4) .card-icon {
+    background-color: rgba(245, 158, 11, 0.14);
+    color: #d97706;
+}
+
+.dashboard-container .card:nth-child(5) .card-icon {
+    background-color: rgba(8, 145, 178, 0.12);
+    color: #0891b2;
+}
+
+.dashboard-container .card:nth-child(6) .card-icon {
+    background-color: rgba(219, 39, 119, 0.12);
+    color: #db2777;
+}
+
+.dashboard-container .card:nth-child(7) .card-icon {
+    background-color: rgba(234, 88, 12, 0.12);
+    color: #ea580c;
 }
 
 /* === RECENT ACTIVITY TABLE === */
