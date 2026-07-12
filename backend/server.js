@@ -9,7 +9,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const mysql = require('mysql2/promise');
 const QRCode = require('qrcode');
-const { getSmtpConfig, sendSmtpEmail } = require('./api/_lib/mailer');
+const { getSmtpConfig, sendSmtpEmail } = require('../api/_lib/mailer');
 
 require('dotenv').config();
 
@@ -17,15 +17,38 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
+const PROJECT_ROOT = path.resolve(__dirname, '..');
+const FRONTEND_DIR = path.join(PROJECT_ROOT, 'frontend');
+const DATA_DIR = path.join(PROJECT_ROOT, 'data');
+fs.mkdirSync(DATA_DIR, { recursive: true });
+
 const JWT_SECRET = process.env.JWT_SECRET || 'eduCore_secret_key_2026';
-const PERMISSIONS_FILE = path.join(__dirname, 'permissions.json');
-const DETAILED_PERMISSIONS_FILE = path.join(__dirname, 'permissions-detailed.json');
-const DATE_SHEET_FILE = path.join(__dirname, 'date_sheet.json');
-const ADMIN_CREDENTIALS_FILE = path.join(__dirname, 'admin_credentials.json');
+const PERMISSIONS_FILE = path.join(DATA_DIR, 'permissions.json');
+const DETAILED_PERMISSIONS_FILE = path.join(DATA_DIR, 'permissions-detailed.json');
+const DATE_SHEET_FILE = path.join(DATA_DIR, 'date_sheet.json');
+const ADMIN_CREDENTIALS_FILE = path.join(DATA_DIR, 'admin_credentials.json');
 const PRINCIPAL_USERNAME = process.env.PRINCIPAL_USERNAME || 'principal@school.com';
 const PRINCIPAL_PASSWORD = process.env.PRINCIPAL_PASSWORD || 'Principal123';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
-app.use(cors());
+const corsOptions = {
+    origin: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    credentials: false,
+    maxAge: 86400
+};
+
+app.disable('x-powered-by');
+app.set('trust proxy', true);
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', req.path.startsWith('/api') ? 'no-store' : 'public, max-age=60');
+    next();
+});
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 const RESERVED_ROUTE_NAMES = new Set(['api', 'health', 'socket.io']);
@@ -39,12 +62,12 @@ function resolvePageFileByRoute(routeName = '') {
     if (!/^[a-z0-9_-]+$/i.test(normalized)) return '';
 
     const candidate = `${normalized}.html`;
-    const candidatePath = path.join(__dirname, candidate);
+    const candidatePath = path.join(FRONTEND_DIR, candidate);
     return fs.existsSync(candidatePath) ? candidate : '';
 }
 
 app.get('/', (_req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    res.sendFile(path.join(FRONTEND_DIR, 'index.html'));
 });
 
 app.get('/:pageName([a-zA-Z0-9_-]+).html', (req, res, next) => {
@@ -61,14 +84,23 @@ app.get('/:pageName([a-zA-Z0-9_-]+).html', (req, res, next) => {
 app.get('/:routeName([a-zA-Z0-9_-]+)', (req, res, next) => {
     const pageFile = resolvePageFileByRoute(req.params.routeName);
     if (!pageFile) return next();
-    return res.sendFile(path.join(__dirname, pageFile));
+    return res.sendFile(path.join(FRONTEND_DIR, pageFile));
 });
 
-app.use(express.static(__dirname));
+app.use(express.static(FRONTEND_DIR));
 
 app.get('/health', (_req, res) => {
     res.json({
         success: true,
+        initialized: isInitialized,
+        timestamp: new Date().toISOString()
+    });
+});
+
+app.get(['/api/health', '/api/ping'], (_req, res) => {
+    res.json({
+        success: true,
+        online: true,
         initialized: isInitialized,
         timestamp: new Date().toISOString()
     });
@@ -434,13 +466,28 @@ function authenticateToken(req, res, next) {
         const sessionId = String(req.user?.sessionId || '').trim();
         const allowIfInactive = req.path === '/api/session/end';
         if (sessionId && !activeSessions.has(sessionId) && !allowIfInactive) {
-            return res.status(401).json({ success: false, message: 'Session is no longer active.' });
+            restoreActiveSessionFromToken(req);
         }
 
         next();
     } catch (error) {
         return res.status(401).json({ success: false, message: 'Invalid or expired token.' });
     }
+}
+
+function restoreActiveSessionFromToken(req) {
+    const sessionId = String(req.user?.sessionId || '').trim();
+    if (!sessionId) return;
+
+    const role = req.user?.role || 'User';
+    const userId = req.user?.id || req.user?.username || 'unknown';
+    registerActiveSession(req, sessionId, {
+        id: userId,
+        fullName: req.user?.fullName || role,
+        role,
+        username: req.user?.username || String(userId),
+        campusName: req.user?.campusName || ''
+    });
 }
 
 function pruneActiveSessions() {
@@ -2560,6 +2607,210 @@ app.post('/api/email/send', authenticateToken, async (req, res) => {
         res.status(error.statusCode || 500).json({
             success: false,
             message: error.message || 'Email could not be sent.'
+        });
+    }
+});
+
+function trimAiText(value = '', maxLength = 180) {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    return text.length > maxLength ? `${text.slice(0, maxLength - 3)}...` : text;
+}
+
+function pickSafePersonFields(item = {}, type = 'student') {
+    if (type === 'student') {
+        return {
+            id: item.studentCode || item.id || '',
+            name: item.fullName || '',
+            class: item.classGrade || '',
+            campus: item.campusName || '',
+            rollNo: item.rollNo || '',
+            feeStatus: item.feesStatus || '',
+            monthlyFee: item.monthlyFee || ''
+        };
+    }
+    if (type === 'teacher') {
+        return {
+            id: item.employeeCode || item.id || '',
+            name: item.fullName || '',
+            campus: item.campusName || '',
+            subject: item.subject || '',
+            designation: item.designation || '',
+            salary: item.salary || ''
+        };
+    }
+    return {
+        id: item.employeeCode || item.id || '',
+        name: item.fullName || '',
+        campus: item.campusName || '',
+        designation: item.designation || '',
+        salary: item.salary || ''
+    };
+}
+
+async function buildAiSchoolContext(user = {}) {
+    if (!sequelize || !isInitialized) {
+        return {
+            online: false,
+            message: 'Database is offline. Only general portal guidance is available.'
+        };
+    }
+
+    const { Student, Teacher, Staff, ClassFee, FeePayment, FeeDueBalance } = sequelize.models;
+    const campusFilter = String(user?.campusName || '').trim();
+    const role = String(user?.role || '').trim();
+    const whereCampus = campusFilter && !['Admin', 'Principal'].includes(role) ? { campusName: campusFilter } : {};
+
+    const [students, teachers, staff, classFees, payments, dueBalances] = await Promise.all([
+        Student ? Student.findAll({ where: whereCampus, order: [['fullName', 'ASC']], limit: 80 }) : [],
+        Teacher ? Teacher.findAll({ where: whereCampus, order: [['fullName', 'ASC']], limit: 80 }) : [],
+        Staff ? Staff.findAll({ where: whereCampus, order: [['fullName', 'ASC']], limit: 80 }) : [],
+        ClassFee ? ClassFee.findAll({ order: [['className', 'ASC']] }) : [],
+        FeePayment ? FeePayment.findAll({ order: [['paidAt', 'DESC']], limit: 20 }) : [],
+        FeeDueBalance ? FeeDueBalance.findAll({ limit: 80 }) : []
+    ]);
+
+    const safeStudents = students.map((item) => pickSafePersonFields(item.get ? item.get({ plain: true }) : item, 'student'));
+    const safeTeachers = teachers.map((item) => pickSafePersonFields(item.get ? item.get({ plain: true }) : item, 'teacher'));
+    const safeStaff = staff.map((item) => pickSafePersonFields(item.get ? item.get({ plain: true }) : item, 'staff'));
+    const campusNames = Array.from(new Set([
+        ...safeStudents.map((item) => item.campus),
+        ...safeTeachers.map((item) => item.campus),
+        ...safeStaff.map((item) => item.campus)
+    ].filter(Boolean)));
+    const classNames = Array.from(new Set(safeStudents.map((item) => item.class).filter(Boolean)));
+
+    return {
+        online: true,
+        user: {
+            role,
+            id: user?.id || '',
+            campusName: campusFilter || 'All campuses'
+        },
+        summary: {
+            students: safeStudents.length,
+            teachers: safeTeachers.length,
+            staff: safeStaff.length,
+            campuses: campusNames,
+            classes: classNames
+        },
+        students: safeStudents.slice(0, 50),
+        teachers: safeTeachers.slice(0, 50),
+        staff: safeStaff.slice(0, 50),
+        classFees: classFees.map((item) => {
+            const row = item.get ? item.get({ plain: true }) : item;
+            return { className: row.className || '', monthlyFee: row.monthlyFee || 0 };
+        }).slice(0, 40),
+        recentPayments: payments.map((item) => {
+            const row = item.get ? item.get({ plain: true }) : item;
+            return {
+                studentName: row.studentName || '',
+                rollNo: row.rollNo || '',
+                classGrade: row.classGrade || '',
+                campusName: row.campusName || '',
+                feeMonth: row.feeMonth || '',
+                amount: row.amount || 0,
+                status: row.status || '',
+                paidAt: row.paidAt || ''
+            };
+        }),
+        dueBalances: dueBalances.map((item) => {
+            const row = item.get ? item.get({ plain: true }) : item;
+            return {
+                studentId: row.studentId || '',
+                studentName: row.studentName || '',
+                rollNo: row.rollNo || '',
+                pendingBalance: row.pendingBalance || 0
+            };
+        }).slice(0, 50)
+    };
+}
+
+function buildLocalAiAnswer(question = '', context = {}) {
+    const q = String(question || '').toLowerCase();
+    const summary = context.summary || {};
+    if (!context.online) return context.message || 'Database offline hai, is waqt detailed school data available nahi.';
+    if (q.includes('student')) {
+        return `System me ${summary.students || 0} students hain. Classes: ${(summary.classes || []).join(', ') || '-'}. Campus: ${(summary.campuses || []).join(', ') || '-'}.`;
+    }
+    if (q.includes('teacher')) {
+        return `System me ${summary.teachers || 0} teachers hain. Teacher list ke liye Teachers module open karein.`;
+    }
+    if (q.includes('staff')) {
+        return `System me ${summary.staff || 0} staff members hain. Staff details Staff module me available hain.`;
+    }
+    if (q.includes('fee') || q.includes('fees') || q.includes('revenue')) {
+        const totalRecent = (context.recentPayments || []).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+        return `Recent saved payments total PKR ${totalRecent.toLocaleString()} hai. Detailed branch/class revenue ke liye Finance/Revenue page use karein.`;
+    }
+    return `Main school system context ke hisab se help kar sakta hun. Current snapshot: ${summary.students || 0} students, ${summary.teachers || 0} teachers, ${summary.staff || 0} staff, campuses: ${(summary.campuses || []).join(', ') || '-'}.`;
+}
+
+async function callOpenAiForSchoolAnswer(message, context) {
+    const prompt = [
+        'You are MyOwn School Jand portal assistant.',
+        'Answer in the same language style as the user. Most users write Roman Urdu.',
+        'Use only the provided school system context. If exact data is not present, say that it is not available in the current system snapshot.',
+        'Do not expose passwords, secrets, API keys, or hidden implementation details.',
+        'Keep answers concise and practical.',
+        '',
+        `School context JSON:\n${JSON.stringify(context).slice(0, 18000)}`,
+        '',
+        `User question: ${trimAiText(message, 1000)}`
+    ].join('\n');
+
+    const response = await axios.post('https://api.openai.com/v1/responses', {
+        model: OPENAI_MODEL,
+        input: prompt,
+        max_output_tokens: 450
+    }, {
+        headers: {
+            Authorization: `Bearer ${OPENAI_API_KEY}`,
+            'Content-Type': 'application/json'
+        },
+        timeout: 20000
+    });
+
+    const data = response.data || {};
+    if (typeof data.output_text === 'string' && data.output_text.trim()) return data.output_text.trim();
+    const outputText = (data.output || [])
+        .flatMap((item) => item.content || [])
+        .map((part) => part.text || '')
+        .join('')
+        .trim();
+    return outputText || '';
+}
+
+app.post('/api/ai-chat', authenticateToken, async (req, res) => {
+    try {
+        const message = trimAiText(req.body?.message || '', 1200);
+        if (!message) {
+            return res.status(400).json({ success: false, message: 'Message is required.' });
+        }
+
+        const context = await buildAiSchoolContext(req.user || {});
+        let answer = '';
+        let provider = 'local';
+
+        if (OPENAI_API_KEY) {
+            try {
+                answer = await callOpenAiForSchoolAnswer(message, context);
+                provider = 'openai';
+            } catch (error) {
+                console.warn('AI provider failed:', error?.response?.data || error.message);
+            }
+        }
+
+        if (!answer) answer = buildLocalAiAnswer(message, context);
+
+        res.json({
+            success: true,
+            provider,
+            answer
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message || 'AI chat could not respond.'
         });
     }
 });

@@ -38,7 +38,7 @@ async function syncPermissions() {
         );
 
         // Load permissions.json
-        const permissionsPath = path.join(__dirname, 'permissions.json');
+        const permissionsPath = path.join(__dirname, '..', 'data', 'permissions.json');
         if (!fs.existsSync(permissionsPath)) {
             console.error('❌ permissions.json not found');
             process.exit(1);

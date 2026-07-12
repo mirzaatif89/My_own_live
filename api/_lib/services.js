@@ -7,7 +7,9 @@ const QRCode = require('qrcode');
 const JWT_SECRET = process.env.JWT_SECRET || 'eduCore_secret_key_2026';
 const PRINCIPAL_USERNAME = process.env.PRINCIPAL_USERNAME || 'principal@school.com';
 const PRINCIPAL_PASSWORD = process.env.PRINCIPAL_PASSWORD || 'Principal123';
-const PERMISSIONS_FILE = path.join(process.cwd(), 'permissions.json');
+const DATA_DIR = path.join(process.cwd(), 'data');
+fs.mkdirSync(DATA_DIR, { recursive: true });
+const PERMISSIONS_FILE = path.join(DATA_DIR, 'permissions.json');
 const MODULE_KEYS = [
     'dashboard',
     'students',
@@ -571,7 +573,7 @@ async function createChallanToken(req, payload) {
 
 // Designation-based permission functions
 function loadDetailedPermissions() {
-    const permissionsPath = path.join(process.cwd(), 'permissions-detailed.json');
+    const permissionsPath = path.join(DATA_DIR, 'permissions-detailed.json');
     try {
         if (fs.existsSync(permissionsPath)) {
             const data = fs.readFileSync(permissionsPath, 'utf8');
@@ -643,7 +645,7 @@ function getAllDesignations() {
 }
 
 async function saveDetailedPermissions(data) {
-    const permissionsPath = path.join(process.cwd(), 'permissions-detailed.json');
+    const permissionsPath = path.join(DATA_DIR, 'permissions-detailed.json');
     try {
         fs.writeFileSync(permissionsPath, JSON.stringify(data, null, 2), 'utf8');
         return true;

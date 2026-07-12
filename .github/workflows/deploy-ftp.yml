@@ -64,9 +64,9 @@ jobs:
             **/.github/**
             **/node_modules/**
             **/.env
-            **/permissions.json
-            **/date_sheet.json
-            **/admin_credentials.json
+            **/data/permissions.json
+            **/data/date_sheet.json
+            **/data/admin_credentials.json
             **/.deploy-backup/**
             **/server.log
             **/stderr.log

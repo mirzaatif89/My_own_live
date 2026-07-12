@@ -1279,8 +1279,16 @@
                 },
                 body: JSON.stringify({ page: currentPage })
             })
-                .then((response) => {
-                    if (response.status === 401 || response.status === 403) {
+                .then(async (response) => {
+                    if (response.status !== 401) return;
+                    let message = '';
+                    try {
+                        const payload = await response.json();
+                        message = String(payload?.message || '').toLowerCase();
+                    } catch (_error) {
+                        message = '';
+                    }
+                    if (!message || /invalid|expired|token|required/.test(message)) {
                         logoutUser();
                     }
                 })
@@ -1361,6 +1369,7 @@ function logoutUser(event) {
     sessionStorage.removeItem('loggedInUser');
     sessionStorage.removeItem('eduCore_token');
     sessionStorage.removeItem('eduCore_student_profile');
+    sessionStorage.removeItem('eduCore_session_id');
     sessionStorage.removeItem('eduCore_permissions_config');
     window.location.href = '/login';
 }

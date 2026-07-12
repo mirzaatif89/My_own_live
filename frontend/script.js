@@ -32,6 +32,7 @@ const BACKEND_URL = isLocalhost
     : (window.ENV_BACKEND_URL || window.location.origin);
 
 const API_BASE_URL = `${BACKEND_URL}/api`;
+const TRANSIENT_HTTP_STATUSES = new Set([403, 408, 429, 500, 502, 503, 504]);
 let socket;
 let activePortalSessionsCache = [];
 let dashboardActiveSessionsInterval = null;
@@ -146,6 +147,48 @@ function toRoutePath(pageName = '') {
     if (normalizedPage === 'index.html') return '/';
     if (normalizedPage === 'login.html') return '/login';
     return normalizedPage;
+}
+
+function delay(ms) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function fetchWithRetry(url, options = {}, retryOptions = {}) {
+    const retries = Number.isFinite(retryOptions.retries) ? retryOptions.retries : 2;
+    const timeoutMs = Number.isFinite(retryOptions.timeoutMs) ? retryOptions.timeoutMs : 15000;
+    let lastError = null;
+
+    for (let attempt = 0; attempt <= retries; attempt += 1) {
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const timeoutId = controller ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
+
+        try {
+            const response = await fetch(url, {
+                cache: 'no-store',
+                ...options,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    ...(options.headers || {})
+                },
+                ...(controller ? { signal: controller.signal } : {})
+            });
+
+            if (attempt < retries && TRANSIENT_HTTP_STATUSES.has(response.status)) {
+                await delay(500 * (attempt + 1));
+                continue;
+            }
+
+            return response;
+        } catch (error) {
+            lastError = error;
+            if (attempt >= retries) break;
+            await delay(500 * (attempt + 1));
+        } finally {
+            if (timeoutId) window.clearTimeout(timeoutId);
+        }
+    }
+
+    throw lastError || new Error('Request failed.');
 }
 
 (function installAppPopups() {
@@ -812,11 +855,11 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.disabled = true;
 
             try {
-                const response = await fetch(`${API_BASE_URL}/login`, {
+                const response = await fetchWithRetry(`${API_BASE_URL}/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
-                });
+                }, { retries: 2, timeoutMs: 15000 });
 
                 const responseText = await response.text();
                 let result = null;
@@ -887,9 +930,11 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (error) {
                 console.error("Login Error:", error);
 
-                let errorMsg = error.message;
-                if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
-                    errorMsg = "🔴 Connection Failed! Please ensure the Backend Server is running.\n\nRun 'node server.js' in your terminal.";
+                let errorMsg = error.message || 'Login failed.';
+                if (error.message === 'Failed to fetch' || error.name === 'TypeError' || error.name === 'AbortError') {
+                    errorMsg = 'Connection failed. Please check your internet and try again. If this continues after redeploy, restart the Node.js app from cPanel.';
+                } else if (/^403\b|forbidden/i.test(errorMsg)) {
+                    errorMsg = 'Request was blocked by the server. Please try again once. If it continues, restart the Node.js app from cPanel and confirm the domain points to this app folder.';
                 }
 
                 alert(errorMsg);

@@ -68,8 +68,10 @@ jobs:
             rm -rf "$BACKUP_DIR"
             mkdir -p "$BACKUP_DIR"
 
-            for file in .env permissions.json date_sheet.json admin_credentials.json; do
+            mkdir -p "$BACKUP_DIR/data"
+            for file in .env data/permissions.json data/date_sheet.json data/admin_credentials.json; do
               if [ -f "$file" ]; then
+                mkdir -p "$BACKUP_DIR/$(dirname "$file")"
                 cp "$file" "$BACKUP_DIR/$file"
               fi
             done
@@ -78,8 +80,9 @@ jobs:
             git checkout "$BRANCH"
             git reset --hard "origin/$BRANCH"
 
-            for file in .env permissions.json date_sheet.json admin_credentials.json; do
+            for file in .env data/permissions.json data/date_sheet.json data/admin_credentials.json; do
               if [ -f "$BACKUP_DIR/$file" ]; then
+                mkdir -p "$(dirname "$file")"
                 cp "$BACKUP_DIR/$file" "$file"
               fi
             done
