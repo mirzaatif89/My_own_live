@@ -34,8 +34,18 @@ module.exports = createHandler({
         const paidAt = existingPayment?.paidAt || new Date();
         const paymentDateLabel = new Date(paidAt).toLocaleDateString('en-GB');
 
-        const paymentAmount = Number(payload.amount || student.monthlyFee || 0);
-        const fullAmount = Number(payload.fullAmount || payload.amount || student.monthlyFee || 0);
+        const paymentAmount = Number(String(payload.amount ?? student.monthlyFee ?? 0).replace(/,/g, ''));
+        if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+            sendHtml(res, 400, renderFeePaymentPage({
+                title: 'Invalid Amount',
+                message: 'This challan does not contain a valid payable amount.',
+                success: false
+            }));
+            return;
+        }
+
+        const parsedFullAmount = Number(String(payload.fullAmount ?? payload.amount ?? student.monthlyFee ?? 0).replace(/,/g, ''));
+        const fullAmount = Number.isFinite(parsedFullAmount) && parsedFullAmount > 0 ? parsedFullAmount : paymentAmount;
         const remainingDue = Math.max(fullAmount - paymentAmount, 0);
         const resolvedStatus = remainingDue > 0 ? 'Partial' : 'Paid';
 
@@ -59,7 +69,7 @@ module.exports = createHandler({
         const monthsPaid = selectedMonths;
         const feeMonthRecorded = monthsPaid.length ? monthsPaid.join(', ') : 'Dues';
 
-        await FeePayment.upsert({
+        const newPaymentRow = {
             challanNumber: payload.challanNumber,
             studentId: payload.studentId,
             studentName: payload.studentName || student.fullName || '',
@@ -72,7 +82,12 @@ module.exports = createHandler({
             paidAt,
             paymentDateLabel,
             paymentSource: 'QR Scan'
-        });
+        };
+
+        const paymentRow = alreadyRecorded ? existingPayment.toJSON() : newPaymentRow;
+        if (!alreadyRecorded) {
+            await FeePayment.upsert(newPaymentRow);
+        }
 
         if (!alreadyRecorded && FeeDueBalance) {
             const existingDue = await FeeDueBalance.findByPk(payload.studentId);
@@ -98,7 +113,7 @@ module.exports = createHandler({
             const lower = String(month || '').toLowerCase();
             return lower === currentLower || lower === currentShortLower;
         });
-        if (resolvedStatus === 'Paid' && (shouldUpdateCurrentMonthStatus || currentMonthPaid) && monthsPaid.length) {
+        if (!alreadyRecorded && resolvedStatus === 'Paid' && (shouldUpdateCurrentMonthStatus || currentMonthPaid) && monthsPaid.length) {
             await Student.update({
                 feesStatus: 'Paid',
                 paymentDate: paymentDateLabel
@@ -118,9 +133,9 @@ module.exports = createHandler({
                 { label: 'Student', value: payload.studentName || student.fullName || '-' },
                 { label: 'Roll No', value: payload.rollNo || student.rollNo || '-' },
                 { label: 'Class', value: payload.classGrade || student.classGrade || '-' },
-                { label: 'Fee Month', value: payload.feeMonth || '-' },
-                { label: 'Session', value: payload.session || '-' },
-                { label: 'Amount', value: `PKR ${Number(paymentAmount || 0).toLocaleString('en-PK')}` },
+                { label: 'Fee Month', value: paymentRow.feeMonth || payload.feeMonth || '-' },
+                { label: 'Session', value: paymentRow.session || payload.session || '-' },
+                { label: 'Amount', value: `PKR ${Number(paymentRow.amount || paymentAmount || 0).toLocaleString('en-PK')}` },
                 ...(remainingDue > 0 ? [{ label: 'Remaining Due', value: `PKR ${Number(remainingDue || 0).toLocaleString('en-PK')}` }] : []),
                 { label: 'Challan No.', value: payload.challanNumber || '-' },
                 { label: 'Paid On', value: paymentDateLabel }

@@ -28,8 +28,14 @@ module.exports = createHandler({
             return;
         }
 
-        const paymentAmount = Number(amount || 0);
-        const safeFullAmount = Number(fullAmount || amount || student.monthlyFee || 0);
+        const paymentAmount = Number(String(amount ?? 0).replace(/,/g, ''));
+        if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+            sendJson(res, 400, { success: false, message: 'Enter a valid payment amount.' });
+            return;
+        }
+
+        const parsedFullAmount = Number(String(fullAmount ?? amount ?? student.monthlyFee ?? 0).replace(/,/g, ''));
+        const safeFullAmount = Number.isFinite(parsedFullAmount) && parsedFullAmount > 0 ? parsedFullAmount : paymentAmount;
         const remainingDue = Math.max(safeFullAmount - paymentAmount, 0);
         const resolvedStatus = remainingDue > 0 ? 'Partial' : 'Paid';
 
@@ -57,7 +63,7 @@ module.exports = createHandler({
         const paidAt = existingPayment?.paidAt || new Date();
         const paymentDateLabel = new Date(paidAt).toLocaleDateString('en-GB');
 
-        const paymentRow = {
+        const newPaymentRow = {
             challanNumber: safeChallanNumber,
             studentId,
             studentName: studentName || student.fullName || '',
@@ -72,7 +78,10 @@ module.exports = createHandler({
             paymentSource: 'Manual'
         };
 
-        await FeePayment.upsert(paymentRow);
+        const paymentRow = alreadyRecorded ? existingPayment.toJSON() : newPaymentRow;
+        if (!alreadyRecorded) {
+            await FeePayment.upsert(newPaymentRow);
+        }
 
         if (!alreadyRecorded && FeeDueBalance) {
             const existingDue = await FeeDueBalance.findByPk(studentId);
@@ -95,7 +104,7 @@ module.exports = createHandler({
             return lower === currentLower || lower === currentShortLower;
         });
 
-        if (currentMonthPaid && resolvedStatus === 'Paid') {
+        if (!alreadyRecorded && currentMonthPaid && resolvedStatus === 'Paid') {
             await Student.update({
                 feesStatus: 'Paid',
                 paymentDate: paymentDateLabel

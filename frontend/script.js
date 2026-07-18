@@ -4047,12 +4047,25 @@ const STORAGE_KEY_BILLS = 'eduCore_bills';
 let currentCategory = null;
 
 function getBills() {
-    const data = localStorage.getItem(STORAGE_KEY_BILLS);
-    return data ? JSON.parse(data) : [];
+    try {
+        const data = JSON.parse(localStorage.getItem(STORAGE_KEY_BILLS) || '[]');
+        return Array.isArray(data) ? data : [];
+    } catch (_error) {
+        return [];
+    }
 }
 
 function saveBills(bills) {
-    localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(bills));
+    localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(Array.isArray(bills) ? bills : []));
+}
+
+function parseFinanceAmount(value) {
+    const amount = Number(String(value ?? '').replace(/,/g, '').trim());
+    return Number.isFinite(amount) ? Math.max(amount, 0) : 0;
+}
+
+function formatFinanceMoney(value) {
+    return `PKR ${parseFinanceAmount(value).toLocaleString('en-PK', { maximumFractionDigits: 2 })}`;
 }
 
 function getScopedBills() {
@@ -4212,7 +4225,7 @@ function renderFinance(term = '') {
                     <td style="font-weight:600; color:var(--primary-color)">${b.category}</td>
                     <td>${pDate}</td>
                     <td>${b.note || '-'}</td>
-                    <td style="font-weight:600">PKR ${parseInt(b.amount).toLocaleString()}</td>
+                    <td style="font-weight:600">${formatFinanceMoney(b.amount)}</td>
                     <td>
                         ${b.invoice ? '<i data-lucide="file-text" size="14" style="margin-right:5px; color:#6366f1;" title="Bill Invoice"></i>' : ''}
                         <i data-lucide="image" size="16" style="color:var(--primary-color)"></i> View
@@ -4227,7 +4240,7 @@ function renderFinance(term = '') {
                 tr.innerHTML = `
                     <td>${b.date}</td>
                     <td>${b.note || '-'}</td>
-                    <td>PKR ${parseInt(b.amount).toLocaleString()}</td>
+                    <td>${formatFinanceMoney(b.amount)}</td>
                     <td>
                         <span class="status-badge ${statusClass}">${b.status}</span>
                         ${b.invoice ? '<i data-lucide="file-text" size="12" style="margin-left:5px; color:#6366f1;" title="Invoice Attached"></i>' : ''}
@@ -4296,7 +4309,7 @@ document.addEventListener('submit', function (e) {
         const newBill = {
             id: isEdit ? idField.value : generateUniqueRecordId('BILL'),
             category: currentCategory,
-            amount: document.getElementById('billAmount').value,
+            amount: parseFinanceAmount(document.getElementById('billAmount').value),
             date: document.getElementById('billDate').value,
             status: document.getElementById('billStatus').value,
             note: document.getElementById('billNote').value,
@@ -4384,7 +4397,7 @@ function openPaymentModal(id) {
     document.getElementById('pModalBillId').innerText = b.id;
     document.getElementById('pModalCategory').innerText = b.category;
     document.getElementById('pModalDate').innerText = b.date;
-    document.getElementById('pModalAmount').innerText = 'PKR ' + parseInt(b.amount).toLocaleString();
+    document.getElementById('pModalAmount').innerText = formatFinanceMoney(b.amount);
 
     // Reset Form
     document.getElementById('paymentConfirmForm').reset();
@@ -4411,8 +4424,9 @@ function closePaymentModal() {
 }
 
 function formatDashboardCurrency(amount) {
-    const value = Number(amount || 0);
-    return `PKR ${Math.round(value).toLocaleString('en-PK')}`;
+    const value = Number(String(amount ?? '').replace(/,/g, '').trim());
+    const safeValue = Number.isFinite(value) ? value : 0;
+    return `PKR ${Math.round(safeValue).toLocaleString('en-PK')}`;
 }
 
 function isFreeStudyStudent(student = {}) {
@@ -4426,7 +4440,7 @@ function isFreeStudyStudent(student = {}) {
 function getDashboardStudentFee(student = {}) {
     if (isFreeStudyStudent(student)) return 0;
     const studentFeeRaw = String(student?.monthlyFee ?? student?.fee ?? '').trim();
-    const studentFee = Number(studentFeeRaw || 0) || 0;
+    const studentFee = Number(studentFeeRaw.replace(/,/g, '') || 0) || 0;
     const hasManualFee = studentFee > 0 && (student?.monthlyFeeCustom === true || student?.monthlyFeeCustom === 'true');
     if (hasManualFee) return studentFee;
 
@@ -4441,7 +4455,7 @@ function getDashboardStudentFee(student = {}) {
     const targetClass = normalize(student?.classGrade || '');
     const match = Object.entries(classFees).find(([className]) => normalize(className) === targetClass);
     const config = match ? (match[1] || {}) : {};
-    const classFee = Number(config.monthlyFee || config.fee || 0) || 0;
+    const classFee = Number(String(config.monthlyFee || config.fee || 0).replace(/,/g, '')) || 0;
     if (studentFee > 0 && classFee > 0 && studentFee !== classFee) return studentFee;
     if (classFee > 0) return classFee;
 
@@ -8219,7 +8233,7 @@ function renderTeachers(term = '') {
                         <div><strong>Pass:</strong> ${t.plainPassword || t.password || '-'}</div>
                     </div>
                 </td>
-                <td style="font-weight:600;">PKR ${parseInt(t.salary || 0).toLocaleString()}</td>
+                <td style="font-weight:600;">${formatDashboardCurrency(t.salary || 0)}</td>
                 <td>${t.phone || '-'}</td>
                 <td>
                     <div class="teacher-action-wrap">
@@ -9465,7 +9479,7 @@ function getEmployeeAttendanceSummary(employeeId, monthKey) {
 }
 
 function getSalaryBreakdown(entry, monthKey) {
-    const grossSalary = parseInt(entry.salary || 0, 10) || 0;
+    const grossSalary = Number(String(entry.salary || 0).replace(/,/g, '')) || 0;
     const attendance = getEmployeeAttendanceSummary(entry.id, monthKey);
     const deductionDays = attendance.absent + attendance.leave;
     const dailyRate = attendance.countedDays ? grossSalary / attendance.countedDays : 0;
@@ -9488,7 +9502,7 @@ function buildSalaryRoster() {
         entityType: 'teacher',
         roleLabel: 'Teacher',
         fullName: teacher.fullName || 'Unnamed Teacher',
-        salary: parseInt(teacher.salary || 0, 10) || 0,
+        salary: Number(String(teacher.salary || 0).replace(/,/g, '')) || 0,
         secondaryLabel: teacher.subject || teacher.campusName || 'Teacher',
         campusName: teacher.campusName || '',
         searchableText: `${teacher.fullName || ''} ${teacher.subject || ''} ${teacher.campusName || ''} teacher`.toLowerCase()
@@ -9499,7 +9513,7 @@ function buildSalaryRoster() {
         entityType: 'staff',
         roleLabel: member.designation || 'Staff',
         fullName: member.fullName || 'Unnamed Staff',
-        salary: parseInt(member.salary || 0, 10) || 0,
+        salary: Number(String(member.salary || 0).replace(/,/g, '')) || 0,
         secondaryLabel: member.designation || 'Staff Member',
         campusName: member.campusName || '',
         searchableText: `${member.fullName || ''} ${member.designation || ''} staff`.toLowerCase()
@@ -9519,7 +9533,8 @@ function getMonthlySalarySummary(monthKey) {
         expected += breakdown.netSalary;
         const payment = getSalaryPaymentRecord(salaries, entry.entityType, entry.id, monthKey);
         if (payment) {
-            transferred += payment.amount || breakdown.netSalary;
+            const paymentAmount = Number(String(payment.amount ?? '').replace(/,/g, ''));
+            transferred += Number.isFinite(paymentAmount) ? Math.max(paymentAmount, 0) : breakdown.netSalary;
         }
     });
 

@@ -10,6 +10,7 @@ const jwt = require('jsonwebtoken');
 const mysql = require('mysql2/promise');
 const QRCode = require('qrcode');
 const { getSmtpConfig, sendSmtpEmail } = require('../api/_lib/mailer');
+const apiCatalog = require('../api/_lib/apiCatalog');
 
 require('dotenv').config();
 
@@ -21,6 +22,8 @@ const PROJECT_ROOT = path.resolve(__dirname, '..');
 const FRONTEND_DIR = path.join(PROJECT_ROOT, 'frontend');
 const DATA_DIR = path.join(PROJECT_ROOT, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
+const MOBILE_API_STORE_DIR = path.join(DATA_DIR, 'mobile_api_store');
+fs.mkdirSync(MOBILE_API_STORE_DIR, { recursive: true });
 
 const JWT_SECRET = process.env.JWT_SECRET || 'eduCore_secret_key_2026';
 const PERMISSIONS_FILE = path.join(DATA_DIR, 'permissions.json');
@@ -104,6 +107,10 @@ app.get(['/api/health', '/api/ping'], (_req, res) => {
         initialized: isInitialized,
         timestamp: new Date().toISOString()
     });
+});
+
+app.get(['/api/catalog', '/api/mobile-api-list'], (_req, res) => {
+    res.json({ success: true, ...apiCatalog });
 });
 
 let sequelize;
@@ -553,6 +560,84 @@ function buildActiveSessionsSummary() {
         sessions,
         uniqueSessions
     };
+}
+
+function safeStoreName(name = '') {
+    return String(name || '').replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
+}
+
+function mobileStorePath(storeName) {
+    return path.join(MOBILE_API_STORE_DIR, `${safeStoreName(storeName)}.json`);
+}
+
+function readMobileStore(storeName) {
+    try {
+        const filePath = mobileStorePath(storeName);
+        if (!fs.existsSync(filePath)) return [];
+        const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (_error) {
+        return [];
+    }
+}
+
+function writeMobileStore(storeName, records = []) {
+    const normalized = Array.isArray(records) ? records : [];
+    fs.writeFileSync(mobileStorePath(storeName), JSON.stringify(normalized, null, 2), 'utf8');
+    return normalized;
+}
+
+function getMobileRecordsPayload(recordsKey, storeName) {
+    const records = readMobileStore(storeName);
+    return { success: true, [recordsKey]: records };
+}
+
+function normalizeMobileRecord(payload = {}, prefix = 'REC') {
+    const raw = payload && typeof payload === 'object' ? payload : {};
+    const id = String(raw.id || `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`).trim();
+    const now = new Date().toISOString();
+    return {
+        ...raw,
+        id,
+        createdAt: raw.createdAt || now,
+        updatedAt: now
+    };
+}
+
+function upsertMobileRecord(storeName, payload, prefix) {
+    const records = readMobileStore(storeName);
+    const record = normalizeMobileRecord(payload, prefix);
+    const index = records.findIndex((item) => String(item.id) === String(record.id));
+    if (index >= 0) {
+        records[index] = { ...records[index], ...record };
+    } else {
+        records.unshift(record);
+    }
+    return { record, records: writeMobileStore(storeName, records) };
+}
+
+function deleteMobileRecord(storeName, id) {
+    const records = readMobileStore(storeName);
+    const nextRecords = records.filter((item) => String(item.id) !== String(id));
+    return writeMobileStore(storeName, nextRecords);
+}
+
+function registerMobileCollectionRoutes({ route, storeName, recordsKey, itemKey, prefix, socketEvent }) {
+    app.get(`/api/${route}`, (req, res) => {
+        res.json(getMobileRecordsPayload(recordsKey, storeName));
+    });
+
+    app.post(`/api/${route}`, (req, res) => {
+        const { record, records } = upsertMobileRecord(storeName, req.body || {}, prefix);
+        if (socketEvent) io.emit(socketEvent, records);
+        res.json({ success: true, [itemKey]: record, [recordsKey]: records });
+    });
+
+    app.delete(`/api/${route}/:id`, (req, res) => {
+        const records = deleteMobileRecord(storeName, req.params.id);
+        if (socketEvent) io.emit(socketEvent, records);
+        res.json({ success: true, deleted: true, [recordsKey]: records });
+    });
 }
 
 function canManageActiveSessions(user = {}) {
@@ -1985,8 +2070,13 @@ app.post('/api/fees/manual-payment', async (req, res) => {
             return res.status(404).json({ success: false, message: 'Student not found.' });
         }
 
-        const paymentAmount = Number(amount || 0);
-        const safeFullAmount = Number(fullAmount || amount || student.monthlyFee || 0);
+        const paymentAmount = Number(String(amount ?? 0).replace(/,/g, ''));
+        if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+            return res.status(400).json({ success: false, message: 'Enter a valid payment amount.' });
+        }
+
+        const parsedFullAmount = Number(String(fullAmount ?? amount ?? student.monthlyFee ?? 0).replace(/,/g, ''));
+        const safeFullAmount = Number.isFinite(parsedFullAmount) && parsedFullAmount > 0 ? parsedFullAmount : paymentAmount;
         const remainingDue = Math.max(safeFullAmount - paymentAmount, 0);
         const resolvedStatus = remainingDue > 0 ? 'Partial' : 'Paid';
 
@@ -2015,7 +2105,7 @@ app.post('/api/fees/manual-payment', async (req, res) => {
         const paidAt = existingPayment?.paidAt || new Date();
         const paymentDateLabel = paidAt.toLocaleDateString('en-GB');
 
-        const paymentRow = {
+        const newPaymentRow = {
             challanNumber: safeChallanNumber,
             studentId,
             studentName: studentName || student.fullName || '',
@@ -2030,7 +2120,10 @@ app.post('/api/fees/manual-payment', async (req, res) => {
             paymentSource: 'Manual'
         };
 
-        await FeePayment.upsert(paymentRow);
+        const paymentRow = alreadyRecorded ? existingPayment.toJSON() : newPaymentRow;
+        if (!alreadyRecorded) {
+            await FeePayment.upsert(newPaymentRow);
+        }
 
         if (!alreadyRecorded && FeeDueBalance) {
             const existingDue = await FeeDueBalance.findByPk(studentId);
@@ -2053,7 +2146,7 @@ app.post('/api/fees/manual-payment', async (req, res) => {
             return lower === currentLower || lower === currentShortLower;
         });
 
-        if (currentMonthPaid && resolvedStatus === 'Paid') {
+        if (!alreadyRecorded && currentMonthPaid && resolvedStatus === 'Paid') {
             await Student.update({
                 feesStatus: 'Paid',
                 paymentDate: paymentDateLabel
@@ -2139,7 +2232,10 @@ app.post('/api/fees/mark-unpaid', async (req, res) => {
             return res.status(404).json({ success: false, message: 'No paid payment record found for this month.' });
         }
 
-        const removedAmount = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+        const removedAmount = payments.reduce((sum, payment) => {
+            const amount = Number(String(payment.amount ?? 0).replace(/,/g, ''));
+            return sum + (Number.isFinite(amount) ? Math.max(amount, 0) : 0);
+        }, 0);
         await FeePayment.update({
             status: 'Voided',
             paymentSource: 'Correction'
@@ -2235,8 +2331,17 @@ app.get('/api/fees/pay/:token', async (req, res) => {
         const paidAt = existingPayment?.paidAt || new Date();
         const paymentDateLabel = paidAt.toLocaleDateString('en-GB');
 
-        const paymentAmount = Number(payload.amount || student.monthlyFee || 0);
-        const fullAmount = Number(payload.fullAmount || payload.amount || student.monthlyFee || 0);
+        const paymentAmount = Number(String(payload.amount ?? student.monthlyFee ?? 0).replace(/,/g, ''));
+        if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+            return res.status(400).send(renderFeePaymentPage({
+                title: 'Invalid Amount',
+                message: 'This challan does not contain a valid payable amount.',
+                success: false
+            }));
+        }
+
+        const parsedFullAmount = Number(String(payload.fullAmount ?? payload.amount ?? student.monthlyFee ?? 0).replace(/,/g, ''));
+        const fullAmount = Number.isFinite(parsedFullAmount) && parsedFullAmount > 0 ? parsedFullAmount : paymentAmount;
         const remainingDue = Math.max(fullAmount - paymentAmount, 0);
         const resolvedStatus = remainingDue > 0 ? 'Partial' : 'Paid';
 
@@ -2258,7 +2363,7 @@ app.get('/api/fees/pay/:token', async (req, res) => {
         const monthsPaid = selectedMonths;
         const feeMonthRecorded = monthsPaid.length ? monthsPaid.join(', ') : 'Dues';
 
-        const paymentRow = {
+        const newPaymentRow = {
             challanNumber: payload.challanNumber,
             studentId: payload.studentId,
             studentName: payload.studentName || student.fullName || '',
@@ -2273,7 +2378,10 @@ app.get('/api/fees/pay/:token', async (req, res) => {
             paymentSource: 'QR Scan'
         };
 
-        await FeePayment.upsert(paymentRow);
+        const paymentRow = alreadyRecorded ? existingPayment.toJSON() : newPaymentRow;
+        if (!alreadyRecorded) {
+            await FeePayment.upsert(newPaymentRow);
+        }
 
         if (!alreadyRecorded && FeeDueBalance) {
             const existingDue = await FeeDueBalance.findByPk(payload.studentId);
@@ -2299,7 +2407,7 @@ app.get('/api/fees/pay/:token', async (req, res) => {
             const lower = String(month || '').toLowerCase();
             return lower === currentLower || lower === currentShortLower;
         });
-        if (resolvedStatus === 'Paid' && (shouldUpdateCurrentMonthStatus || currentMonthPaid) && monthsPaid.length) {
+        if (!alreadyRecorded && resolvedStatus === 'Paid' && (shouldUpdateCurrentMonthStatus || currentMonthPaid) && monthsPaid.length) {
             await Student.update({
                 feesStatus: 'Paid',
                 paymentDate: paymentDateLabel
@@ -2323,9 +2431,9 @@ app.get('/api/fees/pay/:token', async (req, res) => {
                 { label: 'Student', value: payload.studentName || student.fullName || '-' },
                 { label: 'Roll No', value: payload.rollNo || student.rollNo || '-' },
                 { label: 'Class', value: payload.classGrade || student.classGrade || '-' },
-                { label: 'Fee Month', value: payload.feeMonth || '-' },
-                { label: 'Session', value: payload.session || '-' },
-                { label: 'Amount', value: `PKR ${Number(paymentAmount || 0).toLocaleString('en-PK')}` },
+                { label: 'Fee Month', value: paymentRow.feeMonth || payload.feeMonth || '-' },
+                { label: 'Session', value: paymentRow.session || payload.session || '-' },
+                { label: 'Amount', value: `PKR ${Number(paymentRow.amount || paymentAmount || 0).toLocaleString('en-PK')}` },
                 ...(remainingDue > 0 ? [{ label: 'Remaining Due', value: `PKR ${Number(remainingDue || 0).toLocaleString('en-PK')}` }] : []),
                 { label: 'Challan No.', value: payload.challanNumber || '-' },
                 { label: 'Paid On', value: paymentDateLabel }
@@ -2356,6 +2464,28 @@ app.get('/api/teachers', async (req, res) => {
         res.json(teachers);
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/teacher/me', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'Teacher') {
+        return res.status(403).json({ success: false, message: 'Teacher access only.' });
+    }
+
+    if (!sequelize) return res.status(503).json({ success: false, message: 'Database offline' });
+
+    try {
+        const teacher = await sequelize.models.Teacher.findByPk(req.user.id, {
+            attributes: { exclude: ['password'] }
+        });
+
+        if (!teacher) {
+            return res.status(404).json({ success: false, message: 'Teacher record not found.' });
+        }
+
+        return res.json(teacher);
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -2609,6 +2739,179 @@ app.post('/api/email/send', authenticateToken, async (req, res) => {
             message: error.message || 'Email could not be sent.'
         });
     }
+});
+
+registerMobileCollectionRoutes({
+    route: 'banners',
+    storeName: 'banners',
+    recordsKey: 'banners',
+    itemKey: 'banner',
+    prefix: 'BANNER',
+    socketEvent: 'banners_update'
+});
+
+registerMobileCollectionRoutes({
+    route: 'ads',
+    storeName: 'ads',
+    recordsKey: 'ads',
+    itemKey: 'ad',
+    prefix: 'AD',
+    socketEvent: 'ads_update'
+});
+
+registerMobileCollectionRoutes({
+    route: 'online-admissions',
+    storeName: 'online_admissions',
+    recordsKey: 'applications',
+    itemKey: 'application',
+    prefix: 'ADM',
+    socketEvent: 'online_admissions_update'
+});
+
+app.post('/api/online-admissions/:id', (req, res) => {
+    const records = readMobileStore('online_admissions');
+    const index = records.findIndex((item) => String(item.id) === String(req.params.id));
+    if (index < 0) return res.status(404).json({ success: false, message: 'Application not found.' });
+    records[index] = {
+        ...records[index],
+        ...req.body,
+        updatedAt: new Date().toISOString()
+    };
+    const applications = writeMobileStore('online_admissions', records);
+    io.emit('online_admissions_update', applications);
+    res.json({ success: true, application: records[index], applications });
+});
+
+registerMobileCollectionRoutes({ route: 'library/issues', storeName: 'library_issues', recordsKey: 'issues', itemKey: 'issue', prefix: 'LIB' });
+app.post('/api/library/issues/:id/return', (req, res) => {
+    const records = readMobileStore('library_issues');
+    const index = records.findIndex((item) => String(item.id) === String(req.params.id));
+    if (index < 0) return res.status(404).json({ success: false, message: 'Library issue not found.' });
+    records[index] = {
+        ...records[index],
+        status: 'Returned',
+        returnDate: req.body?.returnDate || new Date().toISOString().slice(0, 10),
+        updatedAt: new Date().toISOString()
+    };
+    res.json({ success: true, issue: records[index], issues: writeMobileStore('library_issues', records) });
+});
+
+registerMobileCollectionRoutes({ route: 'cafe/contracts', storeName: 'cafe_contracts', recordsKey: 'contracts', itemKey: 'contract', prefix: 'CAFE' });
+registerMobileCollectionRoutes({ route: 'transport/assignments', storeName: 'transport_assignments', recordsKey: 'assignments', itemKey: 'assignment', prefix: 'TRN' });
+registerMobileCollectionRoutes({ route: 'student-assignments', storeName: 'student_assignments', recordsKey: 'assignments', itemKey: 'assignment', prefix: 'ASG' });
+registerMobileCollectionRoutes({ route: 'teacher-salaries', storeName: 'teacher_salaries', recordsKey: 'salaries', itemKey: 'salary', prefix: 'SAL' });
+registerMobileCollectionRoutes({ route: 'student-diary', storeName: 'student_diary', recordsKey: 'diary', itemKey: 'entry', prefix: 'DIARY' });
+registerMobileCollectionRoutes({ route: 'student-courses', storeName: 'student_courses', recordsKey: 'courses', itemKey: 'course', prefix: 'COURSE' });
+registerMobileCollectionRoutes({ route: 'uploaded-assignments', storeName: 'uploaded_assignments', recordsKey: 'assignments', itemKey: 'assignment', prefix: 'UPLOAD-ASG' });
+registerMobileCollectionRoutes({ route: 'uploaded-lectures', storeName: 'uploaded_lectures', recordsKey: 'lectures', itemKey: 'lecture', prefix: 'LECTURE' });
+registerMobileCollectionRoutes({ route: 'student-quizzes', storeName: 'student_quizzes', recordsKey: 'quizzes', itemKey: 'quiz', prefix: 'QUIZ' });
+registerMobileCollectionRoutes({ route: 'student-quiz-submissions', storeName: 'student_quiz_submissions', recordsKey: 'submissions', itemKey: 'submission', prefix: 'QUIZ-SUB' });
+
+app.get('/api/leave-requests', (req, res) => {
+    let leaveRequests = readMobileStore('leave_requests');
+    const role = String(req.query.role || '').trim().toLowerCase();
+    if (role) {
+        leaveRequests = leaveRequests.filter((item) => String(item.applicantRole || item.role || '').trim().toLowerCase() === role);
+    }
+    res.json({ success: true, leaveRequests });
+});
+
+app.post('/api/leave-requests', (req, res) => {
+    const role = req.user?.role || req.body?.applicantRole || req.body?.role || 'Student';
+    const applicantId = req.user?.id || req.body?.applicantId || req.body?.studentId || req.body?.teacherId || '';
+    const applicantName = req.user?.fullName || req.body?.applicantName || req.body?.studentName || req.body?.teacherName || '';
+    const { record, records } = upsertMobileRecord('leave_requests', {
+        status: 'Pending',
+        ...req.body,
+        applicantRole: role,
+        applicantId,
+        applicantName
+    }, 'LEAVE');
+    res.json({ success: true, leaveRequest: record, leaveRequests: records });
+});
+
+app.post('/api/leave-requests/:id', (req, res) => {
+    const records = readMobileStore('leave_requests');
+    const index = records.findIndex((item) => String(item.id) === String(req.params.id));
+    if (index < 0) return res.status(404).json({ success: false, message: 'Leave request not found.' });
+    records[index] = {
+        ...records[index],
+        ...req.body,
+        status: req.body?.status || records[index].status || 'Pending',
+        reviewedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+    };
+    res.json({ success: true, leaveRequest: records[index], leaveRequests: writeMobileStore('leave_requests', records) });
+});
+
+app.delete('/api/leave-requests/:id', (req, res) => {
+    const leaveRequests = deleteMobileRecord('leave_requests', req.params.id);
+    res.json({ success: true, deleted: true, leaveRequests });
+});
+
+app.get('/api/complaints', (req, res) => {
+    let complaints = readMobileStore('complaints');
+    const role = String(req.query.role || req.query.senderRole || '').trim().toLowerCase();
+    const senderId = String(req.query.senderId || req.query.studentId || req.query.teacherId || '').trim();
+    const status = String(req.query.status || '').trim().toLowerCase();
+    if (role) {
+        complaints = complaints.filter((item) => String(item.senderRole || '').trim().toLowerCase() === role);
+    }
+    if (senderId) {
+        complaints = complaints.filter((item) => String(item.senderId || item.studentId || item.teacherId || '') === senderId);
+    }
+    if (status) {
+        complaints = complaints.filter((item) => String(item.status || '').trim().toLowerCase() === status);
+    }
+    res.json({ success: true, complaints });
+});
+
+app.post('/api/complaints', (req, res) => {
+    const role = req.user?.role || req.body?.senderRole || req.body?.role || req.body?.complainantRole || 'Student';
+    const senderRole = /^teacher$/i.test(role) ? 'Teacher' : (/^(family|parent|parents)$/i.test(role) ? 'Family' : 'Student');
+    const { record, records } = upsertMobileRecord('complaints', {
+        status: 'Pending',
+        ...req.body,
+        senderRole,
+        senderId: req.user?.id || req.body?.senderId || req.body?.studentId || req.body?.teacherId || '',
+        senderName: req.user?.fullName || req.body?.senderName || req.body?.studentName || req.body?.teacherName || req.body?.parentName || req.body?.familyName || '',
+        senderClass: req.body?.senderClass || req.body?.className || req.body?.class || '',
+        subject: req.body?.subject || 'Complaint',
+        message: req.body?.message || req.body?.complaint || req.body?.details || '',
+        status: req.body?.status || 'Pending'
+    }, 'CMP');
+    io.emit('complaints_update', records);
+    res.json({ success: true, complaint: record, complaints: records });
+});
+
+app.post('/api/complaints/:id', (req, res) => {
+    const records = readMobileStore('complaints');
+    const index = records.findIndex((item) => String(item.id) === String(req.params.id));
+    if (index < 0) return res.status(404).json({ success: false, message: 'Complaint not found.' });
+    records[index] = {
+        ...records[index],
+        ...req.body,
+        status: req.body?.status || records[index].status || 'Pending',
+        updatedAt: new Date().toISOString()
+    };
+    const complaints = writeMobileStore('complaints', records);
+    io.emit('complaints_update', complaints);
+    res.json({ success: true, complaint: records[index], complaints });
+});
+
+app.delete('/api/complaints/:id', (req, res) => {
+    const complaints = deleteMobileRecord('complaints', req.params.id);
+    io.emit('complaints_update', complaints);
+    res.json({ success: true, deleted: true, complaints });
+});
+
+app.get('/api/fees/fine-charge', (_req, res) => {
+    res.json(getMobileRecordsPayload('fineCharges', 'fee_fine_charges'));
+});
+
+app.post('/api/fees/fine-charge', (req, res) => {
+    const { record, records } = upsertMobileRecord('fee_fine_charges', req.body || {}, 'FINE');
+    res.json({ success: true, fineCharge: record, fineCharges: records });
 });
 
 function trimAiText(value = '', maxLength = 180) {
@@ -3438,14 +3741,10 @@ module.exports = {
 
 if (require.main === module) {
     const PORT = Number(process.env.PORT || 3001);
-    startServer()
-        .then(() => {
-            server.listen(PORT, '0.0.0.0', () => {
-                console.log(`Real-Time SQL Server running on port ${PORT}`);
-            });
-        })
-        .catch((err) => {
-            console.error('Startup failed:', err?.message || err);
-            process.exit(1);
+    server.listen(PORT, '0.0.0.0', () => {
+        console.log(`Real-Time SQL Server running on port ${PORT}`);
+        startServer().catch((err) => {
+            console.error('Startup background initialization failed:', err?.message || err);
         });
+    });
 }
