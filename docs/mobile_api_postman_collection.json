@@ -1,0 +1,113 @@
+{
+  "info": {
+    "name": "My Own School CRM Mobile APIs",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api" },
+    { "key": "token", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Developer - API Catalog",
+      "request": { "method": "GET", "url": "{{baseUrl}}/catalog" }
+    },
+    {
+      "name": "Auth - Login",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"username\": \"student_or_teacher_username\",\n  \"password\": \"password\"\n}" },
+        "url": "{{baseUrl}}/login"
+      }
+    },
+    {
+      "name": "Student - Me",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{baseUrl}}/student/me"
+      }
+    },
+    {
+      "name": "Teacher - Me",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{baseUrl}}/teacher/me"
+      }
+    },
+    {
+      "name": "Student - Attendance",
+      "request": { "method": "GET", "url": "{{baseUrl}}/student-attendance" }
+    },
+    {
+      "name": "Teacher - Attendance",
+      "request": { "method": "GET", "url": "{{baseUrl}}/teacher-attendance" }
+    },
+    {
+      "name": "Fees - Payments",
+      "request": { "method": "GET", "url": "{{baseUrl}}/fees/payments" }
+    },
+    {
+      "name": "Portal - Student Notices",
+      "request": { "method": "GET", "url": "{{baseUrl}}/special-notices?portal=student" }
+    },
+    {
+      "name": "Portal - Teacher Notices",
+      "request": { "method": "GET", "url": "{{baseUrl}}/special-notices?portal=teacher" }
+    },
+    {
+      "name": "Leave - List",
+      "request": { "method": "GET", "url": "{{baseUrl}}/leave-requests" }
+    },
+    {
+      "name": "Leave - Submit",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"applicantRole\": \"Student\",\n  \"applicantId\": \"STUDENT_ID\",\n  \"fromDate\": \"2026-07-14\",\n  \"toDate\": \"2026-07-15\",\n  \"reason\": \"Leave reason\"\n}" },
+        "url": "{{baseUrl}}/leave-requests"
+      }
+    },
+    {
+      "name": "Complaints - List",
+      "request": { "method": "GET", "url": "{{baseUrl}}/complaints?role=Student" }
+    },
+    {
+      "name": "Complaints - Submit",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"senderRole\": \"Student\",\n  \"senderId\": \"STUDENT_ID\",\n  \"senderName\": \"Student Name\",\n  \"senderClass\": \"Class 5\",\n  \"subject\": \"Complaint subject\",\n  \"message\": \"Complaint details\"\n}" },
+        "url": "{{baseUrl}}/complaints"
+      }
+    },
+    {
+      "name": "Complaints - Update",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"status\": \"Resolved\",\n  \"reply\": \"School office reply\",\n  \"actionTaken\": \"Action taken details\"\n}" },
+        "url": "{{baseUrl}}/complaints/COMPLAINT_ID"
+      }
+    },
+    {
+      "name": "Student - Submit Assignment",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"studentId\": \"STUDENT_ID\",\n  \"assignmentTitle\": \"Homework\",\n  \"subject\": \"Science\",\n  \"note\": \"Submitted from mobile app\"\n}" },
+        "url": "{{baseUrl}}/student-assignments"
+      }
+    },
+    {
+      "name": "Student - Uploaded Lectures",
+      "request": { "method": "GET", "url": "{{baseUrl}}/uploaded-lectures" }
+    },
+    {
+      "name": "Student - Quizzes",
+      "request": { "method": "GET", "url": "{{baseUrl}}/student-quizzes" }
+    }
+  ]
+}

@@ -1,7 +1,6 @@
 const apiBase = '/api';
 
 const state = {
-    notices: [],
     branches: [],
     banners: []
 };
@@ -29,26 +28,9 @@ async function getJson(endpoint, fallback) {
     }
 }
 
-function renderNotices() {
-    const container = document.getElementById('noticeList');
-    if (!container) return;
-    if (!state.notices.length) {
-        container.innerHTML = '<p class="empty-state">No public notices available yet.</p>';
-        return;
-    }
-    container.innerHTML = state.notices.slice(0, 5).map((notice) => `
-        <div class="notice-item">
-            <strong>${escapeHtml(text(notice.title, 'Notice'))}</strong>
-            <span>${escapeHtml(text(notice.message, '')).slice(0, 180)}</span>
-        </div>
-    `).join('');
-}
-
 function renderContact() {
-    const activeBranch = state.branches.find((branch) => branch.isActive !== false) || state.branches[0];
-    const address = text(activeBranch?.campusName || activeBranch?.fullName, 'Main Campus');
-    setText('headerAddress', address);
-    setText('contactAddress', address);
+    setText('headerAddress', 'Dakhni Road Jand');
+    setText('contactAddress', 'Main Campus, Dakhni Road Jand');
 }
 
 function renderBanners() {
@@ -119,18 +101,15 @@ function escapeHtml(value) {
 }
 
 async function loadWebsiteData() {
-    const [noticePayload, branches, bannerPayload] = await Promise.all([
-        getJson('/special-notices', { notices: [] }),
+    const [branches, bannerPayload] = await Promise.all([
         getJson('/branches', []),
         getJson('/banners', { banners: [] })
     ]);
 
-    state.notices = Array.isArray(noticePayload?.notices) ? noticePayload.notices : [];
     state.branches = Array.isArray(branches) ? branches : [];
     state.banners = Array.isArray(bannerPayload?.banners) ? bannerPayload.banners : (Array.isArray(bannerPayload) ? bannerPayload : []);
 
     renderBanners();
-    renderNotices();
     renderContact();
 }
 
@@ -153,14 +132,61 @@ function setupNavigation() {
 function setupInquiryForm() {
     const form = document.getElementById('inquiryForm');
     if (!form) return;
-    form.addEventListener('submit', (event) => {
+    const statusNode = document.getElementById('inquiryFormStatus');
+    const setStatus = (message, isError = false) => {
+        if (!statusNode) return;
+        statusNode.textContent = message;
+        statusNode.classList.toggle('error', Boolean(isError));
+    };
+
+    form.addEventListener('submit', async (event) => {
         event.preventDefault();
-        const name = text(document.getElementById('inquiryName')?.value, '');
-        const className = text(document.getElementById('inquiryClass')?.value, '');
-        const phone = text(document.getElementById('inquiryPhone')?.value, '');
-        const message = text(document.getElementById('inquiryMessage')?.value, '');
-        const body = encodeURIComponent(`Name: ${name}\nClass: ${className}\nPhone: ${phone}\n\n${message}`);
-        window.location.href = `mailto:rootsjand@gmail.com?subject=Admission Inquiry&body=${body}`;
+        const submitButton = form.querySelector('button[type="submit"]');
+        const payload = {
+            studentName: text(document.getElementById('inquiryStudentName')?.value, ''),
+            parentName: text(document.getElementById('inquiryParentName')?.value, ''),
+            className: text(document.getElementById('inquiryClass')?.value, ''),
+            phone: text(document.getElementById('inquiryPhone')?.value, ''),
+            email: text(document.getElementById('inquiryEmail')?.value, ''),
+            campus: text(document.getElementById('inquiryCampus')?.value, ''),
+            studentAge: text(document.getElementById('inquiryStudentAge')?.value, ''),
+            previousSchool: text(document.getElementById('inquiryPreviousSchool')?.value, ''),
+            address: text(document.getElementById('inquiryAddress')?.value, ''),
+            message: text(document.getElementById('inquiryMessage')?.value, '')
+        };
+
+        if (!payload.studentName || !payload.parentName || !payload.className || !payload.phone) {
+            setStatus('Student name, parent name, class, and phone are required.', true);
+            return;
+        }
+
+        try {
+            if (submitButton) {
+                submitButton.disabled = true;
+                submitButton.innerHTML = '<i data-lucide="loader-circle"></i> Submitting...';
+                if (window.lucide) window.lucide.createIcons();
+            }
+            setStatus('Submitting admission application...');
+            const response = await fetch(`${apiBase}/online-admissions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || result.success === false) {
+                throw new Error(result.message || 'Application could not be submitted.');
+            }
+            form.reset();
+            setStatus('Application submitted. School office will contact you soon.');
+        } catch (error) {
+            setStatus(error.message || 'Application could not be submitted.', true);
+        } finally {
+            if (submitButton) {
+                submitButton.disabled = false;
+                submitButton.innerHTML = '<i data-lucide="send"></i> Submit Application';
+                if (window.lucide) window.lucide.createIcons();
+            }
+        }
     });
 }
 

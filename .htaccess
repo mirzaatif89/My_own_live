@@ -1,0 +1,15 @@
+DirectoryIndex index.html frontend/index.html
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    RewriteRule ^$ frontend/index.html [L]
+
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    RewriteCond %{DOCUMENT_ROOT}/frontend/$1.html -f
+    RewriteRule ^([A-Za-z0-9_-]+)$ frontend/$1.html [L]
+</IfModule>

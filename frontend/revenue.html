@@ -566,6 +566,36 @@
 
             <div class="revenue-stats" style="margin-top: 1.5rem;">
                 <div class="rev-card">
+                    <div class="rev-icon" style="background: rgba(20, 184, 166, 0.12); color: #0f766e;">
+                        <i data-lucide="calendar-days"></i>
+                    </div>
+                    <div class="rev-data">
+                        <p id="monthToDateRevenueLabel">Month To Date Revenue</p>
+                        <h3 id="monthToDateRevenue">PKR 0</h3>
+                    </div>
+                </div>
+                <div class="rev-card">
+                    <div class="rev-icon" style="background: rgba(245, 158, 11, 0.12); color: #b45309;">
+                        <i data-lucide="receipt-text"></i>
+                    </div>
+                    <div class="rev-data">
+                        <p id="monthToDateExpenseLabel">Month To Date Expenses</p>
+                        <h3 id="monthToDateExpenses">PKR 0</h3>
+                    </div>
+                </div>
+                <div class="rev-card">
+                    <div class="rev-icon" style="background: rgba(34, 197, 94, 0.12); color: #15803d;">
+                        <i data-lucide="activity"></i>
+                    </div>
+                    <div class="rev-data">
+                        <p id="monthToDateProfitLabel">Profit / Loss To Date</p>
+                        <h3 id="monthToDateProfitLoss" class="profit-value">PKR 0</h3>
+                    </div>
+                </div>
+            </div>
+
+            <div class="revenue-stats" style="margin-top: 1.5rem;">
+                <div class="rev-card">
                     <div class="rev-icon" style="background: rgba(99, 102, 241, 0.1); color: #4f46e5;">
                         <i data-lucide="wallet"></i>
                     </div>
@@ -710,7 +740,7 @@
     </div>
 
     <script src="auth.js"></script>
-    <script src="script.js"></script>
+    <script src="script.js?v=20260718-revenue-mtd-profit-loss"></script>
     <script>
         const STORAGE_KEY_MONTHLY_FEES = 'eduCore_monthly_fees';
         const STORAGE_KEY_REVENUE_BILLS = 'eduCore_bills';
@@ -721,6 +751,7 @@
 
         let revenueRefreshTimer = null;
         let selectedRevenueMonthKey = '';
+        let revenueMonthManuallySelected = false;
         let selectedRevenueDateKey = '';
         let dailyRevenueRows = [];
         let dailyRevenueTotalAmount = 0;
@@ -734,6 +765,7 @@
             initRevenueCampusFilter();
             document.getElementById('revenueMonthPicker')?.addEventListener('change', (event) => {
                 selectedRevenueMonthKey = String(event.target.value || getCurrentMonthMeta().monthKey);
+                revenueMonthManuallySelected = true;
                 updateRevenueReport();
             });
             document.getElementById('revenueDatePicker')?.addEventListener('change', (event) => {
@@ -910,6 +942,34 @@
             return parsed.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
         }
 
+        function getRevenueMonthStartKey(monthMeta = getCurrentMonthMeta()) {
+            return `${monthMeta.year}-${String(monthMeta.monthIndex + 1).padStart(2, '0')}-01`;
+        }
+
+        function getRevenueMonthEndKey(monthMeta = getCurrentMonthMeta()) {
+            const lastDate = new Date(monthMeta.year, monthMeta.monthIndex + 1, 0);
+            return `${lastDate.getFullYear()}-${String(lastDate.getMonth() + 1).padStart(2, '0')}-${String(lastDate.getDate()).padStart(2, '0')}`;
+        }
+
+        function getRevenueMonthToDateCutoffKey(monthMeta = getCurrentMonthMeta()) {
+            const todayKey = getTodayDateKey();
+            const monthStartKey = getRevenueMonthStartKey(monthMeta);
+            const monthEndKey = getRevenueMonthEndKey(monthMeta);
+            if (todayKey < monthStartKey) return monthStartKey;
+            if (todayKey > monthEndKey) return monthEndKey;
+            return todayKey;
+        }
+
+        function isRevenueDateInRange(dateKey = '', startKey = '', endKey = '') {
+            const normalized = normalizeRevenueDateKey(dateKey);
+            if (!normalized) return false;
+            return (!startKey || normalized >= startKey) && (!endKey || normalized <= endKey);
+        }
+
+        function getRevenueMonthToDateLabel(monthMeta = getCurrentMonthMeta()) {
+            return `${formatRevenueDateLabel(getRevenueMonthStartKey(monthMeta))} to ${formatRevenueDateLabel(getRevenueMonthToDateCutoffKey(monthMeta))}`;
+        }
+
         function normalizeFeeMonthToKey(value) {
             const raw = String(value || '').trim();
             if (!raw) return '';
@@ -955,6 +1015,18 @@
             if (monthKeys.length) return Array.from(new Set(monthKeys));
             const single = normalizeFeeMonthToKey(raw);
             return single ? [single] : [];
+        }
+
+        function getLatestRevenuePaymentMonthKey(payments = []) {
+            if (typeof getLatestDashboardPaymentMonthKey === 'function') return getLatestDashboardPaymentMonthKey(payments);
+            return (Array.isArray(payments) ? payments : []).reduce((latestMonthKey, payment) => {
+                if (!isRevenueFeePayment(payment)) return latestMonthKey;
+                const monthKeys = getPaymentMonthKeys(payment.feeMonth, payment.paidAt || payment.paymentDateLabel || payment.createdAt);
+                monthKeys.forEach((monthKey) => {
+                    if (!latestMonthKey || monthKey > latestMonthKey) latestMonthKey = monthKey;
+                });
+                return latestMonthKey;
+            }, '');
         }
 
         function isRevenueFeePayment(payment = {}) {
@@ -1098,6 +1170,16 @@
                 .reduce((total, bill) => total + Math.max(parseRevenueAmount(bill.amount), 0), 0);
         }
 
+        function getPaidBillsAmountToDate(monthMeta = getCurrentMonthMeta()) {
+            const startKey = getRevenueMonthStartKey(monthMeta);
+            const cutoffKey = getRevenueMonthToDateCutoffKey(monthMeta);
+            return readRevenueBills()
+                .filter(revenueMatchesSelectedCampus)
+                .filter((bill) => String(bill.status || '').toLowerCase() === 'paid')
+                .filter((bill) => isRevenueDateInRange(bill?.billDate || bill?.date || bill?.paidAt || bill?.createdAt, startKey, cutoffKey))
+                .reduce((total, bill) => total + Math.max(parseRevenueAmount(bill.amount), 0), 0);
+        }
+
         function getAllSalaryTransfers() {
             const salaries = typeof getTeacherSalaries === 'function' ? getTeacherSalaries() : {};
             const roster = typeof buildSalaryRoster === 'function' ? buildSalaryRoster() : [];
@@ -1110,6 +1192,36 @@
                 if (!/20\d{2}-\d{2}$/.test(String(key || ''))) return total;
                 if (allowedKeys.size && !Array.from(allowedKeys).some((prefix) => String(key).startsWith(prefix))) return total;
                 return total + Math.max(parseRevenueAmount(payment?.amount), 0);
+            }, 0);
+        }
+
+        function getSalaryTransfersToDate(monthMeta = getCurrentMonthMeta()) {
+            const salaries = typeof getTeacherSalaries === 'function' ? getTeacherSalaries() : {};
+            const roster = typeof buildSalaryRoster === 'function' ? buildSalaryRoster() : [];
+            const cutoffKey = getRevenueMonthToDateCutoffKey(monthMeta);
+            return roster.reduce((total, entry) => {
+                const payment = typeof getSalaryPaymentRecord === 'function'
+                    ? getSalaryPaymentRecord(salaries, entry.entityType, entry.id, monthMeta.monthKey)
+                    : null;
+                if (!payment) return total;
+                const paymentDateKey = normalizeRevenueDateKey(payment.date || payment.paidAt || payment.createdAt || '');
+                if (paymentDateKey && paymentDateKey > cutoffKey) return total;
+                const breakdown = typeof getSalaryBreakdown === 'function'
+                    ? getSalaryBreakdown(entry, monthMeta.monthKey)
+                    : { netSalary: parseRevenueAmount(entry.salary || 0) };
+                const paymentAmount = parseRevenueAmount(payment?.amount);
+                return total + (paymentAmount > 0 ? paymentAmount : Math.max(parseRevenueAmount(breakdown.netSalary), 0));
+            }, 0);
+        }
+
+        function getCollectedRevenueToDate(payments = [], monthMeta = getCurrentMonthMeta()) {
+            const startKey = getRevenueMonthStartKey(monthMeta);
+            const cutoffKey = getRevenueMonthToDateCutoffKey(monthMeta);
+            return (Array.isArray(payments) ? payments : []).reduce((total, payment) => {
+                if (!isRevenueFeePayment(payment)) return total;
+                const paymentDateKey = normalizeRevenueDateKey(payment.paidAt || payment.paymentDateLabel || payment.createdAt || '');
+                if (!isRevenueDateInRange(paymentDateKey, startKey, cutoffKey)) return total;
+                return total + Math.max(parseRevenueAmount(payment.amount), 0);
             }, 0);
         }
 
@@ -1150,6 +1262,15 @@
             const salarySummary = getMonthlySalarySummary(currentMonthMeta.monthKey);
             const paymentResult = await fetchCollectedFeePayments();
             const feePayments = getRevenueScopedPayments(paymentResult.payments, allStudents);
+            if (!revenueMonthManuallySelected) {
+                const latestMonthKey = getLatestRevenuePaymentMonthKey(feePayments);
+                if (latestMonthKey && latestMonthKey !== selectedRevenueMonthKey) {
+                    selectedRevenueMonthKey = latestMonthKey;
+                    const picker = document.getElementById('revenueMonthPicker');
+                    if (picker) picker.value = latestMonthKey;
+                    return updateRevenueReport();
+                }
+            }
             renderDailyFeeCollection(feePayments);
             const monthDisplay = document.getElementById('currentMonthDisplay');
             if (monthDisplay) monthDisplay.innerText = `${currentMonthMeta.monthName} ${currentMonthMeta.year}`;
@@ -1180,6 +1301,12 @@
             const paidBills = getPaidBillsAmount(currentMonthMeta.monthKey);
             const paidExpenses = salarySummary.transferred + paidBills;
             const profitLoss = totalCollected - paidExpenses;
+            const monthToDateLabel = getRevenueMonthToDateLabel(currentMonthMeta);
+            const monthToDateCollected = getCollectedRevenueToDate(validFeePayments, currentMonthMeta);
+            const monthToDateBills = getPaidBillsAmountToDate(currentMonthMeta);
+            const monthToDateSalaries = getSalaryTransfersToDate(currentMonthMeta);
+            const monthToDateExpenses = monthToDateBills + monthToDateSalaries;
+            const monthToDateProfitLoss = monthToDateCollected - monthToDateExpenses;
             const allMonthsSalaries = getAllSalaryTransfers();
             const allMonthsBills = getPaidBillsAmount();
             const allMonthsProfitLoss = allMonthsCollected - allMonthsSalaries - allMonthsBills;
@@ -1195,10 +1322,16 @@
             document.getElementById('netPendingRevenue').innerText = formatRevenueMoney(remainingBalance);
             document.getElementById('paidBillsExpense').innerText = formatRevenueMoney(paidBills);
             document.getElementById('paidExpensesTotal').innerText = formatRevenueMoney(paidExpenses);
+            document.getElementById('monthToDateRevenue').innerText = formatRevenueMoney(monthToDateCollected);
+            document.getElementById('monthToDateExpenses').innerText = formatRevenueMoney(monthToDateExpenses);
+            document.getElementById('monthToDateRevenueLabel').innerText = `Revenue To Date (${monthToDateLabel})`;
+            document.getElementById('monthToDateExpenseLabel').innerText = `Expenses To Date (${monthToDateLabel})`;
+            document.getElementById('monthToDateProfitLabel').innerText = `Profit / Loss To Date (${monthToDateLabel})`;
             document.getElementById('allMonthsRevenue').innerText = formatRevenueMoney(allMonthsCollected);
             document.getElementById('allMonthsSalaries').innerText = formatRevenueMoney(allMonthsSalaries);
             document.getElementById('allMonthsBills').innerText = formatRevenueMoney(allMonthsBills);
             setProfitLossValue('profitLossRevenue', profitLoss);
+            setProfitLossValue('monthToDateProfitLoss', monthToDateProfitLoss);
             setProfitLossValue('allMonthsProfitLoss', allMonthsProfitLoss);
 
             // Render Class Bars (sorted by class order)

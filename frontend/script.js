@@ -37,6 +37,8 @@ let socket;
 let activePortalSessionsCache = [];
 let dashboardActiveSessionsInterval = null;
 let activeSessionsModalEventsBound = false;
+let selectedDashboardRevenueMonthKey = '';
+let dashboardRevenueMonthManuallySelected = false;
 const DASHBOARD_CAMPUS_FILTER_KEY = 'eduCore_dashboard_campus_filter';
 const GLOBAL_CAMPUS_FILTER_KEY = DASHBOARD_CAMPUS_FILTER_KEY;
 const DEFAULT_CAMPUS_NAMES = ['Main Campus'];
@@ -325,7 +327,8 @@ if (typeof io !== 'undefined') {
 
     // Listen for Real-Time SQL Updates
     socket.on('students_update', (data) => {
-        const serverStudents = Array.isArray(data) ? mergeStudentRecords(data, { preserveLocalOnly: false }) : [];
+        const studentRecords = normalizeApiRecordList(data, 'students');
+        const serverStudents = mergeStudentRecords(studentRecords, { preserveLocalOnly: false });
         localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(getCurrentUserScopedRecords(serverStudents)));
         if (isCurrentPage('students.html')) renderStudents();
         if (isCurrentPage('stuck_off.html')) renderStuckOffPage();
@@ -333,14 +336,14 @@ if (typeof io !== 'undefined') {
     });
 
     socket.on('teachers_update', (data) => {
-        localStorage.setItem(STORAGE_KEY_TEACHERS, JSON.stringify(getCurrentUserScopedRecords(mergeTeacherRecords(data))));
+        localStorage.setItem(STORAGE_KEY_TEACHERS, JSON.stringify(getCurrentUserScopedRecords(mergeTeacherRecords(normalizeApiRecordList(data, 'teachers')))));
         if (isCurrentPage('teachers.html')) renderTeachers();
         if (isCurrentPage('stuck_off.html')) renderStuckOffPage();
         if (isCurrentPage('dashboard.html')) updateDashboardStats();
     });
 
     socket.on('staff_update', (data) => {
-        localStorage.setItem(STORAGE_KEY_STAFF, JSON.stringify(getCurrentUserScopedRecords(mergeStaffRecords(data))));
+        localStorage.setItem(STORAGE_KEY_STAFF, JSON.stringify(getCurrentUserScopedRecords(mergeStaffRecords(normalizeApiRecordList(data, 'staff')))));
         if (isCurrentPage('staff.html')) renderStaff();
         if (isCurrentPage('dashboard.html')) updateDashboardStats();
     });
@@ -425,6 +428,13 @@ function getMissingRecords(localRecords, serverRecords) {
     return localList.filter((item) => item?.id && !serverIds.has(item.id));
 }
 
+function normalizeApiRecordList(payload, recordsKey) {
+    if (Array.isArray(payload)) return payload;
+    if (payload && Array.isArray(payload[recordsKey])) return payload[recordsKey];
+    if (payload && Array.isArray(payload.records)) return payload.records;
+    return [];
+}
+
 async function initialSQLSync() {
     try {
         const token = sessionStorage.getItem('eduCore_token') || '';
@@ -433,7 +443,8 @@ async function initialSQLSync() {
 
         const sRes = await fetch(`${API_BASE_URL}/students`, { headers: authHeaders });
         if (sRes.ok) {
-            const data = await sRes.json();
+            const result = await parseJsonResponse(sRes, 'Students could not be loaded.');
+            const data = normalizeApiRecordList(result, 'students');
             const mergedStudents = isBranchUser ? getCurrentUserScopedRecords(data) : mergeStudentRecords(data, { preserveLocalOnly: false });
             localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(mergedStudents));
             if (typeof renderStudents === 'function') renderStudents();
@@ -443,7 +454,8 @@ async function initialSQLSync() {
 
         const tRes = await fetch(`${API_BASE_URL}/teachers`, { headers: authHeaders });
         if (tRes.ok) {
-            const data = await tRes.json();
+            const result = await parseJsonResponse(tRes, 'Teachers could not be loaded.');
+            const data = normalizeApiRecordList(result, 'teachers');
             const mergedTeachers = isBranchUser ? getCurrentUserScopedRecords(data) : mergeTeacherRecords(data);
             localStorage.setItem(STORAGE_KEY_TEACHERS, JSON.stringify(mergedTeachers));
             const missingTeachers = isBranchUser ? [] : getMissingRecords(mergedTeachers, data);
@@ -457,7 +469,8 @@ async function initialSQLSync() {
 
         const staffRes = await fetch(`${API_BASE_URL}/staff`, { headers: authHeaders });
         if (staffRes.ok) {
-            const data = await staffRes.json();
+            const result = await parseJsonResponse(staffRes, 'Staff could not be loaded.');
+            const data = normalizeApiRecordList(result, 'staff');
             const mergedStaff = isBranchUser ? getCurrentUserScopedRecords(data) : mergeStaffRecords(data);
             localStorage.setItem(STORAGE_KEY_STAFF, JSON.stringify(mergedStaff));
             const missingStaff = isBranchUser ? [] : getMissingRecords(mergedStaff, data);
@@ -492,15 +505,16 @@ async function refreshStudentsFromSQL() {
 
     const result = await parseJsonResponse(response, 'Students could not be loaded.');
 
-    if (!response.ok || !Array.isArray(result)) {
+    const records = normalizeApiRecordList(result, 'students');
+    if (!response.ok || !Array.isArray(records)) {
         throw new Error(result?.message || result?.error || 'Students could not be loaded.');
     }
 
-    console.log(`API returned ${Array.isArray(result) ? result.length : 0} students`);
+    console.log(`API returned ${records.length} students`);
 
     const mergedStudents = getLoggedInUser()?.role === 'Branch'
-        ? getCurrentUserScopedRecords(result)
-        : mergeStudentRecords(result, { preserveLocalOnly: false });
+        ? getCurrentUserScopedRecords(records)
+        : mergeStudentRecords(records, { preserveLocalOnly: false });
     console.log(`After merge: ${mergedStudents.length} students total`);
 
     localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(mergedStudents));
@@ -513,12 +527,13 @@ async function refreshTeachersFromSQL() {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
     });
     const result = await parseJsonResponse(response, 'Teachers could not be loaded.');
-    if (!response.ok || !Array.isArray(result)) {
+    const records = normalizeApiRecordList(result, 'teachers');
+    if (!response.ok || !Array.isArray(records)) {
         throw new Error(result?.message || result?.error || 'Teachers could not be loaded.');
     }
     const mergedTeachers = getLoggedInUser()?.role === 'Branch'
-        ? getCurrentUserScopedRecords(result)
-        : mergeTeacherRecords(result);
+        ? getCurrentUserScopedRecords(records)
+        : mergeTeacherRecords(records);
     localStorage.setItem(STORAGE_KEY_TEACHERS, JSON.stringify(mergedTeachers));
     return mergedTeachers;
 }
@@ -529,12 +544,13 @@ async function refreshStaffFromSQL() {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
     });
     const result = await parseJsonResponse(response, 'Staff could not be loaded.');
-    if (!response.ok || !Array.isArray(result)) {
+    const records = normalizeApiRecordList(result, 'staff');
+    if (!response.ok || !Array.isArray(records)) {
         throw new Error(result?.message || result?.error || 'Staff could not be loaded.');
     }
     const mergedStaff = getLoggedInUser()?.role === 'Branch'
-        ? getCurrentUserScopedRecords(result)
-        : mergeStaffRecords(result);
+        ? getCurrentUserScopedRecords(records)
+        : mergeStaffRecords(records);
     localStorage.setItem(STORAGE_KEY_STAFF, JSON.stringify(mergedStaff));
     return mergedStaff;
 }
@@ -747,10 +763,8 @@ document.addEventListener('DOMContentLoaded', () => {
     applyGlobalBranding();
     initializeDashboardHome();
 
-    // Perform initial sync from SQL Server
-    if (sessionStorage.getItem('eduCore_token')) {
-        initialSQLSync();
-    }
+    // Perform initial sync from SQL Server. Public GET endpoints keep dashboard/list counts fresh even if token storage was cleared.
+    initialSQLSync();
     populateCampusDropdowns();
     [
         ensureBranchRegistrationNav,
@@ -2387,8 +2401,7 @@ function getCurrentUserScopedRecords(records = []) {
 
     const campusKey = String(user.campusName || '').trim().toLowerCase();
     return (Array.isArray(records) ? records : []).filter((record) => {
-        const recordCampus = String(record?.campusName || record?.branchName || record?.campus || '').trim().toLowerCase();
-        return recordCampus === campusKey;
+        return normalizeCampusFilterValue(getRecordCampusName(record)) === campusKey;
     });
 }
 
@@ -4424,9 +4437,12 @@ function closePaymentModal() {
 }
 
 function formatDashboardCurrency(amount) {
-    const value = Number(String(amount ?? '').replace(/,/g, '').trim());
-    const safeValue = Number.isFinite(value) ? value : 0;
-    return `PKR ${Math.round(safeValue).toLocaleString('en-PK')}`;
+    return `PKR ${Math.round(parseDashboardAmount(amount)).toLocaleString('en-PK')}`;
+}
+
+function parseDashboardAmount(value) {
+    const amount = Number(String(value ?? '').replace(/,/g, '').trim());
+    return Number.isFinite(amount) ? amount : 0;
 }
 
 function isFreeStudyStudent(student = {}) {
@@ -4440,7 +4456,7 @@ function isFreeStudyStudent(student = {}) {
 function getDashboardStudentFee(student = {}) {
     if (isFreeStudyStudent(student)) return 0;
     const studentFeeRaw = String(student?.monthlyFee ?? student?.fee ?? '').trim();
-    const studentFee = Number(studentFeeRaw.replace(/,/g, '') || 0) || 0;
+    const studentFee = parseDashboardAmount(studentFeeRaw);
     const hasManualFee = studentFee > 0 && (student?.monthlyFeeCustom === true || student?.monthlyFeeCustom === 'true');
     if (hasManualFee) return studentFee;
 
@@ -4455,7 +4471,7 @@ function getDashboardStudentFee(student = {}) {
     const targetClass = normalize(student?.classGrade || '');
     const match = Object.entries(classFees).find(([className]) => normalize(className) === targetClass);
     const config = match ? (match[1] || {}) : {};
-    const classFee = Number(String(config.monthlyFee || config.fee || 0).replace(/,/g, '')) || 0;
+    const classFee = parseDashboardAmount(config.monthlyFee || config.fee || 0);
     if (studentFee > 0 && classFee > 0 && studentFee !== classFee) return studentFee;
     if (classFee > 0) return classFee;
 
@@ -4471,7 +4487,36 @@ function getCurrentDashboardFeeMonthKey() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
-function getDashboardPaymentMonthKeys(value = '') {
+function getDashboardRevenueMonthKey() {
+    return selectedDashboardRevenueMonthKey || getCurrentDashboardFeeMonthKey();
+}
+
+function getDashboardMonthMeta(monthKey = getDashboardRevenueMonthKey()) {
+    const match = String(monthKey || '').match(/^(\d{4})-(\d{2})$/);
+    const now = new Date();
+    const year = match ? Number(match[1]) : now.getFullYear();
+    const monthIndex = match ? Math.min(Math.max(Number(match[2]) - 1, 0), 11) : now.getMonth();
+    const monthNames = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    return {
+        monthName: monthNames[monthIndex],
+        monthKey: `${year}-${String(monthIndex + 1).padStart(2, '0')}`,
+        year
+    };
+}
+
+function getDashboardPaymentFallbackYear(fallbackDate = '') {
+    const raw = String(fallbackDate || '').trim();
+    const slashDate = raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+    if (slashDate) return Number(slashDate[3]);
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) return parsed.getFullYear();
+    return new Date().getFullYear();
+}
+
+function getDashboardPaymentMonthKeys(value = '', fallbackDate = '') {
     const raw = String(value || '').trim();
     if (!raw) return [];
 
@@ -4489,15 +4534,33 @@ function getDashboardPaymentMonthKeys(value = '') {
     ];
     const lowered = raw.toLowerCase();
     const yearMatch = lowered.match(/\b(20\d{2})\b/);
-    const fallbackYear = yearMatch ? Number(yearMatch[1]) : new Date().getFullYear();
-    return monthNames
+    const fallbackYear = yearMatch ? Number(yearMatch[1]) : getDashboardPaymentFallbackYear(fallbackDate);
+    return Array.from(new Set(monthNames
         .map((month, index) => ({ month, index }))
         .filter(({ month }) => lowered.includes(month.toLowerCase()) || lowered.includes(month.slice(0, 3).toLowerCase()))
-        .map(({ index }) => `${fallbackYear}-${String(index + 1).padStart(2, '0')}`);
+        .map(({ index }) => `${fallbackYear}-${String(index + 1).padStart(2, '0')}`)));
+}
+
+function getLatestDashboardPaymentMonthKey(payments = []) {
+    return (Array.isArray(payments) ? payments : []).reduce((latestMonthKey, payment) => {
+        if (!isDashboardFeeCollectionPayment(payment)) return latestMonthKey;
+        const monthKeys = getDashboardPaymentMonthKeys(payment?.feeMonth || '', payment?.paidAt || payment?.paymentDateLabel || payment?.createdAt);
+        monthKeys.forEach((monthKey) => {
+            if (!latestMonthKey || monthKey > latestMonthKey) latestMonthKey = monthKey;
+        });
+        return latestMonthKey;
+    }, '');
+}
+
+function isDashboardFeeCollectionPayment(payment = {}) {
+    const status = String(payment?.status || '').toLowerCase();
+    const source = String(payment?.paymentSource || payment?.paymentMode || '').toLowerCase();
+    return ['paid', 'partial'].includes(status) && !['fine', 'fine correction', 'correction'].includes(source);
 }
 
 function getDashboardFeeStatusRevenue(students = []) {
-    const currentMonth = getCurrentDashboardFeeMonth();
+    const monthMeta = getDashboardMonthMeta();
+    const currentMonth = monthMeta.monthName;
     let monthlyFeesData = {};
     let paymentDetails = {};
 
@@ -4521,7 +4584,7 @@ function getDashboardFeeStatusRevenue(students = []) {
         if (!(feeAmount > 0)) return summary;
 
         const monthStatus = monthlyFeesData?.[studentId]?.[currentMonth];
-        const paidRecordAmount = Number(paymentDetails?.[studentId]?.[currentMonth]?.amount || 0) || 0;
+        const paidRecordAmount = Math.max(parseDashboardAmount(paymentDetails?.[studentId]?.[currentMonth]?.amount), 0);
         const studentStatus = String(student?.feesStatus || '').trim().toLowerCase();
 
         let paidAmount = 0;
@@ -4535,12 +4598,12 @@ function getDashboardFeeStatusRevenue(students = []) {
         }
 
         return summary;
-    }, { total: 0, paidStudents: 0, month: currentMonth });
+    }, { total: 0, paidStudents: 0, month: `${currentMonth} ${monthMeta.year}`, monthKey: monthMeta.monthKey });
 }
 
 async function getDashboardBackendFeeStatusRevenue(students = []) {
-    const currentMonth = getCurrentDashboardFeeMonth();
-    const currentMonthKey = getCurrentDashboardFeeMonthKey();
+    const monthMeta = getDashboardMonthMeta();
+    const currentMonthKey = monthMeta.monthKey;
     const studentList = Array.isArray(students) ? students : [];
     const studentMap = new Map(studentList.map((student) => [String(student?.id || ''), student]));
     const rollMap = new Map(studentList
@@ -4552,7 +4615,7 @@ async function getDashboardBackendFeeStatusRevenue(students = []) {
             `${String(student.fullName || '').trim().toLowerCase()}|${String(student.rollNo || '').trim().toLowerCase()}|${String(student.classGrade || '').trim().toLowerCase()}`,
             student
         ]));
-    const summary = { total: 0, paidStudents: 0, month: currentMonth };
+    const summary = { total: 0, paidStudents: 0, month: `${monthMeta.monthName} ${monthMeta.year}`, monthKey: currentMonthKey };
     const paidStudentIds = new Set();
 
     try {
@@ -4560,24 +4623,45 @@ async function getDashboardBackendFeeStatusRevenue(students = []) {
         const result = await parseJsonResponse(response, 'Fee payments could not be loaded.');
         if (!response.ok || result?.success === false) throw new Error(result?.message || 'Fee payments could not be loaded.');
         const payments = Array.isArray(result?.payments) ? result.payments : [];
+        if (!dashboardRevenueMonthManuallySelected) {
+            const latestMonthKey = getLatestDashboardPaymentMonthKey(payments);
+            if (latestMonthKey && latestMonthKey !== selectedDashboardRevenueMonthKey) {
+                selectedDashboardRevenueMonthKey = latestMonthKey;
+                const picker = document.getElementById('dashboardRevenueMonthPicker');
+                if (picker) picker.value = latestMonthKey;
+                return getDashboardBackendFeeStatusRevenue(students);
+            }
+        }
+        const paymentMap = new Map();
 
         payments.forEach((payment) => {
-            const status = String(payment?.status || '').toLowerCase();
-            if (!['paid', 'partial'].includes(status)) return;
+            if (!isDashboardFeeCollectionPayment(payment)) return;
             const studentId = String(payment?.studentId || '');
             const matchedStudent = studentMap.get(studentId) ||
                 rollMap.get(String(payment?.rollNo || '').trim().toLowerCase()) ||
                 nameRollMap.get(`${String(payment?.studentName || '').trim().toLowerCase()}|${String(payment?.rollNo || '').trim().toLowerCase()}|${String(payment?.classGrade || '').trim().toLowerCase()}`);
             if (!matchedStudent) return;
-            const monthKeys = getDashboardPaymentMonthKeys(payment?.feeMonth || '');
+            const monthKeys = getDashboardPaymentMonthKeys(payment?.feeMonth || '', payment?.paidAt || payment?.paymentDateLabel || payment?.createdAt);
             if (monthKeys.length && !monthKeys.includes(currentMonthKey)) return;
-            const amount = Math.max(Number(payment?.amount || 0), 0);
+            const amount = Math.max(parseDashboardAmount(payment?.amount), 0);
             if (!(amount > 0)) return;
-            summary.total += amount / Math.max(monthKeys.length || 1, 1);
-            paidStudentIds.add(String(matchedStudent.id || studentId || `${payment?.studentName || ''}|${payment?.rollNo || ''}`));
+            const normalizedStudentId = String(matchedStudent.id || studentId || `${payment?.studentName || ''}|${payment?.rollNo || ''}`);
+            paymentMap.set(normalizedStudentId, (paymentMap.get(normalizedStudentId) || 0) + (amount / Math.max(monthKeys.length || 1, 1)));
+        });
+
+        studentList.forEach((student) => {
+            const studentId = String(student?.id || '').trim();
+            if (!studentId) return;
+            const expectedFee = Math.max(getDashboardStudentFee(student), 0);
+            if (!(expectedFee > 0)) return;
+            const paidAmount = Math.min(Math.max(paymentMap.get(studentId) || 0, 0), expectedFee);
+            if (!(paidAmount > 0)) return;
+            summary.total += paidAmount;
+            paidStudentIds.add(studentId);
         });
 
         summary.paidStudents = paidStudentIds.size;
+        summary.loaded = true;
         return summary;
     } catch (error) {
         console.warn('Dashboard fee payments could not be loaded:', error.message);
@@ -4644,6 +4728,20 @@ async function populateDashboardCampusFilter() {
     }
 }
 
+function initDashboardRevenueMonthPicker() {
+    const picker = document.getElementById('dashboardRevenueMonthPicker');
+    if (!picker) return;
+    selectedDashboardRevenueMonthKey = selectedDashboardRevenueMonthKey || getCurrentDashboardFeeMonthKey();
+    picker.value = selectedDashboardRevenueMonthKey;
+    if (picker.dataset.dashboardRevenueMonthBound) return;
+    picker.dataset.dashboardRevenueMonthBound = 'true';
+    picker.addEventListener('change', () => {
+        selectedDashboardRevenueMonthKey = String(picker.value || getCurrentDashboardFeeMonthKey());
+        dashboardRevenueMonthManuallySelected = true;
+        updateDashboardRevenueStats();
+    });
+}
+
 async function updateDashboardRevenueStats(studentsForDashboard) {
     const amountEl = document.getElementById('dashRevenue');
     const detailEl = document.getElementById('dashRevenueDetail');
@@ -4652,9 +4750,8 @@ async function updateDashboardRevenueStats(studentsForDashboard) {
     const students = Array.isArray(studentsForDashboard)
         ? studentsForDashboard
         : getDashboardCampusFilteredRecords(getArrayData(STORAGE_KEY_STUDENTS));
-    const localSummary = getDashboardFeeStatusRevenue(students);
     const backendSummary = await getDashboardBackendFeeStatusRevenue(students);
-    const feeSummary = backendSummary && backendSummary.total > 0 ? backendSummary : localSummary;
+    const feeSummary = backendSummary?.loaded ? backendSummary : getDashboardFeeStatusRevenue(students);
     const selectedCampus = getSelectedDashboardCampus();
     const campusLabel = selectedCampus === 'all' ? '' : ` in ${selectedCampus}`;
 
@@ -4769,6 +4866,7 @@ function initializeDashboardHome() {
     const dashStudentCount = document.getElementById('dashStudentCount');
     if (!dashStudentCount) return;
 
+    initDashboardRevenueMonthPicker();
     populateDashboardCampusFilter().then(updateDashboardStats).catch(() => updateDashboardStats());
     updateDashboardStats();
     if (!dashboardActiveSessionsInterval) {
@@ -6728,7 +6826,7 @@ function renderStudents(term = '') {
         (genderSet.size === 0 || genderSet.has(String(s.gender || '').toLowerCase())) &&
         (!requireBelow5 || isStudentBelowAge(s, 5)) &&
         (classSet.size === 0 || classSet.has(String(s.classGrade || '').toLowerCase())) &&
-        (campusSet.size === 0 || campusSet.has(String(s.campusName || '').toLowerCase())) &&
+        (campusSet.size === 0 || campusSet.has(normalizeCampusFilterValue(getRecordCampusName(s)))) &&
         (feeStatusSet.size === 0 || feeStatusSet.has(String(getStudentStatusLabel(s) || '').toLowerCase())) &&
         (!requireZeroFee || isStudentZeroFee(s)) &&
         !isStudentTerminated(s)
@@ -7220,7 +7318,7 @@ function printStudentsList() {
             (genderSet.size === 0 || genderSet.has(String(s.gender || '').toLowerCase())) &&
             (!requireBelow5 || isStudentBelowAge(s, 5)) &&
             (classSet.size === 0 || classSet.has(String(s.classGrade || '').toLowerCase())) &&
-            (campusSet.size === 0 || campusSet.has(String(s.campusName || '').toLowerCase())) &&
+            (campusSet.size === 0 || campusSet.has(normalizeCampusFilterValue(getRecordCampusName(s)))) &&
             (feeStatusSet.size === 0 || feeStatusSet.has(String(getStudentStatusLabel(s) || '').toLowerCase())) &&
             (!requireZeroFee || isStudentZeroFee(s)) &&
             !isStudentTerminated(s)

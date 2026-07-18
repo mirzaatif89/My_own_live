@@ -364,6 +364,78 @@
             font-size: 22px;
         }
 
+        .portal-ad-board {
+            display: grid;
+            gap: 0.85rem;
+            margin: 0 0 18px;
+        }
+
+        .portal-ad-board[hidden] {
+            display: none !important;
+        }
+
+        .portal-ad-card {
+            display: grid;
+            grid-template-columns: minmax(0, 150px) minmax(0, 1fr);
+            gap: 1rem;
+            align-items: stretch;
+            border: 1px solid rgba(32, 176, 164, 0.2);
+            border-radius: 18px;
+            background: linear-gradient(135deg, #ffffff 0%, #f3fffd 100%);
+            box-shadow: 0 16px 34px rgba(15, 76, 117, 0.09);
+            overflow: hidden;
+        }
+
+        .portal-ad-card img {
+            width: 100%;
+            height: 100%;
+            min-height: 132px;
+            object-fit: cover;
+            background: #e0f2fe;
+        }
+
+        .portal-ad-content {
+            display: grid;
+            align-content: center;
+            gap: 0.45rem;
+            padding: 1rem 1rem 1rem 0;
+        }
+
+        .portal-ad-content span {
+            color: #d97706;
+            font-size: 0.72rem;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .portal-ad-content h3 {
+            margin: 0;
+            color: #0f172a;
+            font-size: 1.15rem;
+            line-height: 1.18;
+        }
+
+        .portal-ad-content p {
+            margin: 0;
+            color: #475569;
+            line-height: 1.55;
+        }
+
+        .portal-ad-link {
+            justify-self: start;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            margin-top: 0.2rem;
+            border-radius: 999px;
+            background: var(--portal-primary-dark);
+            color: #ffffff;
+            padding: 0.55rem 0.85rem;
+            font-weight: 800;
+            text-decoration: none;
+        }
+
         .teacher-options {
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -567,6 +639,7 @@
 
         .teacher-portal.portal-screen-open .profile-card,
         .teacher-portal.portal-screen-open .stats-grid,
+        .teacher-portal.portal-screen-open .portal-ad-board,
         .teacher-portal.portal-screen-open .teacher-options {
             display: none !important;
         }
@@ -985,6 +1058,18 @@
                 gap: 10px;
             }
 
+            .portal-ad-card {
+                grid-template-columns: 1fr;
+            }
+
+            .portal-ad-card img {
+                max-height: 180px;
+            }
+
+            .portal-ad-content {
+                padding: 0 1rem 1rem;
+            }
+
             #teacherAttendanceSummary .portal-metric {
                 min-height: 92px;
                 padding: 12px;
@@ -1197,6 +1282,8 @@
             </div>
         </section>
 
+        <section class="portal-ad-board" id="teacherPortalAds" hidden aria-label="School ads"></section>
+
         <section class="teacher-options" aria-label="Teacher portal options">
             <button class="teacher-option-btn" type="button" data-teacher-panel="attendancePanel">
                 <i data-lucide="calendar-check" width="16"></i>
@@ -1406,6 +1493,54 @@
 
         function escapeHtml(value) {
             return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char]));
+        }
+
+        function getActivePortalAds(records = [], portal = 'teacher') {
+            return (Array.isArray(records) ? records : [])
+                .filter((ad) => ad && ad.isActive !== false)
+                .filter((ad) => {
+                    const targets = Array.isArray(ad.targetPortals) && ad.targetPortals.length
+                        ? ad.targetPortals
+                        : ['student', 'teacher'];
+                    return targets.map((target) => String(target).toLowerCase()).includes(portal);
+                })
+                .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+                .slice(0, 3);
+        }
+
+        function renderPortalAds(records = []) {
+            const board = document.getElementById('teacherPortalAds');
+            if (!board) return;
+            const ads = getActivePortalAds(records, 'teacher');
+            if (!ads.length) {
+                board.hidden = true;
+                board.innerHTML = '';
+                return;
+            }
+
+            board.hidden = false;
+            board.innerHTML = ads.map((ad) => `
+                <article class="portal-ad-card">
+                    ${ad.imageUrl ? `<img src="${escapeHtml(ad.imageUrl)}" alt="${escapeHtml(ad.title || 'School ad')}">` : ''}
+                    <div class="portal-ad-content">
+                        <span>School Ad</span>
+                        <h3>${escapeHtml(ad.title || 'Announcement')}</h3>
+                        <p>${escapeHtml(ad.message || '')}</p>
+                        ${ad.linkUrl ? `<a class="portal-ad-link" href="${escapeHtml(ad.linkUrl)}" target="_blank" rel="noopener">Open</a>` : ''}
+                    </div>
+                </article>
+            `).join('');
+        }
+
+        async function loadPortalAds() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/ads`);
+                if (!response.ok) throw new Error('Ads unavailable.');
+                const result = await response.json();
+                renderPortalAds(result.ads || []);
+            } catch (_error) {
+                renderPortalAds([]);
+            }
         }
 
         function todayKey() {
@@ -2119,6 +2254,7 @@
         window.addEventListener('load', () => {
             bindTeacherMenu();
             loadTeacherProfile();
+            loadPortalAds();
             bindTeacherPortalOptions();
             document.getElementById('teacherPortalPhoto')?.addEventListener('change', updateTeacherPortalPhoto);
             lucide.createIcons();

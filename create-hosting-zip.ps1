@@ -13,12 +13,26 @@ if (Test-Path $outputPath) {
 }
 
 $excludePrefixes = @(
+    ".agents\",
+    ".agents/",
+    ".codex\",
+    ".codex/",
     ".git\",
     ".git/",
+    ".github\",
+    ".github/",
+    ".deploy_tmp\",
+    ".deploy_tmp/",
     ".vscode\",
     ".vscode/",
+    "apkapp\",
+    "apkapp/",
+    "mobile-app\",
+    "mobile-app/",
     "node_modules\",
-    "node_modules/"
+    "node_modules/",
+    "tools\",
+    "tools/"
 )
 
 if ($IncludeNodeModules) {
@@ -35,6 +49,8 @@ $filesToPack = $allFiles | Where-Object {
     }
 
     if ($relative -eq $Output) { return $false }
+    if ($_.Extension -ieq ".zip") { return $false }
+    if ($_.Extension -ieq ".log") { return $false }
     return $true
 }
 

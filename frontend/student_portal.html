@@ -385,6 +385,7 @@
         .portal-container.portal-screen-open .user-card,
         .portal-container.portal-screen-open .stats-grid,
         .portal-container.portal-screen-open .portal-module-heading,
+        .portal-container.portal-screen-open .portal-ad-board,
         .portal-container.portal-screen-open .student-action-grid {
             display: none !important;
         }
@@ -1814,6 +1815,78 @@
             line-height: 1.1;
         }
 
+        .portal-ad-board {
+            display: grid;
+            gap: 0.85rem;
+            margin: 0 0 1.25rem;
+        }
+
+        .portal-ad-board[hidden] {
+            display: none !important;
+        }
+
+        .portal-ad-card {
+            display: grid;
+            grid-template-columns: minmax(0, 150px) minmax(0, 1fr);
+            gap: 1rem;
+            align-items: stretch;
+            border: 1px solid rgba(32, 176, 164, 0.2);
+            border-radius: 18px;
+            background: linear-gradient(135deg, #ffffff 0%, #f3fffd 100%);
+            box-shadow: 0 16px 34px rgba(15, 76, 117, 0.09);
+            overflow: hidden;
+        }
+
+        .portal-ad-card img {
+            width: 100%;
+            height: 100%;
+            min-height: 132px;
+            object-fit: cover;
+            background: #e0f2fe;
+        }
+
+        .portal-ad-content {
+            display: grid;
+            align-content: center;
+            gap: 0.45rem;
+            padding: 1rem 1rem 1rem 0;
+        }
+
+        .portal-ad-content span {
+            color: #d97706;
+            font-size: 0.72rem;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .portal-ad-content h3 {
+            margin: 0;
+            color: #0f172a;
+            font-size: 1.15rem;
+            line-height: 1.18;
+        }
+
+        .portal-ad-content p {
+            margin: 0;
+            color: #475569;
+            line-height: 1.55;
+        }
+
+        .portal-ad-link {
+            justify-self: start;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            margin-top: 0.2rem;
+            border-radius: 999px;
+            background: #0f766e;
+            color: #ffffff;
+            padding: 0.55rem 0.85rem;
+            font-weight: 800;
+            text-decoration: none;
+        }
+
         .student-action-grid {
             grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
             gap: 1rem;
@@ -2109,6 +2182,7 @@
 
             .portal-profile-side,
             .stats-grid,
+            .portal-ad-board,
             .student-action-grid {
                 gap: 10px;
                 grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2119,9 +2193,26 @@
             }
 
             .portal-shell > .stats-grid,
+            .portal-shell > .portal-ad-board,
             .portal-shell > .student-action-grid {
                 display: grid !important;
                 grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            }
+
+            .portal-shell > .portal-ad-board {
+                grid-template-columns: 1fr !important;
+            }
+
+            .portal-ad-card {
+                grid-template-columns: 1fr;
+            }
+
+            .portal-ad-card img {
+                max-height: 180px;
+            }
+
+            .portal-ad-content {
+                padding: 0 1rem 1rem;
             }
 
             .portal-status-card {
@@ -2411,6 +2502,8 @@
                 <strong id="portalSummaryClass">-</strong>
             </div>
         </section>
+
+        <section class="portal-ad-board" id="studentPortalAds" hidden aria-label="School ads"></section>
 
         <section class="portal-module-heading" aria-label="Student module overview">
             <div>
@@ -4170,6 +4263,54 @@
             if (window.lucide) window.lucide.createIcons();
         }
 
+        function getActivePortalAds(records = [], portal = 'student') {
+            return (Array.isArray(records) ? records : [])
+                .filter((ad) => ad && ad.isActive !== false)
+                .filter((ad) => {
+                    const targets = Array.isArray(ad.targetPortals) && ad.targetPortals.length
+                        ? ad.targetPortals
+                        : ['student', 'teacher'];
+                    return targets.map((target) => String(target).toLowerCase()).includes(portal);
+                })
+                .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+                .slice(0, 3);
+        }
+
+        function renderPortalAds(records = []) {
+            const board = document.getElementById('studentPortalAds');
+            if (!board) return;
+            const ads = getActivePortalAds(records, 'student');
+            if (!ads.length) {
+                board.hidden = true;
+                board.innerHTML = '';
+                return;
+            }
+
+            board.hidden = false;
+            board.innerHTML = ads.map((ad) => `
+                <article class="portal-ad-card">
+                    ${ad.imageUrl ? `<img src="${escapeHtml(ad.imageUrl)}" alt="${escapeHtml(ad.title || 'School ad')}">` : ''}
+                    <div class="portal-ad-content">
+                        <span>School Ad</span>
+                        <h3>${escapeHtml(ad.title || 'Announcement')}</h3>
+                        <p>${escapeHtml(ad.message || '')}</p>
+                        ${ad.linkUrl ? `<a class="portal-ad-link" href="${escapeHtml(ad.linkUrl)}" target="_blank" rel="noopener">Open</a>` : ''}
+                    </div>
+                </article>
+            `).join('');
+        }
+
+        async function loadPortalAds() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/ads`);
+                if (!response.ok) throw new Error('Ads unavailable.');
+                const result = await response.json();
+                renderPortalAds(result.ads || []);
+            } catch (_error) {
+                renderPortalAds([]);
+            }
+        }
+
         function bindStudentPortalActions() {
             document.querySelectorAll('[data-student-action-target]').forEach((button) => {
                 button.addEventListener('click', async () => {
@@ -5668,6 +5809,7 @@
             loadStudentProfile();
             document.getElementById('studentPortalPhoto')?.addEventListener('change', updateStudentPortalPhoto);
             loadSpecialNoticesForPortal();
+            loadPortalAds();
             bindStudentPortalActions();
             bindStudentPortalMenu();
             lucide.createIcons();

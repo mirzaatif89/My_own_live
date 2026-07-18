@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ads - My Own Science School</title>
+    <link rel="icon" type="image/png" href="images/logo.jpeg">
+    <link rel="stylesheet" href="style.css?v=20260603-kids-roots-jand-brand">
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        .ads-layout {
+            display: grid;
+            grid-template-columns: minmax(330px, 420px) minmax(0, 1fr);
+            gap: 1.15rem;
+            align-items: start;
+        }
+
+        .ads-panel {
+            border: 1px solid rgba(32, 176, 164, 0.18);
+            border-radius: 10px;
+            background: #ffffff;
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+        }
+
+        .ads-panel-head {
+            padding: 1rem 1.1rem;
+            border-bottom: 1px solid var(--border-color);
+            background: linear-gradient(180deg, #ffffff 0%, #f8fffe 100%);
+        }
+
+        .ads-panel-head h2 {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1rem;
+        }
+
+        .ads-panel-head p {
+            margin: 0.25rem 0 0;
+            color: var(--text-secondary);
+            font-size: 0.86rem;
+        }
+
+        .ads-form,
+        .ads-list {
+            display: grid;
+            gap: 1rem;
+            padding: 1.1rem;
+        }
+
+        .ads-field label {
+            display: block;
+            margin-bottom: 0.45rem;
+            color: var(--text-secondary);
+            font-size: 0.78rem;
+            font-weight: 800;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+        }
+
+        .ads-field input,
+        .ads-field textarea {
+            width: 100%;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.78rem 0.9rem;
+            color: var(--text-primary);
+            background: #ffffff;
+            font: inherit;
+        }
+
+        .ads-field textarea {
+            min-height: 110px;
+            resize: vertical;
+        }
+
+        .ads-targets,
+        .ads-toggle {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .ads-check {
+            min-height: 42px;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0 0.8rem;
+            color: var(--text-secondary);
+            background: #ffffff;
+            font-weight: 800;
+        }
+
+        .ads-check input {
+            accent-color: var(--primary-color);
+        }
+
+        .ads-upload-box {
+            display: grid;
+            gap: 0.8rem;
+            padding: 0.8rem;
+            border: 1px dashed rgba(32, 176, 164, 0.5);
+            border-radius: 10px;
+            background: #f8fffe;
+        }
+
+        .ads-preview {
+            width: 100%;
+            aspect-ratio: 16 / 8;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            display: grid;
+            place-items: center;
+            overflow: hidden;
+            color: var(--text-secondary);
+            background: #f8fafc;
+            text-align: center;
+            font-weight: 800;
+        }
+
+        .ads-preview img,
+        .ads-thumb {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        #adImageFile {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .ads-file-action {
+            min-height: 42px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(32, 176, 164, 0.35);
+            border-radius: 8px;
+            color: var(--primary-color);
+            background: #ffffff;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+        .ads-actions {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .ads-card {
+            display: grid;
+            grid-template-columns: 210px minmax(0, 1fr);
+            gap: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 0.85rem;
+            background: #ffffff;
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+        }
+
+        .ads-thumb-wrap {
+            min-height: 130px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: #eef2f7;
+        }
+
+        .ads-meta {
+            display: grid;
+            gap: 0.55rem;
+            align-content: start;
+            min-width: 0;
+        }
+
+        .ads-meta h3,
+        .ads-meta p {
+            margin: 0;
+            overflow-wrap: anywhere;
+        }
+
+        .ads-meta p {
+            color: var(--text-secondary);
+            line-height: 1.45;
+        }
+
+        .ads-pill-row {
+            display: flex;
+            gap: 0.45rem;
+            flex-wrap: wrap;
+        }
+
+        .ads-pill {
+            border-radius: 999px;
+            padding: 0.25rem 0.6rem;
+            background: #dcfce7;
+            color: #166534;
+            font-size: 0.78rem;
+            font-weight: 800;
+        }
+
+        .ads-pill.inactive {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .ads-empty {
+            display: grid;
+            justify-items: center;
+            gap: 0.65rem;
+            padding: 2.5rem 1.5rem;
+            border: 1px dashed rgba(32, 176, 164, 0.35);
+            border-radius: 10px;
+            color: var(--text-secondary);
+            text-align: center;
+            background: #f8fffe;
+        }
+
+        @media (max-width: 980px) {
+            .ads-layout,
+            .ads-card {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="dashboard-container">
+        <aside class="sidebar">
+            <div class="logo-section">
+                <img class="sidebar-logo-img" src="images/logo.jpeg" alt="Myownschool logo">
+            </div>
+            <nav class="nav-links"></nav>
+            <a href="settings.html" class="user-profile">
+                <div class="avatar">AD</div>
+                <div class="user-info">
+                    <h4>Admin User</h4>
+                    <p>Principal</p>
+                </div>
+            </a>
+        </aside>
+
+        <main class="main-content">
+            <header class="header">
+                <div>
+                    <h1>Ads</h1>
+                    <p style="color: var(--text-secondary); margin-top: 0.3rem;">Post ads for the student and teacher portals.</p>
+                </div>
+            </header>
+
+            <section class="ads-layout">
+                <div class="ads-panel">
+                    <div class="ads-panel-head">
+                        <h2>Ad Details</h2>
+                        <p>Image is optional. Active ads appear on selected portals.</p>
+                    </div>
+                    <form id="adForm" class="ads-form">
+                        <input type="hidden" id="adId">
+                        <input type="hidden" id="adExistingImage">
+                        <div class="ads-field">
+                            <label for="adTitle">Title</label>
+                            <input type="text" id="adTitle" required placeholder="Admissions Open">
+                        </div>
+                        <div class="ads-field">
+                            <label for="adMessage">Message</label>
+                            <textarea id="adMessage" required placeholder="Write ad details"></textarea>
+                        </div>
+                        <div class="ads-field">
+                            <label for="adLinkUrl">Link URL</label>
+                            <input type="url" id="adLinkUrl" placeholder="https://example.com">
+                        </div>
+                        <div class="ads-field">
+                            <label>Ad Image</label>
+                            <div class="ads-upload-box">
+                                <div class="ads-preview" id="adImagePreview">No image selected</div>
+                                <label class="ads-file-action" for="adImageFile">Choose Image</label>
+                                <input type="file" id="adImageFile" accept="image/*">
+                            </div>
+                        </div>
+                        <div class="ads-field">
+                            <label>Show On</label>
+                            <div class="ads-targets">
+                                <label class="ads-check"><input type="checkbox" id="adTargetStudent" checked> Student Portal</label>
+                                <label class="ads-check"><input type="checkbox" id="adTargetTeacher" checked> Teacher Portal</label>
+                            </div>
+                        </div>
+                        <div class="ads-toggle">
+                            <label class="ads-check"><input type="checkbox" id="adIsActive" checked> Active</label>
+                        </div>
+                        <div class="ads-actions">
+                            <button type="submit" class="btn btn-primary" id="adSaveBtn"><i data-lucide="save"></i> Save Ad</button>
+                            <button type="button" class="btn btn-outline" id="adResetBtn"><i data-lucide="rotate-ccw"></i> Reset</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="ads-panel">
+                    <div class="ads-panel-head">
+                        <h2>Saved Ads</h2>
+                        <p>Manage active and inactive portal ads.</p>
+                    </div>
+                    <div id="adList" class="ads-list"></div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="auth.js?v=20260520-sidebar-requested-order"></script>
+    <script src="script.js?v=20260520-sidebar-classes-restore"></script>
+    <script src="sidebar-order.js?v=20260715-ads"></script>
+    <script>
+        let adRecords = [];
+
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            }[char]));
+        }
+
+        function readAdFile(file) {
+            return new Promise((resolve, reject) => {
+                if (!file) return resolve('');
+                if (!file.type.startsWith('image/')) return reject(new Error('Please upload an image file only.'));
+                const reader = new FileReader();
+                reader.onload = () => resolve(String(reader.result || ''));
+                reader.onerror = () => reject(new Error('Image could not be read.'));
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function setAdPreview(imageUrl = '') {
+            const preview = document.getElementById('adImagePreview');
+            if (!preview) return;
+            preview.innerHTML = imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="Ad preview">` : 'No image selected';
+        }
+
+        function getAdTargets() {
+            const targets = [];
+            if (document.getElementById('adTargetStudent').checked) targets.push('student');
+            if (document.getElementById('adTargetTeacher').checked) targets.push('teacher');
+            return targets;
+        }
+
+        function resetAdForm() {
+            document.getElementById('adId').value = '';
+            document.getElementById('adExistingImage').value = '';
+            document.getElementById('adForm').reset();
+            document.getElementById('adTargetStudent').checked = true;
+            document.getElementById('adTargetTeacher').checked = true;
+            document.getElementById('adIsActive').checked = true;
+            document.getElementById('adSaveBtn').innerHTML = '<i data-lucide="save"></i> Save Ad';
+            setAdPreview('');
+            if (window.lucide) window.lucide.createIcons();
+        }
+
+        function renderAds() {
+            const list = document.getElementById('adList');
+            if (!adRecords.length) {
+                list.innerHTML = '<div class="ads-empty"><i data-lucide="megaphone"></i><strong>No ads saved yet</strong><span>Create an ad to show it on portals.</span></div>';
+                if (window.lucide) window.lucide.createIcons();
+                return;
+            }
+
+            list.innerHTML = [...adRecords].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).map((ad) => {
+                const targets = Array.isArray(ad.targetPortals) && ad.targetPortals.length ? ad.targetPortals : ['student', 'teacher'];
+                return `
+                    <article class="ads-card">
+                        <div class="ads-thumb-wrap">${ad.imageUrl ? `<img class="ads-thumb" src="${escapeHtml(ad.imageUrl)}" alt="${escapeHtml(ad.title || 'Ad')}">` : ''}</div>
+                        <div class="ads-meta">
+                            <div class="ads-pill-row">
+                                <span class="ads-pill${ad.isActive === false ? ' inactive' : ''}">${ad.isActive === false ? 'Inactive' : 'Active'}</span>
+                                ${targets.map((target) => `<span class="ads-pill">${escapeHtml(target)}</span>`).join('')}
+                            </div>
+                            <h3>${escapeHtml(ad.title || 'Ad')}</h3>
+                            <p>${escapeHtml(ad.message || '')}</p>
+                            <div class="ads-actions">
+                                <button class="btn btn-outline" type="button" onclick="editAd('${escapeHtml(ad.id)}')"><i data-lucide="pencil"></i> Edit</button>
+                                <button class="btn btn-outline" type="button" onclick="toggleAdStatus('${escapeHtml(ad.id)}')"><i data-lucide="${ad.isActive === false ? 'eye' : 'eye-off'}"></i> ${ad.isActive === false ? 'Activate' : 'Deactivate'}</button>
+                                <button class="btn btn-danger" type="button" onclick="deleteAd('${escapeHtml(ad.id)}')"><i data-lucide="trash-2"></i> Delete</button>
+                            </div>
+                        </div>
+                    </article>
+                `;
+            }).join('');
+            if (window.lucide) window.lucide.createIcons();
+        }
+
+        async function loadAds() {
+            const response = await fetch(`${API_BASE_URL}/ads`);
+            const data = await response.json();
+            adRecords = Array.isArray(data.ads) ? data.ads : [];
+            renderAds();
+            resetAdForm();
+        }
+
+        async function saveAdPayload(payload) {
+            const response = await fetch(`${API_BASE_URL}/ads`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await response.json();
+            if (!response.ok || data.success === false) throw new Error(data.message || 'Ad save failed.');
+            adRecords = Array.isArray(data.ads) ? data.ads : [];
+            renderAds();
+        }
+
+        function editAd(id) {
+            const ad = adRecords.find((item) => String(item.id) === String(id));
+            if (!ad) return;
+            const targets = Array.isArray(ad.targetPortals) ? ad.targetPortals : ['student', 'teacher'];
+            document.getElementById('adId').value = ad.id || '';
+            document.getElementById('adTitle').value = ad.title || '';
+            document.getElementById('adMessage').value = ad.message || '';
+            document.getElementById('adLinkUrl').value = ad.linkUrl || '';
+            document.getElementById('adExistingImage').value = ad.imageUrl || '';
+            document.getElementById('adImageFile').value = '';
+            document.getElementById('adTargetStudent').checked = targets.includes('student');
+            document.getElementById('adTargetTeacher').checked = targets.includes('teacher');
+            document.getElementById('adIsActive').checked = ad.isActive !== false;
+            document.getElementById('adSaveBtn').innerHTML = '<i data-lucide="save"></i> Update Ad';
+            setAdPreview(ad.imageUrl || '');
+            if (window.lucide) window.lucide.createIcons();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        async function toggleAdStatus(id) {
+            const ad = adRecords.find((item) => String(item.id) === String(id));
+            if (!ad) return;
+            await saveAdPayload({ ...ad, isActive: ad.isActive === false });
+        }
+
+        async function deleteAd(id) {
+            if (!confirm('Delete this ad?')) return;
+            const response = await fetch(`${API_BASE_URL}/ads/${encodeURIComponent(id)}`, { method: 'DELETE' });
+            const data = await response.json();
+            adRecords = Array.isArray(data.ads) ? data.ads : [];
+            renderAds();
+        }
+
+        document.getElementById('adForm').addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const targetPortals = getAdTargets();
+            if (!targetPortals.length) {
+                alert('Select at least one portal.');
+                return;
+            }
+            const imageUrl = await readAdFile(document.getElementById('adImageFile').files[0])
+                || document.getElementById('adExistingImage').value.trim();
+            await saveAdPayload({
+                id: document.getElementById('adId').value.trim() || undefined,
+                title: document.getElementById('adTitle').value.trim(),
+                message: document.getElementById('adMessage').value.trim(),
+                linkUrl: document.getElementById('adLinkUrl').value.trim(),
+                imageUrl,
+                targetPortals,
+                isActive: document.getElementById('adIsActive').checked
+            });
+            resetAdForm();
+        });
+
+        document.getElementById('adResetBtn').addEventListener('click', resetAdForm);
+        document.getElementById('adImageFile').addEventListener('change', async (event) => {
+            try {
+                setAdPreview(await readAdFile(event.target.files[0]));
+            } catch (error) {
+                alert(error.message || 'Image could not be read.');
+                event.target.value = '';
+            }
+        });
+
+        if (window.socket) {
+            window.socket.on('ads_update', (records) => {
+                adRecords = Array.isArray(records) ? records : [];
+                renderAds();
+            });
+        }
+
+        loadAds().catch((error) => {
+            document.getElementById('adList').innerHTML = `<div class="ads-empty"><strong>Ads could not be loaded</strong><span>${escapeHtml(error.message || '')}</span></div>`;
+        });
+    </script>
+</body>
+
+</html>
