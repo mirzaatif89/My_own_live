@@ -64,6 +64,9 @@
     <script src="script.js?v=20260520-sidebar-classes-restore"></script>
     <script>
         const STUDENT_COURSE_KEY = 'eduCore_student_courses';
+        const COURSE_API_BASE = typeof getApiBaseUrl === 'function'
+            ? getApiBaseUrl()
+            : `${window.location.origin}/api`;
         function data(key) { try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch (_e) { return []; } }
         function save(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch (_e) { showAppAlert('File/data is too large to save.', 'Storage Full'); return false; } }
         function esc(value) { return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char])); }
@@ -84,6 +87,46 @@
             studentCourseList.innerHTML = `<table class="schedule-table"><thead><tr><th>Class</th><th>Title</th><th>Details</th><th>File</th><th>Action</th></tr></thead><tbody>${courses.map((item) => `<tr><td>${esc(item.classGrade)}</td><td>${esc(item.title)}</td><td>${esc(item.details)}</td><td>${item.file?.dataUrl ? `<a href="${item.file.dataUrl}" download="${esc(item.file.name || 'file')}">${esc(item.file.name || 'Download')}</a>` : '-'}</td><td><div class="schedule-actions"><button class="schedule-action-btn edit" onclick="editCourse('${item.id}')"><i data-lucide="edit-2" width="14"></i> Edit</button><button class="schedule-action-btn delete" onclick="deleteCourse('${item.id}')"><i data-lucide="trash-2" width="14"></i> Delete</button></div></td></tr>`).join('')}</tbody></table>`;
             lucide.createIcons();
         }
+        function mergeCourses(remote = [], cached = []) {
+            const map = new Map();
+            [...cached, ...remote].forEach((item) => {
+                if (!item?.id) return;
+                map.set(String(item.id), { ...(map.get(String(item.id)) || {}), ...item });
+            });
+            return Array.from(map.values());
+        }
+        async function loadCourses() {
+            try {
+                const cachedCourses = data(STUDENT_COURSE_KEY);
+                const response = await fetch(`${COURSE_API_BASE}/student-courses`);
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok || !result.success || !Array.isArray(result.courses)) {
+                    throw new Error(result.message || 'Courses could not be loaded.');
+                }
+                save(STUDENT_COURSE_KEY, mergeCourses(result.courses, cachedCourses));
+                const remoteIds = new Set(result.courses.map((item) => String(item.id || '')));
+                const localOnlyCourses = cachedCourses.filter((item) => item?.id && !remoteIds.has(String(item.id)));
+                for (const item of localOnlyCourses) {
+                    await saveCourseToApi(item);
+                }
+            } catch (_error) {
+                // Keep local courses visible if the API is temporarily unavailable.
+            }
+            render();
+        }
+        async function saveCourseToApi(item) {
+            const response = await fetch(`${COURSE_API_BASE}/student-courses`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(item)
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || !result.success) {
+                throw new Error(result.message || 'Course could not be saved.');
+            }
+            if (Array.isArray(result.courses)) save(STUDENT_COURSE_KEY, result.courses);
+            return result.course || item;
+        }
         function editCourse(id) {
             const item = data(STUDENT_COURSE_KEY).find((entry) => entry.id === id);
             if (!item) return;
@@ -91,7 +134,20 @@
             document.querySelector('#studentCourseForm button[type="submit"]').innerHTML = '<i data-lucide="save"></i> Update Course';
             studentCourseForm.scrollIntoView({ behavior: 'smooth', block: 'start' }); lucide.createIcons();
         }
-        function deleteCourse(id) { save(STUDENT_COURSE_KEY, data(STUDENT_COURSE_KEY).filter((item) => item.id !== id)); render(); }
+        async function deleteCourse(id) {
+            try {
+                const response = await fetch(`${COURSE_API_BASE}/student-courses?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+                const result = await response.json().catch(() => ({}));
+                if (response.ok && result.success && Array.isArray(result.courses)) {
+                    save(STUDENT_COURSE_KEY, result.courses);
+                } else {
+                    save(STUDENT_COURSE_KEY, data(STUDENT_COURSE_KEY).filter((item) => item.id !== id));
+                }
+            } catch (_error) {
+                save(STUDENT_COURSE_KEY, data(STUDENT_COURSE_KEY).filter((item) => item.id !== id));
+            }
+            render();
+        }
         studentCourseForm.addEventListener('submit', async (event) => {
             event.preventDefault();
             const editId = studentCourseId.value;
@@ -103,9 +159,15 @@
             const index = items.findIndex((entry) => entry.id === editId);
             if (index >= 0) items[index] = item; else items.push(item);
             if (!save(STUDENT_COURSE_KEY, items)) return;
+            try {
+                await saveCourseToApi(item);
+            } catch (error) {
+                showAppAlert(error.message || 'Course could not be published.', 'Publish Failed');
+                return;
+            }
             event.target.reset(); studentCourseId.value = ''; document.querySelector('#studentCourseForm button[type="submit"]').innerHTML = '<i data-lucide="save"></i> Save Course'; render(); showSuccessModal(editId ? 'Course Updated!' : 'Course Saved!', 'Class course is visible in student portal.');
         });
-        populateClasses(); render(); lucide.createIcons();
+        populateClasses(); loadCourses(); lucide.createIcons();
     </script>
 </body>
 

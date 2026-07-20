@@ -2539,7 +2539,7 @@
             <button type="button" class="student-action-btn" data-student-action-target="studentPerformanceSection">
                 <i data-lucide="trending-up"></i> Performance
             </button>
-            <button type="button" class="student-action-btn" data-student-action-target="studentSyllabusSection">
+            <button type="button" class="student-action-btn" data-student-action-target="studentCourseSection">
                 <i data-lucide="file-text"></i> Syllabus
             </button>
             <button type="button" class="student-action-btn" data-student-action-target="studentAssignmentSection">
@@ -3508,6 +3508,20 @@
 
         function applyStudentCourse(student = {}) {
             renderPortalContentList('studentCourseList', 'studentCourseEmpty', getClassWiseItems(STUDENT_COURSE_KEY, student), STUDENT_COURSE_KEY);
+        }
+
+        async function loadStudentCoursesForPortal(student = getCurrentPortalStudent()) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/student-courses`);
+                if (!response.ok) throw new Error('Course unavailable.');
+                const result = await response.json().catch(() => ({}));
+                if (Array.isArray(result.courses)) {
+                    localStorage.setItem(STUDENT_COURSE_KEY, JSON.stringify(result.courses));
+                }
+            } catch (_error) {
+                // Keep cached course/syllabus visible if the API is temporarily unavailable.
+            }
+            applyStudentCourse(student);
         }
 
         function getStudentAssignmentSubmissions(student = {}) {
@@ -4783,6 +4797,7 @@
                 try {
                     await loadStudentAttendanceForPortal();
                     await loadExecutedDateSheet();
+                    await loadStudentCoursesForPortal(student);
                     applyStudentAttendance(student);
                     applyStudentPerformance(student);
                     updateStudentNotifications(student);
@@ -5720,6 +5735,7 @@
                 const student = await response.json();
                 await loadStudentAttendanceForPortal();
                 await loadExecutedDateSheet();
+                await loadStudentCoursesForPortal(student);
                 await mergeStudentFeePaymentsIntoMonthlyStore();
                 applyStudentData(student);
                 await loadStudentMessages();
@@ -5732,6 +5748,7 @@
                 if (fallbackStudent) {
                     await loadStudentAttendanceForPortal();
                     await loadExecutedDateSheet();
+                    await loadStudentCoursesForPortal(fallbackStudent);
                     await mergeStudentFeePaymentsIntoMonthlyStore();
                     applyStudentData(fallbackStudent);
                     await loadStudentMessages();
