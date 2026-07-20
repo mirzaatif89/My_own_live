@@ -1313,10 +1313,6 @@
                 <i data-lucide="school" width="16"></i>
                 Assigned Classes
             </button>
-            <button class="teacher-option-btn" type="button" data-teacher-panel="diaryPanel">
-                <i data-lucide="book-open" width="16"></i>
-                Class Diary
-            </button>
             <button class="teacher-option-btn" type="button" data-teacher-panel="lecturesPanel">
                 <i data-lucide="presentation" width="16"></i>
                 Assigned Lectures
@@ -1398,34 +1394,6 @@
             <div class="notice-list" id="teacherAssignedClasses"></div>
         </section>
 
-        <section class="panel-card teacher-option-panel" id="diaryPanel">
-            <h3>Class Diary</h3>
-            <p class="muted">Upload today's homework or class diary for students in an assigned class.</p>
-            <form id="teacherDiaryForm">
-                <div class="portal-form-grid">
-                    <div>
-                        <label for="teacherDiaryClass">Class</label>
-                        <select id="teacherDiaryClass" required></select>
-                    </div>
-                    <div>
-                        <label for="teacherDiaryDate">Diary Date</label>
-                        <input type="date" id="teacherDiaryDate" required>
-                    </div>
-                    <div>
-                        <label for="teacherDiarySubject">Subject</label>
-                        <input type="text" id="teacherDiarySubject" required placeholder="e.g. English">
-                    </div>
-                    <div style="grid-column:1 / -1;">
-                        <label for="teacherDiaryDetails">Homework / Diary</label>
-                        <textarea id="teacherDiaryDetails" required placeholder="Write today's homework or class diary"></textarea>
-                    </div>
-                </div>
-                <button class="portal-btn" type="submit"><i data-lucide="send" width="15"></i> Publish Diary</button>
-            </form>
-            <h4 style="margin:1.2rem 0 .75rem;">Recent Uploaded Diaries</h4>
-            <div class="notice-list" id="teacherDiaryHistory"></div>
-        </section>
-
         <section class="panel-card teacher-option-panel" id="lecturesPanel">
             <h3>Assigned Lectures</h3>
             <div class="notice-list" id="teacherAssignedLectures"></div>
@@ -1446,11 +1414,9 @@
         const COMPLAINT_KEY = 'eduCore_complaints';
         const TEACHER_LEAVE_KEY = 'eduCore_teacher_leave_requests';
         const TEACHER_SALARY_KEY = 'eduCore_teacher_salaries';
-        const STUDENT_DIARY_KEY = 'eduCore_student_diaries';
         const TEACHER_THEME_KEY = 'eduCore_teacher_portal_theme';
         let currentTeacherProfile = null;
         let remoteTeacherLeaveRequests = null;
-        let teacherDiaryRecords = null;
 
         function syncThemeMenu() {
             const isDark = document.body.classList.contains('portal-dark');
@@ -1609,54 +1575,6 @@
                 if (!classes.has(key)) classes.set(key, className);
             });
             return Array.from(classes.values());
-        }
-
-        function getTeacherCampusName() {
-            return String(currentTeacherProfile?.campusName || loggedInUser?.campusName || '').trim();
-        }
-
-        function populateTeacherDiaryClassOptions() {
-            const select = document.getElementById('teacherDiaryClass');
-            if (!select) return;
-            const classes = uniqueClasses();
-            select.innerHTML = '<option value="">Select Class</option>' + classes.map((className) => (
-                `<option value="${escapeHtml(className)}">${escapeHtml(className)}</option>`
-            )).join('');
-        }
-
-        function getTeacherDiaryItems() {
-            const teacherId = getTeacherIdentity().toLowerCase();
-            const records = Array.isArray(teacherDiaryRecords) ? teacherDiaryRecords : readLocal(STUDENT_DIARY_KEY);
-            return records
-                .filter((item) => String(item.createdByTeacherId || item.teacherId || '').trim().toLowerCase() === teacherId)
-                .sort((a, b) => String(b.updatedAt || b.createdAt || b.date || '').localeCompare(String(a.updatedAt || a.createdAt || a.date || '')));
-        }
-
-        function mergeTeacherDiaryRecords(remote = [], cached = []) {
-            const map = new Map();
-            [...cached, ...remote].forEach((item) => {
-                if (!item?.id) return;
-                map.set(String(item.id), { ...(map.get(String(item.id)) || {}), ...item });
-            });
-            return Array.from(map.values());
-        }
-
-        async function loadTeacherDiaryRecords() {
-            try {
-                const cached = readLocal(STUDENT_DIARY_KEY);
-                const response = await fetch(`${API_BASE_URL}/student-diary`, {
-                    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {}
-                });
-                const result = await response.json().catch(() => ({}));
-                if (!response.ok || !result?.success || !Array.isArray(result.diary)) {
-                    throw new Error(result?.message || 'Diary could not be loaded.');
-                }
-                teacherDiaryRecords = mergeTeacherDiaryRecords(result.diary, cached);
-                localStorage.setItem(STUDENT_DIARY_KEY, JSON.stringify(teacherDiaryRecords));
-            } catch (_error) {
-                teacherDiaryRecords = null;
-            }
-            renderTeacherDiaryHistory();
         }
 
         function getTeacherAttendanceMonth(attendanceStore, teacherId, month = monthKey()) {
@@ -1891,19 +1809,6 @@
             `);
         }
 
-        function renderTeacherDiaryHistory() {
-            renderPortalList('teacherDiaryHistory', getTeacherDiaryItems(), 'No diary has been uploaded yet.', (item) => `
-                <div class="list-item">
-                    <div class="list-item-top">
-                        <span>${escapeHtml(item.title || 'Diary')}</span>
-                        <span>${escapeHtml(item.date || '-')}</span>
-                    </div>
-                    <div class="muted">${escapeHtml([item.campusName, item.classGrade].filter(Boolean).join(' | ') || '-')}</div>
-                    <div>${escapeHtml(item.details || '-')}</div>
-                </div>
-            `);
-        }
-
         function renderTeacherPanels() {
             renderSalaryRecord();
             renderTimeTable();
@@ -1911,8 +1816,6 @@
             renderTeacherLeaveHistory();
             renderAssignedClasses();
             renderAssignedLectures();
-            populateTeacherDiaryClassOptions();
-            renderTeacherDiaryHistory();
             renderSelfAttendance();
         }
 
@@ -2256,64 +2159,6 @@
             showAppAlert('Your leave request has been submitted.', 'Leave Submitted');
         }
 
-        async function submitTeacherDiary(event) {
-            event.preventDefault();
-            const classGrade = document.getElementById('teacherDiaryClass')?.value || '';
-            const date = document.getElementById('teacherDiaryDate')?.value || '';
-            const title = document.getElementById('teacherDiarySubject')?.value.trim() || '';
-            const details = document.getElementById('teacherDiaryDetails')?.value.trim() || '';
-            if (!classGrade || !date || !title || !details) {
-                showAppAlert('Class, date, subject, and diary details are required.', 'Missing Diary Details');
-                return;
-            }
-
-            const now = new Date().toISOString();
-            const teacherId = getTeacherIdentity();
-            const payload = {
-                id: `DIARY-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-                campusName: getTeacherCampusName(),
-                classGrade,
-                date,
-                title,
-                details,
-                file: null,
-                createdByRole: 'Teacher',
-                createdByTeacherId: teacherId,
-                teacherId,
-                teacherName: currentTeacherProfile?.fullName || loggedInUser?.fullName || 'Teacher',
-                createdAt: now,
-                updatedAt: now
-            };
-
-            try {
-                const response = await fetch(`${API_BASE_URL}/student-diary`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: `Bearer ${authToken}`
-                    },
-                    body: JSON.stringify(payload)
-                });
-                const result = await response.json().catch(() => ({}));
-                if (!response.ok || !result?.success) {
-                    throw new Error(result?.message || 'Diary could not be published.');
-                }
-                if (Array.isArray(result.diary)) {
-                    teacherDiaryRecords = result.diary;
-                    localStorage.setItem(STUDENT_DIARY_KEY, JSON.stringify(result.diary));
-                }
-            } catch (error) {
-                showAppAlert(error.message || 'Diary could not be published.', 'Diary Publish Failed');
-                return;
-            }
-
-            event.target.reset();
-            document.getElementById('teacherDiaryDate').value = todayKey();
-            populateTeacherDiaryClassOptions();
-            await loadTeacherDiaryRecords();
-            showAppAlert('Diary has been published for students.', 'Diary Published');
-        }
-
         function bindTeacherPortalOptions() {
             document.querySelectorAll('[data-teacher-panel]').forEach((button) => {
                 button.addEventListener('click', () => {
@@ -2325,10 +2170,7 @@
             document.getElementById('teacherComplaintForm')?.addEventListener('submit', submitTeacherComplaint);
             document.getElementById('teacherComplaintFile')?.addEventListener('change', updateTeacherComplaintFileLabel);
             document.getElementById('teacherLeaveForm')?.addEventListener('submit', submitTeacherLeave);
-            document.getElementById('teacherDiaryForm')?.addEventListener('submit', submitTeacherDiary);
             document.getElementById('teacherAttendanceMonth')?.addEventListener('change', renderSelfAttendance);
-            const diaryDate = document.getElementById('teacherDiaryDate');
-            if (diaryDate && !diaryDate.value) diaryDate.value = todayKey();
         }
 
         function updateTeacherComplaintFileLabel() {
@@ -2396,14 +2238,12 @@
                 applyTeacherData(teacher);
                 await loadTeacherMessages();
                 await loadTeacherLeaveRequests();
-                await loadTeacherDiaryRecords();
             } catch (_error) {
                 const fallback = getTeacherFallback();
                 if (fallback) {
                     applyTeacherData(fallback);
                     await loadTeacherMessages();
                     await loadTeacherLeaveRequests();
-                    await loadTeacherDiaryRecords();
                     return;
                 }
                 await showAppAlert('The teacher profile could not be loaded. Please sign in again.');
