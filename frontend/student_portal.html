@@ -4012,8 +4012,33 @@
         function getStudentLeaveRequests(student = {}) {
             const candidates = getStudentIdentityCandidates(student);
             return getPortalData(STUDENT_LEAVE_KEY)
-                .filter((item) => candidates.includes(String(item.applicantId || item.studentIdentity || item.studentId || item.rollNo || '').trim().toLowerCase()))
+                .filter((item) => {
+                    const itemCandidates = [
+                        item.applicantId,
+                        item.studentIdentity,
+                        item.studentId,
+                        item.studentCode,
+                        item.rollNo
+                    ].map((value) => String(value || '').trim().toLowerCase()).filter(Boolean);
+                    return itemCandidates.some((value) => candidates.includes(value));
+                })
                 .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+        }
+
+        function buildStudentLeaveIdentityPayload(student = {}) {
+            const applicantId = String(student.id || loggedInUser?.id || student.studentCode || student.rollNo || '').trim();
+            return {
+                applicantRole: 'Student',
+                role: 'Student',
+                applicantId,
+                studentId: applicantId,
+                studentCode: student.studentCode || student.id || loggedInUser?.id || '',
+                applicantName: student.fullName || loggedInUser?.fullName || 'Student',
+                studentName: student.fullName || loggedInUser?.fullName || 'Student',
+                classGrade: student.classGrade || '',
+                rollNo: student.rollNo || '',
+                campusName: student.campusName || loggedInUser?.campusName || ''
+            };
         }
 
         function mergeStudentLeaveRequests(remote = [], cached = []) {
@@ -4038,6 +4063,7 @@
                             Authorization: `Bearer ${authToken}`
                         },
                         body: JSON.stringify({
+                            ...buildStudentLeaveIdentityPayload(student),
                             id: item.id,
                             fromDate: item.fromDate,
                             toDate: item.toDate,
@@ -4214,6 +4240,7 @@
                         Authorization: `Bearer ${authToken}`
                     },
                     body: JSON.stringify({
+                        ...buildStudentLeaveIdentityPayload(student),
                         ...(editingStudentLeaveId ? { id: editingStudentLeaveId } : {}),
                         fromDate,
                         toDate,
