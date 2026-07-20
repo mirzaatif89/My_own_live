@@ -3168,14 +3168,15 @@
 
         async function downloadPortalDiaryGroup(encodedGroupKey) {
             const groupKey = decodeURIComponent(encodedGroupKey || '');
-            const items = getPortalData(STUDENT_DIARY_KEY).filter((entry) => `${entry.classGrade || '-'}|${entry.date || '-'}` === groupKey);
+            const student = getCurrentPortalStudent();
+            const items = getClassWiseItems(STUDENT_DIARY_KEY, student).filter((entry) => `${entry.campusName || ''}|${entry.classGrade || '-'}|${entry.date || '-'}` === groupKey);
             if (!items.length) {
                 showAppAlert('Diary entry was not found.', 'Download Failed');
                 return;
             }
 
             const logoDataUrl = await getPortalLogoDataUrl();
-            const html = buildDiaryDownloadHtml(items, logoDataUrl, getCurrentPortalStudent());
+            const html = buildDiaryDownloadHtml(items, logoDataUrl, student);
             openDiaryPrintWindow(html);
         }
 
@@ -3443,10 +3444,11 @@
         function groupPortalDiaryItems(items = []) {
             const groups = new Map();
             items.forEach((item) => {
-                const key = `${item.classGrade || '-'}|${item.date || '-'}`;
+                const key = `${item.campusName || ''}|${item.classGrade || '-'}|${item.date || '-'}`;
                 if (!groups.has(key)) {
                     groups.set(key, {
                         key,
+                        campusName: item.campusName || '',
                         classGrade: item.classGrade || '-',
                         date: item.date || '-',
                         items: []
@@ -3473,7 +3475,7 @@
             list.innerHTML = groups.map((group) => `
                 <article class="portal-content-card">
                     <h4>${escapeHtml(group.classGrade)} Class Diary</h4>
-                    <div class="portal-content-meta">${escapeHtml(group.date)} - ${group.items.length} subject${group.items.length === 1 ? '' : 's'}</div>
+                    <div class="portal-content-meta">${escapeHtml([group.date, group.campusName].filter(Boolean).join(' | '))} - ${group.items.length} subject${group.items.length === 1 ? '' : 's'}</div>
                     <div class="portal-diary-subjects">
                         ${group.items.map((item) => `
                             <div class="portal-diary-subject">
@@ -3513,6 +3515,20 @@
 
         function applyStudentDiary(student = {}) {
             renderPortalDiaryList(student);
+        }
+
+        async function loadStudentDiaryForPortal(student = getCurrentPortalStudent()) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/student-diary`);
+                if (!response.ok) throw new Error('Diary unavailable.');
+                const result = await response.json().catch(() => ({}));
+                if (Array.isArray(result.diary)) {
+                    localStorage.setItem(STUDENT_DIARY_KEY, JSON.stringify(result.diary));
+                }
+            } catch (_error) {
+                // Keep cached diary visible if the API is temporarily unavailable.
+            }
+            applyStudentDiary(student);
         }
 
         function applyStudentCourse(student = {}) {
@@ -4806,6 +4822,7 @@
                 try {
                     await loadStudentAttendanceForPortal();
                     await loadExecutedDateSheet();
+                    await loadStudentDiaryForPortal(student);
                     await loadStudentCoursesForPortal(student);
                     applyStudentAttendance(student);
                     applyStudentPerformance(student);
@@ -5744,6 +5761,7 @@
                 const student = await response.json();
                 await loadStudentAttendanceForPortal();
                 await loadExecutedDateSheet();
+                await loadStudentDiaryForPortal(student);
                 await loadStudentCoursesForPortal(student);
                 await mergeStudentFeePaymentsIntoMonthlyStore();
                 applyStudentData(student);
@@ -5757,6 +5775,7 @@
                 if (fallbackStudent) {
                     await loadStudentAttendanceForPortal();
                     await loadExecutedDateSheet();
+                    await loadStudentDiaryForPortal(fallbackStudent);
                     await loadStudentCoursesForPortal(fallbackStudent);
                     await mergeStudentFeePaymentsIntoMonthlyStore();
                     applyStudentData(fallbackStudent);

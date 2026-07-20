@@ -27,6 +27,7 @@
         }
 
         #studentDiaryForm #studentDiaryClass,
+        #studentDiaryForm #studentDiaryCampus,
         #studentDiaryForm #studentDiaryDate {
             min-height: 37px;
             height: 37px;
@@ -194,6 +195,7 @@
                 <form id="studentDiaryForm">
                     <input type="hidden" id="studentDiaryId">
                     <div class="schedule-grid">
+                        <div><label>Campus</label><select id="studentDiaryCampus" required></select></div>
                         <div><label>Class</label><select id="studentDiaryClass" required></select></div>
                         <div><label>Diary Date</label><input type="date" id="studentDiaryDate" required></div>
                         <button type="button" class="btn btn-primary" id="openDiaryBuilderBtn"><i data-lucide="book-plus"></i> Add Subject Diary</button>
@@ -241,6 +243,9 @@
     <script src="script.js?v=20260520-sidebar-classes-restore"></script>
     <script>
         const STUDENT_DIARY_KEY = 'eduCore_student_diaries';
+        const DIARY_API_BASE = typeof getApiBaseUrl === 'function'
+            ? getApiBaseUrl()
+            : `${window.location.origin}/api`;
         let diaryDrafts = [];
         let diaryEditId = '';
         let lastAutoOpenedKey = '';
@@ -256,8 +261,22 @@
             studentDiaryClass.innerHTML = '<option value="">Select Class</option>' + names.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join('');
         }
 
+        function populateCampuses() {
+            const students = data('eduCore_students');
+            const classes = data('eduCore_classes');
+            const campuses = typeof getUniqueCampusNames === 'function'
+                ? getUniqueCampusNames()
+                : [...new Set(['Main Campus', ...students.map((student) => student?.campusName), ...classes.map((item) => item?.campusName)].map((value) => String(value || '').trim()).filter(Boolean))].sort();
+            studentDiaryCampus.innerHTML = '<option value="">Select Campus</option>' + campuses.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join('');
+            const user = typeof getLoggedInUser === 'function' ? getLoggedInUser() : null;
+            if (user?.role === 'Branch' && user.campusName) {
+                studentDiaryCampus.value = user.campusName;
+                studentDiaryCampus.disabled = true;
+            }
+        }
+
         function getDiarySelectionKey() {
-            return `${studentDiaryClass.value || ''}|${studentDiaryDate.value || ''}`;
+            return `${studentDiaryCampus.value || ''}|${studentDiaryClass.value || ''}|${studentDiaryDate.value || ''}`;
         }
 
         function renderDrafts() {
@@ -275,14 +294,14 @@
         }
 
         function openDiaryBuilder(force = false) {
-            if (!studentDiaryClass.value || !studentDiaryDate.value) {
-                showAppAlert('Please select class and diary date first.', 'Missing Diary Info');
+            if (!studentDiaryCampus.value || !studentDiaryClass.value || !studentDiaryDate.value) {
+                showAppAlert('Please select campus, class, and diary date first.', 'Missing Diary Info');
                 return;
             }
             const key = getDiarySelectionKey();
             if (!force && lastAutoOpenedKey === key) return;
             lastAutoOpenedKey = key;
-            diaryBuilderMeta.textContent = `${studentDiaryClass.value} - ${studentDiaryDate.value}`;
+            diaryBuilderMeta.textContent = `${studentDiaryCampus.value} - ${studentDiaryClass.value} - ${studentDiaryDate.value}`;
             diaryBuilderModal.classList.add('active');
             diaryBuilderModal.setAttribute('aria-hidden', 'false');
             renderDrafts();
@@ -295,7 +314,7 @@
         }
 
         function maybeAutoOpenBuilder() {
-            if (studentDiaryClass.value && studentDiaryDate.value && !diaryEditId) openDiaryBuilder(false);
+            if (studentDiaryCampus.value && studentDiaryClass.value && studentDiaryDate.value && !diaryEditId) openDiaryBuilder(false);
         }
 
         function addDiaryDraft() {
@@ -321,15 +340,16 @@
             const diaries = data(STUDENT_DIARY_KEY).sort((a, b) => `${b.date || ''}${b.updatedAt || ''}`.localeCompare(`${a.date || ''}${a.updatedAt || ''}`));
             if (!diaries.length) { studentDiaryList.innerHTML = '<div class="empty-note">No class diary added yet.</div>'; return; }
             const groups = groupDiaries(diaries);
-            studentDiaryList.innerHTML = `<table class="schedule-table"><thead><tr><th>Class</th><th>Date</th><th>Subjects</th><th>Action</th></tr></thead><tbody>${groups.map((group) => `
+            studentDiaryList.innerHTML = `<table class="schedule-table"><thead><tr><th>Campus</th><th>Class</th><th>Date</th><th>Subjects</th><th>Action</th></tr></thead><tbody>${groups.map((group) => `
                 <tr class="diary-group-row" onclick="toggleDiaryGroup('${group.key}')">
+                    <td>${esc(group.campusName || 'All Campuses')}</td>
                     <td><span class="diary-group-title"><i data-lucide="chevron-down" width="16"></i>${esc(group.classGrade)}</span></td>
                     <td>${esc(group.date)}</td>
                     <td>${group.items.length} subject${group.items.length === 1 ? '' : 's'}</td>
                     <td><button type="button" class="schedule-action-btn edit" onclick="event.stopPropagation(); toggleDiaryGroup('${group.key}')"><i data-lucide="book-open" width="14"></i> Open</button></td>
                 </tr>
                 <tr class="diary-detail-row" id="${group.key}">
-                    <td colspan="4">
+                    <td colspan="5">
                         <div class="diary-detail-wrap">
                             ${group.items.map((item) => `
                                 <article class="diary-subject-card">
@@ -356,23 +376,35 @@
             diaryEditId = item.id;
             diaryDrafts = [{ title: item.title || '', details: item.details || '' }];
             studentDiaryId.value = item.id;
+            studentDiaryCampus.value = item.campusName || '';
             studentDiaryClass.value = item.classGrade || '';
             studentDiaryDate.value = item.date || '';
             openDiaryBuilder(true);
         }
 
-        function deleteDiary(id) {
-            save(STUDENT_DIARY_KEY, data(STUDENT_DIARY_KEY).filter((item) => item.id !== id));
+        async function deleteDiary(id) {
+            try {
+                const response = await fetch(`${DIARY_API_BASE}/student-diary?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+                const result = await response.json().catch(() => ({}));
+                if (response.ok && result.success && Array.isArray(result.diary)) {
+                    save(STUDENT_DIARY_KEY, result.diary);
+                } else {
+                    save(STUDENT_DIARY_KEY, data(STUDENT_DIARY_KEY).filter((item) => item.id !== id));
+                }
+            } catch (_error) {
+                save(STUDENT_DIARY_KEY, data(STUDENT_DIARY_KEY).filter((item) => item.id !== id));
+            }
             render();
         }
 
         function groupDiaries(diaries) {
             const groups = new Map();
             diaries.forEach((item) => {
-                const key = `${item.classGrade || '-'}|${item.date || '-'}`;
+                const key = `${item.campusName || ''}|${item.classGrade || '-'}|${item.date || '-'}`;
                 if (!groups.has(key)) {
                     groups.set(key, {
                         key: `DIARY-GROUP-${groups.size}`,
+                        campusName: item.campusName || '',
                         classGrade: item.classGrade || '-',
                         date: item.date || '-',
                         items: []
@@ -388,9 +420,52 @@
             if (window.lucide) window.lucide.createIcons();
         }
 
-        function saveDiaryDrafts() {
-            if (!studentDiaryClass.value || !studentDiaryDate.value) {
-                showAppAlert('Please select class and diary date first.', 'Missing Diary Info');
+        function mergeDiaries(remote = [], cached = []) {
+            const map = new Map();
+            [...cached, ...remote].forEach((item) => {
+                if (!item?.id) return;
+                map.set(String(item.id), { ...(map.get(String(item.id)) || {}), ...item });
+            });
+            return Array.from(map.values());
+        }
+
+        async function loadDiaries() {
+            try {
+                const cachedDiaries = data(STUDENT_DIARY_KEY);
+                const response = await fetch(`${DIARY_API_BASE}/student-diary`);
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok || !result.success || !Array.isArray(result.diary)) {
+                    throw new Error(result.message || 'Diary could not be loaded.');
+                }
+                save(STUDENT_DIARY_KEY, mergeDiaries(result.diary, cachedDiaries));
+                const remoteIds = new Set(result.diary.map((item) => String(item.id || '')));
+                const localOnlyDiaries = cachedDiaries.filter((item) => item?.id && !remoteIds.has(String(item.id)));
+                for (const item of localOnlyDiaries) {
+                    await saveDiaryToApi(item);
+                }
+            } catch (_error) {
+                // Keep local diaries visible if the API is temporarily unavailable.
+            }
+            render();
+        }
+
+        async function saveDiaryToApi(item) {
+            const response = await fetch(`${DIARY_API_BASE}/student-diary`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(item)
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || !result.success) {
+                throw new Error(result.message || 'Diary could not be published.');
+            }
+            if (Array.isArray(result.diary)) save(STUDENT_DIARY_KEY, result.diary);
+            return result.entry || item;
+        }
+
+        async function saveDiaryDrafts() {
+            if (!studentDiaryCampus.value || !studentDiaryClass.value || !studentDiaryDate.value) {
+                showAppAlert('Please select campus, class, and diary date first.', 'Missing Diary Info');
                 return;
             }
             if (!diaryDrafts.length) {
@@ -405,6 +480,7 @@
                 if (index >= 0) {
                     items[index] = {
                         ...items[index],
+                        campusName: studentDiaryCampus.value,
                         classGrade: studentDiaryClass.value,
                         date: studentDiaryDate.value,
                         title: diaryDrafts[0].title,
@@ -417,6 +493,7 @@
                 diaryDrafts.forEach((entry, index) => {
                     items.push({
                         id: `DIARY-${Date.now()}-${index}`,
+                        campusName: studentDiaryCampus.value,
                         classGrade: studentDiaryClass.value,
                         date: studentDiaryDate.value,
                         title: entry.title,
@@ -429,6 +506,17 @@
             }
 
             if (!save(STUDENT_DIARY_KEY, items)) return;
+            try {
+                const savedItems = diaryEditId
+                    ? items.filter((entry) => entry.id === diaryEditId)
+                    : items.filter((entry) => entry.createdAt === now && entry.campusName === studentDiaryCampus.value && entry.classGrade === studentDiaryClass.value && entry.date === studentDiaryDate.value);
+                for (const item of savedItems) {
+                    await saveDiaryToApi(item);
+                }
+            } catch (error) {
+                showAppAlert(error.message || 'Diary could not be published.', 'Publish Failed');
+                return;
+            }
             diaryDrafts = [];
             diaryEditId = '';
             studentDiaryId.value = '';
@@ -443,14 +531,16 @@
         saveDiaryBuilderBtn.addEventListener('click', saveDiaryDrafts);
         closeDiaryBuilderBtn.addEventListener('click', closeDiaryBuilder);
         cancelDiaryBuilderBtn.addEventListener('click', closeDiaryBuilder);
+        studentDiaryCampus.addEventListener('change', maybeAutoOpenBuilder);
         studentDiaryClass.addEventListener('change', maybeAutoOpenBuilder);
         studentDiaryDate.addEventListener('change', maybeAutoOpenBuilder);
         diaryBuilderModal.addEventListener('click', (event) => {
             if (event.target === diaryBuilderModal) closeDiaryBuilder();
         });
 
+        populateCampuses();
         populateClasses();
-        render();
+        loadDiaries();
         if (window.lucide) window.lucide.createIcons();
     </script>
 </body>
