@@ -3432,12 +3432,14 @@
         function getClassWiseItems(key, student = {}) {
             const studentClass = normalizeClassName(student.classGrade);
             const studentCampus = normalizePortalCampusName(student.campusName || loggedInUser?.campusName || 'Main Campus');
-            return getPortalData(key)
-                .filter((item) => normalizeClassName(item.classGrade) === studentClass)
-                .filter((item) => {
-                    const itemCampus = normalizePortalCampusName(item.campusName || item.branchName || item.campus || '');
-                    return !itemCampus || !studentCampus || itemCampus === studentCampus;
-                })
+            const classItems = getPortalData(key)
+                .filter((item) => normalizeClassName(item.classGrade) === studentClass);
+            const exactCampusItems = classItems.filter((item) => {
+                const itemCampus = normalizePortalCampusName(item.campusName || item.branchName || item.campus || '');
+                return !itemCampus || !studentCampus || itemCampus === studentCampus;
+            });
+            const visibleItems = exactCampusItems.length ? exactCampusItems : classItems;
+            return visibleItems
                 .sort((a, b) => String(b.date || b.updatedAt || b.createdAt || '').localeCompare(String(a.date || a.updatedAt || a.createdAt || '')));
         }
 
