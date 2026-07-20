@@ -1303,6 +1303,103 @@ app.post('/api/class-fees', authenticateToken, async (req, res) => {
     }
 });
 
+function formatStudentDiaryEntry(entry = {}) {
+    const row = entry?.toJSON ? entry.toJSON() : entry;
+    let file = row.file || null;
+    if (typeof file === 'string' && file) {
+        try {
+            file = JSON.parse(file);
+        } catch (_error) {
+            file = null;
+        }
+    }
+
+    return {
+        ...row,
+        file
+    };
+}
+
+async function listStudentDiaryEntries() {
+    const rows = await sequelize.models.StudentDiary.findAll({
+        order: [['date', 'DESC'], ['updatedAt', 'DESC']]
+    });
+    return rows.map(formatStudentDiaryEntry);
+}
+
+function normalizeStudentDiaryPayload(payload = {}) {
+    const now = new Date().toISOString();
+    const title = String(payload.title || payload.subject || '').trim();
+    const details = String(payload.details || payload.description || payload.homework || '').trim();
+    const classGrade = String(payload.classGrade || payload.className || payload.class || '').trim();
+    const date = String(payload.date || payload.diaryDate || '').trim();
+
+    return {
+        id: String(payload.id || `DIARY-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+        campusName: String(payload.campusName || '').trim(),
+        classGrade,
+        date,
+        title,
+        details,
+        file: payload.file ? JSON.stringify(payload.file) : null,
+        createdByRole: String(payload.createdByRole || 'Admin').trim(),
+        createdByTeacherId: String(payload.createdByTeacherId || '').trim(),
+        teacherId: String(payload.teacherId || '').trim(),
+        teacherName: String(payload.teacherName || '').trim(),
+        createdAtLabel: payload.createdAtLabel || now,
+        createdAt: payload.createdAt || now,
+        updatedAt: now
+    };
+}
+
+app.get('/api/student-diary', async (_req, res) => {
+    if (!sequelize) return res.status(503).json({ success: false, message: 'Database offline', diary: [] });
+
+    try {
+        res.json({ success: true, diary: await listStudentDiaryEntries() });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message, diary: [] });
+    }
+});
+
+app.post('/api/student-diary', async (req, res) => {
+    if (!sequelize) return res.status(503).json({ success: false, message: 'Database offline', diary: [] });
+
+    try {
+        const record = normalizeStudentDiaryPayload(req.body || {});
+        if (!record.classGrade || !record.date || !record.title || !record.details) {
+            return res.status(400).json({ success: false, message: 'Class, date, subject, and diary details are required.', diary: await listStudentDiaryEntries() });
+        }
+
+        await sequelize.models.StudentDiary.upsert(record);
+        const entry = await sequelize.models.StudentDiary.findByPk(record.id);
+        const diary = await listStudentDiaryEntries();
+        io.emit('student_diary_update', diary);
+        res.json({ success: true, entry: formatStudentDiaryEntry(entry || record), diary });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message, diary: [] });
+    }
+});
+
+async function deleteStudentDiaryById(req, res) {
+    if (!sequelize) return res.status(503).json({ success: false, message: 'Database offline', diary: [] });
+
+    try {
+        const id = String(req.params.id || req.query.id || '').trim();
+        if (!id) return res.status(400).json({ success: false, message: 'Diary id is required.', diary: await listStudentDiaryEntries() });
+
+        await sequelize.models.StudentDiary.destroy({ where: { id } });
+        const diary = await listStudentDiaryEntries();
+        io.emit('student_diary_update', diary);
+        res.json({ success: true, deleted: true, diary });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message, diary: [] });
+    }
+}
+
+app.delete('/api/student-diary', deleteStudentDiaryById);
+app.delete('/api/student-diary/:id', deleteStudentDiaryById);
+
 function normalizeMessageRole(value) {
     const role = String(value || '').trim().toLowerCase();
     if (role === 'student') return 'Student';
@@ -2832,7 +2929,6 @@ registerMobileCollectionRoutes({ route: 'cafe/contracts', storeName: 'cafe_contr
 registerMobileCollectionRoutes({ route: 'transport/assignments', storeName: 'transport_assignments', recordsKey: 'assignments', itemKey: 'assignment', prefix: 'TRN' });
 registerMobileCollectionRoutes({ route: 'student-assignments', storeName: 'student_assignments', recordsKey: 'assignments', itemKey: 'assignment', prefix: 'ASG' });
 registerMobileCollectionRoutes({ route: 'teacher-salaries', storeName: 'teacher_salaries', recordsKey: 'salaries', itemKey: 'salary', prefix: 'SAL' });
-registerMobileCollectionRoutes({ route: 'student-diary', storeName: 'student_diary', recordsKey: 'diary', itemKey: 'entry', prefix: 'DIARY' });
 registerMobileCollectionRoutes({ route: 'student-courses', storeName: 'student_courses', recordsKey: 'courses', itemKey: 'course', prefix: 'COURSE' });
 registerMobileCollectionRoutes({ route: 'uploaded-assignments', storeName: 'uploaded_assignments', recordsKey: 'assignments', itemKey: 'assignment', prefix: 'UPLOAD-ASG' });
 registerMobileCollectionRoutes({ route: 'uploaded-lectures', storeName: 'uploaded_lectures', recordsKey: 'lectures', itemKey: 'lecture', prefix: 'LECTURE' });
@@ -3319,6 +3415,23 @@ function defineClassFeeModel(db) {
     });
 }
 
+function defineStudentDiaryModel(db) {
+    return db.define('StudentDiary', {
+        id: { type: DataTypes.STRING, primaryKey: true },
+        campusName: { type: DataTypes.STRING, allowNull: true },
+        classGrade: { type: DataTypes.STRING, allowNull: false },
+        date: { type: DataTypes.STRING, allowNull: false },
+        title: { type: DataTypes.STRING, allowNull: false },
+        details: { type: DataTypes.TEXT('long'), allowNull: false },
+        file: { type: DataTypes.TEXT('long'), allowNull: true },
+        createdByRole: { type: DataTypes.STRING, allowNull: true },
+        createdByTeacherId: { type: DataTypes.STRING, allowNull: true },
+        teacherId: { type: DataTypes.STRING, allowNull: true },
+        teacherName: { type: DataTypes.STRING, allowNull: true },
+        createdAtLabel: { type: DataTypes.STRING, allowNull: true }
+    });
+}
+
 function defineStudentAttendanceModel(db) {
     return db.define('StudentAttendance', {
         id: { type: DataTypes.STRING, primaryKey: true },
@@ -3738,6 +3851,7 @@ async function startServer() {
         defineFeePaymentModel(sequelize);
         defineFeeDueBalanceModel(sequelize);
         defineClassFeeModel(sequelize);
+        defineStudentDiaryModel(sequelize);
         defineStudentAttendanceModel(sequelize);
         defineTeacherAttendanceModel(sequelize);
         defineSpecialNoticeModel(sequelize);

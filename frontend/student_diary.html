@@ -429,19 +429,37 @@
             return Array.from(map.values());
         }
 
+        function dedupeDiaries(items = []) {
+            const map = new Map();
+            items.forEach((item) => {
+                if (!item?.id) return;
+                const key = [
+                    item.campusName || '',
+                    item.classGrade || '',
+                    item.date || '',
+                    item.title || '',
+                    item.details || ''
+                ].map((value) => String(value).trim().toLowerCase()).join('|');
+                if (!map.has(key)) map.set(key, item);
+            });
+            return Array.from(map.values());
+        }
+
         async function loadDiaries() {
             try {
-                const cachedDiaries = data(STUDENT_DIARY_KEY);
+                const cachedDiaries = dedupeDiaries(data(STUDENT_DIARY_KEY));
                 const response = await fetch(`${DIARY_API_BASE}/student-diary`);
                 const result = await response.json().catch(() => ({}));
                 if (!response.ok || !result.success || !Array.isArray(result.diary)) {
                     throw new Error(result.message || 'Diary could not be loaded.');
                 }
-                save(STUDENT_DIARY_KEY, mergeDiaries(result.diary, cachedDiaries));
-                const remoteIds = new Set(result.diary.map((item) => String(item.id || '')));
-                const localOnlyDiaries = cachedDiaries.filter((item) => item?.id && !remoteIds.has(String(item.id)));
-                for (const item of localOnlyDiaries) {
-                    await saveDiaryToApi(item);
+                if (result.diary.length || !cachedDiaries.length) {
+                    save(STUDENT_DIARY_KEY, dedupeDiaries(result.diary));
+                } else {
+                    save(STUDENT_DIARY_KEY, cachedDiaries);
+                    for (const item of cachedDiaries) {
+                        await saveDiaryToApi(item);
+                    }
                 }
             } catch (_error) {
                 // Keep local diaries visible if the API is temporarily unavailable.
