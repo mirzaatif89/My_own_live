@@ -3199,6 +3199,10 @@
             return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
         }
 
+        function normalizePortalCampusName(value = '') {
+            return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        }
+
         function getStudentClassSchedules(student = {}) {
             const className = normalizeClassName(student.classGrade);
             if (!className) return [];
@@ -3426,8 +3430,13 @@
 
         function getClassWiseItems(key, student = {}) {
             const studentClass = normalizeClassName(student.classGrade);
+            const studentCampus = normalizePortalCampusName(student.campusName || loggedInUser?.campusName || 'Main Campus');
             return getPortalData(key)
                 .filter((item) => normalizeClassName(item.classGrade) === studentClass)
+                .filter((item) => {
+                    const itemCampus = normalizePortalCampusName(item.campusName || item.branchName || item.campus || '');
+                    return !itemCampus || !studentCampus || itemCampus === studentCampus;
+                })
                 .sort((a, b) => String(b.date || b.updatedAt || b.createdAt || '').localeCompare(String(a.date || a.updatedAt || a.createdAt || '')));
         }
 
@@ -3494,7 +3503,7 @@
             list.innerHTML = items.map((item) => `
                 <article class="portal-content-card">
                     <h4>${escapeHtml(item.title || '-')}</h4>
-                    <div class="portal-content-meta">${escapeHtml(item.date || item.classGrade || '-')}</div>
+                    <div class="portal-content-meta">${escapeHtml([item.date || item.classGrade || '-', item.campusName].filter(Boolean).join(' | '))}</div>
                     <p>${escapeHtml(item.details || '-')}</p>
                     ${item.file?.dataUrl ? `<button type="button" class="portal-download-btn" onclick="downloadPortalAttachment('${escapeHtml(storageKey)}', '${escapeHtml(item.id || '')}')"><i data-lucide="download" width="16"></i> Download ${escapeHtml(item.file.name || 'File')}</button>` : ''}
                 </article>
