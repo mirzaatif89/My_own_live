@@ -5303,6 +5303,20 @@
             return loadDateSheetState();
         }
 
+        function normalizeClassMatchValue(value = '') {
+            return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        }
+
+        function isDateSheetRowForStudent(row = {}, student = {}, state = {}) {
+            const studentClass = normalizeClassMatchValue(student.classGrade);
+            if (!studentClass) return true;
+
+            const rowClass = normalizeClassMatchValue(row.className || state.dateSheetClassGroup);
+            if (!rowClass) return true;
+
+            return rowClass === studentClass || rowClass.includes(studentClass) || studentClass.includes(rowClass);
+        }
+
         function formatScheduleDate(value) {
             if (!value) return '-';
             const parsed = new Date(value);
@@ -5437,12 +5451,11 @@
             const emptyState = document.getElementById('studentDateSheetEmpty');
             const table = document.getElementById('studentDateSheetTable');
             const fileNote = document.getElementById('studentDateSheetFileNote');
-            const className = String(student.classGrade || '').trim().toLowerCase();
             const rows = Array.isArray(state.scheduleRows) ? state.scheduleRows : [];
             const uploadedFile = state.uploadedDateSheetFile || {};
             const hasUploadedFile = Boolean(state.status === 'executed' && uploadedFile.name && uploadedFile.dataUrl);
             const filteredRows = state.status === 'executed'
-                ? rows.filter((row) => !className || String(row.className || '').trim().toLowerCase().includes(className))
+                ? rows.filter((row) => isDateSheetRowForStudent(row, student, state))
                 : [];
 
             if (!filteredRows.length) {
