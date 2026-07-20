@@ -1237,12 +1237,44 @@ function normalizeClassFeeRecords(records = []) {
     return Array.from(byClass.values());
 }
 
+function deriveClassFeesFromStudents(students = []) {
+    const byClass = new Map();
+
+    students.forEach((student) => {
+        const className = String(student?.classGrade || '').trim();
+        const monthlyFee = Number(String(student?.monthlyFee || student?.fee || 0).replace(/,/g, '')) || 0;
+        if (!className || monthlyFee <= 0) return;
+
+        const key = className.toLowerCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ');
+        if (byClass.has(key)) return;
+
+        byClass.set(key, {
+            id: key,
+            className,
+            monthlyFee,
+            feeFrequency: String(student?.feeFrequency || 'Monthly').trim() || 'Monthly',
+            updatedAtLabel: new Date().toLocaleString('en-GB')
+        });
+    });
+
+    return Array.from(byClass.values()).sort((a, b) => a.className.localeCompare(b.className, undefined, { numeric: true, sensitivity: 'base' }));
+}
+
 app.get('/api/class-fees', async (req, res) => {
     if (!sequelize) return res.status(503).json({ success: false, message: 'Database offline', classFees: [] });
 
     try {
         const rows = await sequelize.models.ClassFee.findAll({ order: [['className', 'ASC']] });
-        res.json({ success: true, classFees: rows });
+        if (rows.length) {
+            res.json({ success: true, classFees: rows });
+            return;
+        }
+
+        const students = await sequelize.models.Student.findAll({
+            attributes: ['classGrade', 'monthlyFee', 'feeFrequency'],
+            order: [['classGrade', 'ASC']]
+        });
+        res.json({ success: true, classFees: deriveClassFeesFromStudents(students), source: 'students' });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message, classFees: [] });
     }
