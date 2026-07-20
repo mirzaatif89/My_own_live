@@ -1238,13 +1238,13 @@ function normalizeClassFeeRecords(records = []) {
 }
 
 app.get('/api/class-fees', async (req, res) => {
-    if (!sequelize) return res.status(503).json({ error: 'Database offline' });
+    if (!sequelize) return res.status(503).json({ success: false, message: 'Database offline', classFees: [] });
 
     try {
         const rows = await sequelize.models.ClassFee.findAll({ order: [['className', 'ASC']] });
-        res.json(rows);
+        res.json({ success: true, classFees: rows });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, message: err.message, classFees: [] });
     }
 });
 
