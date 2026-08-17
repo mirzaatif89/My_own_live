@@ -16,16 +16,16 @@
   "roleGroups": {
     "Admin": "superadmin",
     "Principal": "admin",
-    "Branch Manager": "admin",
+    "Branch": "computer_operator",
     "Teacher": "computer_operator",
-    "Senior Teacher": "admin",
-    "Coordinator": "admin",
     "Student": "computer_operator",
     "Staff": "computer_operator",
+    "Branch Manager": "admin",
+    "Senior Teacher": "admin",
+    "Coordinator": "admin",
     "Accountant": "admin",
     "Receptionist": "admin",
-    "Office Assistant": "admin",
-    "Branch": "computer_operator"
+    "Office Assistant": "admin"
   },
   "customModules": [],
   "groups": {
@@ -46,6 +46,7 @@
         "student_attendance_report": "manage",
         "teacher_attendance_report": "manage",
         "notifications": "manage",
+        "messages": "manage",
         "special_notices": "manage",
         "exams": "manage",
         "revenue": "manage",
@@ -73,6 +74,7 @@
         "student_attendance_report": "manage",
         "teacher_attendance_report": "manage",
         "notifications": "manage",
+        "messages": "manage",
         "special_notices": "manage",
         "exams": "manage",
         "revenue": "manage",
@@ -81,6 +83,206 @@
         "branch_registration": "manage",
         "aboutme": "manage",
         "student_portal": "manage"
+      },
+      "actionPermissions": {
+        "aboutme": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "branch_registration": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "classes": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "dashboard": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "exams": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "fee_challan": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "fees": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "messages": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "notifications": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "permissions": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "revenue": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "settings": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "special_notices": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "staff": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "student_attendance": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "student_attendance_report": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "student_portal": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "students": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "teacher_attendance": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "teacher_attendance_report": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "teacher_salaries": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "teachers": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        }
       }
     },
     "computer_operator": {
@@ -100,6 +302,7 @@
         "student_attendance_report": "edit",
         "teacher_attendance_report": "edit",
         "notifications": "edit",
+        "messages": "view",
         "special_notices": "edit",
         "exams": "edit",
         "revenue": "edit",
@@ -108,6 +311,462 @@
         "branch_registration": "edit",
         "aboutme": "edit",
         "student_portal": "edit"
+      }
+    },
+    "teacher": {
+      "name": "Teacher",
+      "homePage": "dashboard.html",
+      "permissions": {
+        "dashboard": "none",
+        "students": "none",
+        "teachers": "none",
+        "staff": "none",
+        "classes": "none",
+        "fees": "none",
+        "fee_challan": "none",
+        "teacher_salaries": "none",
+        "student_attendance": "none",
+        "teacher_attendance": "none",
+        "student_attendance_report": "none",
+        "teacher_attendance_report": "none",
+        "notifications": "none",
+        "messages": "none",
+        "special_notices": "none",
+        "exams": "none",
+        "revenue": "none",
+        "settings": "none",
+        "permissions": "none",
+        "branch_registration": "none",
+        "aboutme": "none",
+        "student_portal": "none"
+      },
+      "actionPermissions": {
+        "aboutme": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "branch_registration": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "classes": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "dashboard": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "exams": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "fee_challan": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "fees": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "messages": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "notifications": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "permissions": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "revenue": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "settings": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "special_notices": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "staff": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "student_attendance": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "student_attendance_report": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "student_portal": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "students": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "teacher_attendance": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "teacher_attendance_report": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "teacher_salaries": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "teachers": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        }
+      }
+    },
+    "accountant": {
+      "name": "Accountant",
+      "homePage": "dashboard.html",
+      "permissions": {
+        "dashboard": "manage",
+        "students": "manage",
+        "teachers": "manage",
+        "staff": "manage",
+        "classes": "manage",
+        "fees": "manage",
+        "fee_challan": "manage",
+        "teacher_salaries": "manage",
+        "student_attendance": "manage",
+        "teacher_attendance": "manage",
+        "student_attendance_report": "manage",
+        "teacher_attendance_report": "manage",
+        "notifications": "none",
+        "messages": "none",
+        "special_notices": "none",
+        "exams": "view",
+        "revenue": "manage",
+        "settings": "none",
+        "permissions": "none",
+        "branch_registration": "edit",
+        "aboutme": "view",
+        "student_portal": "manage"
+      },
+      "actionPermissions": {
+        "aboutme": {
+          "view": true,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "branch_registration": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": false,
+          "export": true,
+          "import": false,
+          "bulk_action": false
+        },
+        "classes": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "dashboard": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "exams": {
+          "view": true,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "fee_challan": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "fees": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "messages": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "notifications": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "permissions": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "revenue": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "settings": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "special_notices": {
+          "view": false,
+          "add": false,
+          "edit": false,
+          "delete": false,
+          "export": false,
+          "import": false,
+          "bulk_action": false
+        },
+        "staff": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "student_attendance": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "student_attendance_report": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "student_portal": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "students": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "teacher_attendance": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "teacher_attendance_report": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "teacher_salaries": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        },
+        "teachers": {
+          "view": true,
+          "add": true,
+          "edit": true,
+          "delete": true,
+          "export": true,
+          "import": true,
+          "bulk_action": true
+        }
       }
     }
   }

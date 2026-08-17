@@ -219,6 +219,7 @@ const defaultPermissions = {
 function normalizePermissionsConfig(input = {}) {
     const raw = input && typeof input === 'object' ? input : {};
     const groupsInput = raw.groups && typeof raw.groups === 'object' ? raw.groups : {};
+    const allowedGroupKeys = new Set(['admin', 'teacher', 'accountant']);
     const customModules = Array.isArray(raw.customModules) ? raw.customModules : [];
     const allowedHomePages = new Set(ALLOWED_HOME_PAGES);
     customModules.forEach((module) => {
@@ -227,7 +228,7 @@ function normalizePermissionsConfig(input = {}) {
     const groups = Object.entries({
         ...defaultPermissions.groups,
         ...groupsInput
-    }).reduce((acc, [key, groupValue]) => {
+    }).filter(([key]) => allowedGroupKeys.has(String(key).toLowerCase())).reduce((acc, [key, groupValue]) => {
         const baseGroup = defaultPermissions.groups[key] || {
             name: key,
             homePage: 'dashboard.html',
@@ -248,12 +249,12 @@ function normalizePermissionsConfig(input = {}) {
 
     return {
         loginAccess: {
-            ...defaultPermissions.loginAccess,
-            ...(raw.loginAccess || {})
+            admin: raw.loginAccess?.admin !== false,
+            teacher: raw.loginAccess?.teacher !== false,
+            staff: raw.loginAccess?.staff !== false
         },
         roleGroups: {
-            ...defaultPermissions.roleGroups,
-            ...(raw.roleGroups || {})
+            Admin: 'admin', Teacher: 'teacher', Staff: 'accountant'
         },
         customModules,
         groups

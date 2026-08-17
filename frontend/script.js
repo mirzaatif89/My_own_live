@@ -915,14 +915,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (result.user.role === 'Admin') return 'dashboard.html';
                         if (result.user.role === 'Branch') return 'students.html';
                         if (result.user.role === 'Student') return 'student_portal.html';
-                        if (result.user.role === 'Teacher') return 'teacher_portal.html';
+                        if (result.user.role === 'Teacher' && String(result.user.groupKey || '').toLowerCase() !== 'accountant'
+                            && String(result.user.designation || '').toLowerCase() !== 'accountant') return 'teacher_portal.html';
                         return 'dashboard.html';
                     };
 
                     const getPermissionHome = () => {
                         if (!result.permissions) return '';
                         if (result.user.role === 'Student') return 'student_portal.html';
-                        if (result.user.role === 'Teacher') return 'teacher_portal.html';
+                        if (result.user.role === 'Teacher' && String(result.user.groupKey || '').toLowerCase() !== 'accountant'
+                            && String(result.user.designation || '').toLowerCase() !== 'accountant') return 'teacher_portal.html';
                         const groupKey = result.user.groupKey || result.permissions.roleGroups?.[result.user.role];
                         const group = result.permissions.groups?.[groupKey];
                         const pageRegistry = window.eduCoreAuth?.pageRegistry || {};
@@ -2714,6 +2716,7 @@ function initializeSidebarScrollMemory() {
 }
 
 function ensureDesignationPermissionsNav() {
+    return;
     const navLinks = document.querySelector('.nav-links');
     const loggedInUser = getLoggedInUser();
     if (!navLinks || !loggedInUser || loggedInUser.role !== 'Admin') return;
@@ -3245,7 +3248,6 @@ function ensureAdminSidebarCompleteness() {
         { page: 'bills.html', label: 'Bills', icon: 'receipt' },
         { page: 'notifications.html', label: 'Notifications', icon: 'bell-ring' },
         { page: 'permissions.html', label: 'Permissions', icon: 'shield' },
-        { page: 'designation-permissions.html', label: 'Designation Permissions', icon: 'shield-check' },
         { page: 'library.html', label: 'Library', icon: 'library' },
         { page: 'complain_box.html', label: 'Complain Box', icon: 'message-square' },
         { page: 'branch_registration.html', label: 'Branch Registration', icon: 'building-2' },
@@ -3380,7 +3382,6 @@ function renderAdminSidebarSequence() {
             icon: 'shield',
             children: [
                 { page: 'permissions.html', label: 'Permissions', icon: 'shield' },
-                { page: 'designation-permissions.html', label: 'Designation Permissions', icon: 'shield-check' }
             ]
         },
         { type: 'link', page: 'library.html', label: 'Library', icon: 'library' },
@@ -3421,7 +3422,9 @@ function renderAdminSidebarSequence() {
     };
 
     const buildItem = (item, nested = false) => {
-        if (item.type === 'link') return buildLink(item, nested ? 'nav-subitem' : 'nav-item');
+        // Nested sidebar entries are compact objects without an explicit type.
+        // Treat them as links instead of trying to render them as dropdowns.
+        if (!item || item.type === 'link' || !item.type) return buildLink(item, nested ? 'nav-subitem' : 'nav-item');
         if (item.type === 'logout') {
             return `
                 <a href="#" class="nav-item" onclick="logoutUser(event)">
@@ -8240,7 +8243,10 @@ function renderTeachers(term = '') {
     const genderFilter = document.getElementById('teacherGenderFilter');
     const selectedCampus = campusFilter ? campusFilter.value : '';
     const selectedGender = genderFilter ? genderFilter.value : '';
-    const teachers = getGlobalCampusFilteredRecords(getArrayData(STORAGE_KEY_TEACHERS));
+    // The page-level campus selector is authoritative here. Applying the
+    // dashboard's hidden global filter as well can hide teachers while this
+    // selector visibly says "All Campuses".
+    const teachers = getArrayData(STORAGE_KEY_TEACHERS);
     const teacherSearchFields = [
         'employeeCode', 'fullName', 'fatherName', 'dob', 'cnic', 'phone', 'email',
         'address', 'qualification', 'campusName', 'gender', 'designation', 'subject',

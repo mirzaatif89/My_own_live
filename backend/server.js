@@ -290,6 +290,7 @@ const defaultPermissions = {
 function normalizePermissionsConfig(input = {}) {
     const raw = input && typeof input === 'object' ? input : {};
     const groupsInput = raw.groups && typeof raw.groups === 'object' ? raw.groups : {};
+    const allowedGroupKeys = new Set(['admin', 'teacher', 'accountant']);
     const customModules = Array.isArray(raw.customModules) ? raw.customModules : [];
     const allowedHomePages = new Set(ALLOWED_HOME_PAGES);
     customModules.forEach((module) => {
@@ -298,7 +299,7 @@ function normalizePermissionsConfig(input = {}) {
     const groups = Object.entries({
         ...defaultPermissions.groups,
         ...groupsInput
-    }).reduce((acc, [key, groupValue]) => {
+    }).filter(([key]) => allowedGroupKeys.has(String(key).toLowerCase())).reduce((acc, [key, groupValue]) => {
         const baseGroup = defaultPermissions.groups[key] || {
             name: key,
             homePage: 'dashboard.html',
@@ -324,12 +325,12 @@ function normalizePermissionsConfig(input = {}) {
 
     return {
         loginAccess: {
-            ...defaultPermissions.loginAccess,
-            ...(raw.loginAccess || {})
+            admin: raw.loginAccess?.admin !== false,
+            teacher: raw.loginAccess?.teacher !== false,
+            staff: raw.loginAccess?.staff !== false
         },
         roleGroups: {
-            ...defaultPermissions.roleGroups,
-            ...(raw.roleGroups || {})
+            Admin: 'admin', Teacher: 'teacher', Staff: 'accountant'
         },
         customModules,
         groups
@@ -1108,28 +1109,63 @@ app.post('/api/login', async (req, res) => {
         const Teacher = sequelize.models.Teacher;
         const user = await User.findOne({ where: userWhere });
 
-        if (user) {
+        // Older records can exist in Teachers/Staff while their User auth row
+        // was not created (or contains an old password). Recover those records
+        // from the profile table and repair the auth row during login.
+        let profileFallback = null;
+        if (!user || user.role === 'Teacher' || user.role === 'Staff') {
+            const profileWhere = normalizedIdentity.includes('@')
+                ? { [Op.or]: [{ username: normalizedIdentity }, { email: normalizedIdentity.toLowerCase() }] }
+                : { username: normalizedIdentity };
+            profileFallback = await Teacher.findOne({ where: profileWhere })
+                || await sequelize.models.Staff.findOne({ where: profileWhere });
+        }
+
+        if (user || profileFallback) {
             const permissions = readPermissions();
-            const roleKey = String(user.role || '').toLowerCase();
+            const baseRole = user?.role || (profileFallback instanceof sequelize.models.Teacher ? 'Teacher' : 'Staff');
+            const roleKey = String(baseRole || '').toLowerCase();
             if (permissions.loginAccess[roleKey] === false) {
-                return res.status(403).json({ success: false, message: `${user.role} login is currently disabled by admin.` });
+                return res.status(403).json({ success: false, message: `${baseRole} login is currently disabled by admin.` });
             }
 
-            const isMatch = await bcrypt.compare(password, user.password);
+            const storedPassword = profileFallback?.password || user?.password || '';
+            const isMatch = isPasswordHash(storedPassword)
+                ? await bcrypt.compare(password, storedPassword)
+                : String(password || '') === String(storedPassword || '');
 
             if (isMatch) {
-                let profileName = user.fullName;
+                const profileId = user?.profileId || profileFallback.id;
+                const currentUser = user || {
+                    id: `${roleKey === 'teacher' ? 'teacher' : 'staff'}_${profileId}`,
+                    profileId,
+                    role: baseRole,
+                    username: profileFallback.username,
+                    email: profileFallback.email,
+                    fullName: profileFallback.fullName,
+                    campusName: profileFallback.campusName,
+                    groupKey: profileFallback.groupKey
+                };
+                if (!user) await upsertAuthUser(sequelize.models.User, {
+                    id: currentUser.id, profileId, role: baseRole,
+                    username: profileFallback.username, email: profileFallback.email,
+                    password: storedPassword, plainPassword: profileFallback.plainPassword,
+                    fullName: profileFallback.fullName, campusName: profileFallback.campusName,
+                    groupKey: profileFallback.groupKey
+                });
+
+                let profileName = currentUser.fullName;
                 let designationKey = '';
 
-                if (user.role === 'Student') {
-                    const student = await Student.findByPk(user.profileId);
+                if (baseRole === 'Student') {
+                    const student = await Student.findByPk(profileId);
                     profileName = student?.fullName || profileName;
-                } else if (user.role === 'Teacher') {
-                    const teacher = await Teacher.findByPk(user.profileId);
+                } else if (baseRole === 'Teacher') {
+                    const teacher = await Teacher.findByPk(profileId);
                     profileName = teacher?.fullName || profileName;
                     designationKey = normalizeDesignationKey(teacher?.designation || 'teacher');
-                } else if (user.role === 'Staff') {
-                    const staff = await sequelize.models.Staff.findByPk(user.profileId);
+                } else if (baseRole === 'Staff') {
+                    const staff = await sequelize.models.Staff.findByPk(profileId);
                     profileName = staff?.fullName || profileName;
                     designationKey = normalizeDesignationKey(staff?.designation || 'staff');
                 }
@@ -1144,14 +1180,14 @@ app.post('/api/login', async (req, res) => {
                     : designationKey === 'accountant' ? 'accountant'
                         : designationKey === 'teacher' ? 'teacher' : user.groupKey;
 
-                const sessionId = createSessionId(designationRole, user.profileId);
-                const token = jwt.sign({ id: user.profileId, role: designationRole, campusName: user.campusName || '', sessionId }, JWT_SECRET, { expiresIn: '1d' });
+                const sessionId = createSessionId(designationRole, profileId);
+                const token = jwt.sign({ id: profileId, role: designationRole, campusName: currentUser.campusName || '', sessionId }, JWT_SECRET, { expiresIn: '1d' });
                 const responseUser = {
-                    id: user.profileId,
+                    id: profileId,
                     fullName: profileName,
                     role: designationRole,
-                    username: user.username,
-                    campusName: user.campusName || '',
+                    username: currentUser.username,
+                    campusName: currentUser.campusName || '',
                     groupKey: designationGroupKey || permissions.roleGroups[designationRole] || roleKey,
                     ...(designationKey ? { designation: designationKey } : {})
                 };

@@ -10,6 +10,7 @@
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
+        .permission-section:has(#roleGroupMappingList) { display: none !important; }
         .permissions-panel {
             display: grid;
             grid-template-columns: 320px minmax(0, 1fr);
@@ -77,8 +78,10 @@
 
         .permissions-table {
             width: 100%;
+            min-width: 760px;
             border-collapse: collapse;
             margin-top: 0.75rem;
+            table-layout: fixed;
         }
 
         .permissions-table th,
@@ -165,6 +168,7 @@
 
         .role-access-table th:first-child,
         .role-access-table td:first-child {
+            width: 180px;
             text-align: left;
             position: sticky;
             left: 0;
@@ -175,6 +179,12 @@
             width: 16px;
             height: 16px;
             cursor: pointer;
+        }
+
+        .role-access-table th:not(:first-child),
+        .role-access-table td:not(:first-child) {
+            width: 82px;
+            white-space: nowrap;
         }
 
         .login-access-list {
@@ -320,17 +330,7 @@
             <header class="header">
                 <div>
                     <h1>Permissions</h1>
-                    <p style="color: var(--text-secondary); margin-top: 0.25rem;">Manage role groups (module access) and designation actions (Add/Edit/Delete).</p>
-                    <div class="permission-tabs">
-                        <button class="tab-btn active" type="button" id="tabRoleBtn">
-                            <i data-lucide="layout-panel-left"></i>
-                            Role Modules
-                        </button>
-                        <button class="tab-btn" type="button" id="tabDesignationBtn">
-                            <i data-lucide="shield-check"></i>
-                            Designation Actions
-                        </button>
-                    </div>
+                    <p style="color: var(--text-secondary); margin-top: 0.25rem;">Manage permissions for school users.</p>
                 </div>
             </header>
 
@@ -344,11 +344,10 @@
                             </div>
                         </div>
 
-                        <label for="roleGroupSelect">Select role group</label>
+                        <label for="roleGroupSelect">Assign Permissions for</label>
                         <select id="roleGroupSelect" class="form-control"></select>
-                        <button id="addRoleBtn" class="btn btn-outline" type="button">Add Role Group</button>
 
-                        <div class="permission-group-details">
+                        <div class="permission-group-details" style="display:none !important;">
                             <label for="roleGroupName">Group display name</label>
                             <input id="roleGroupName" class="form-control" type="text" placeholder="Role name">
 
@@ -363,12 +362,6 @@
                             <h3>Login access</h3>
                             <p>Enable or disable login by role.</p>
                             <div id="loginAccessList" class="login-access-list"></div>
-                        </div>
-
-                        <div class="permission-section">
-                            <h3>Role → Group mapping</h3>
-                            <p>Which role uses which role group (screen/module access).</p>
-                            <div id="roleGroupMappingList" class="login-access-list"></div>
                         </div>
 
                         <button id="savePermissionsBtn" class="btn btn-success" type="button">Save Permissions</button>
@@ -417,7 +410,7 @@
                 </div>
             </section>
 
-            <section class="permissions-panel tab-section" id="designationPermissionsSection" hidden>
+            <section class="permissions-panel tab-section" id="designationPermissionsSection" hidden style="display:none !important;">
                 <div class="permissions-sidebar">
                     <div class="permission-card">
                         <div class="permission-card-header">
@@ -490,8 +483,8 @@
         </main>
     </div>
 
-    <script src="auth.js?v=20260520-sidebar-requested-order"></script>
-    <script src="script.js?v=20260520-sidebar-classes-restore"></script>
+    <script src="auth.js?v=20260817-permissions-only-three"></script>
+    <script src="script.js?v=20260817-permissions-only-three"></script>
     <script>
         if (window.lucide) window.lucide.createIcons();
 
@@ -787,11 +780,22 @@
             if (!select) return;
             select.innerHTML = '';
             const config = getPermissionsConfig();
-            const groupKeys = Object.keys(config.groups || {});
+            const allowedGroupKeys = new Set(['admin', 'teacher', 'accountant']);
+            config.groups = config.groups && typeof config.groups === 'object' ? config.groups : {};
+            ['admin', 'teacher', 'accountant'].forEach((groupKey) => {
+                if (!config.groups[groupKey]) {
+                    config.groups[groupKey] = {
+                        name: ({ admin: 'Admin', teacher: 'Teacher', accountant: 'Accountant' })[groupKey],
+                        homePage: 'dashboard.html',
+                        permissions: {}
+                    };
+                }
+            });
+            const groupKeys = ['admin', 'teacher', 'accountant'];
             groupKeys.forEach((groupKey) => {
                 const opt = document.createElement('option');
                 opt.value = groupKey;
-                opt.textContent = `${config.groups[groupKey].name || groupKey} (${groupKey})`;
+                opt.textContent = ({ admin: 'Admin', teacher: 'Teacher', accountant: 'Accountant' })[groupKey] || groupKey;
                 select.appendChild(opt);
             });
             if (!permissionState.selectedGroupKey || !groupKeys.includes(permissionState.selectedGroupKey)) {
@@ -833,7 +837,7 @@
             list.innerHTML = '';
             const config = getPermissionsConfig();
             const loginAccess = config.loginAccess || {};
-            Object.entries(loginAccess).forEach(([roleKey, allowed]) => {
+            Object.entries({ admin: loginAccess.admin, teacher: loginAccess.teacher, accountant: loginAccess.staff }).forEach(([roleKey, allowed]) => {
                 const row = document.createElement('div');
                 row.className = 'login-access-row';
                 row.innerHTML = `
@@ -853,8 +857,7 @@
 
         function getRoleKeysForMapping(config) {
             const keys = new Set();
-            ['Admin', 'Principal', 'Branch', 'Teacher', 'Student', 'Staff'].forEach((key) => keys.add(key));
-            Object.keys(config.roleGroups || {}).forEach((key) => keys.add(key));
+            ['Admin', 'Teacher', 'Staff'].forEach((key) => keys.add(key));
             return [...keys].sort((a, b) => a.localeCompare(b));
         }
 
@@ -868,7 +871,10 @@
                 config.roleGroups = {};
             }
 
-            const groupKeys = Object.keys(config.groups || {}).sort((a, b) => a.localeCompare(b));
+            const allowedGroupKeys = new Set(['admin', 'teacher', 'accountant']);
+            const groupKeys = Object.keys(config.groups || {})
+                .filter((key) => allowedGroupKeys.has(String(key).toLowerCase()))
+                .sort((a, b) => a.localeCompare(b));
             const roleKeys = getRoleKeysForMapping(config);
 
             roleKeys.forEach((roleKey) => {
@@ -882,7 +888,7 @@
                 `;
 
                 const select = row.querySelector('select');
-                select.value = config.roleGroups[roleKey] || '';
+                select.value = config.roleGroups[roleKey] || (roleKey === 'Staff' ? 'accountant' : '');
                 if (!select.value && groupKeys.length) {
                     select.value = groupKeys[0];
                     config.roleGroups[roleKey] = select.value;

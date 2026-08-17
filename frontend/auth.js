@@ -325,6 +325,17 @@
                     aboutme: 'view'
                 }
             },
+            accountant: {
+                name: 'Accountants',
+                homePage: 'dashboard.html',
+                permissions: {
+                    dashboard: 'view',
+                    fees: 'manage',
+                    fee_challan: 'manage',
+                    revenue: 'view',
+                    aboutme: 'view'
+                }
+            },
             student: {
                 name: 'Students',
                 homePage: 'student_portal.html',
@@ -396,10 +407,11 @@
         registerCustomModules(raw.customModules || []);
         const moduleKeys = [...new Set(Object.values(pageRegistry).map((entry) => entry.moduleKey).filter(Boolean))];
         const rawGroups = raw.groups && typeof raw.groups === 'object' ? raw.groups : {};
+        const allowedGroupKeys = new Set(['admin', 'teacher', 'accountant']);
         const groups = Object.entries({
             ...defaultPermissions.groups,
             ...rawGroups
-        }).reduce((acc, [groupKey, groupValue]) => {
+        }).filter(([groupKey]) => allowedGroupKeys.has(String(groupKey).toLowerCase())).reduce((acc, [groupKey, groupValue]) => {
             const baseGroup = defaultPermissions.groups[groupKey] || { name: groupKey, homePage: 'dashboard.html', permissions: {} };
             const nextGroup = groupValue && typeof groupValue === 'object' ? groupValue : {};
             const permissions = { ...(baseGroup.permissions || {}), ...(nextGroup.permissions || {}) };
@@ -416,14 +428,8 @@
         }, {});
 
         return {
-            loginAccess: {
-                ...defaultPermissions.loginAccess,
-                ...(raw.loginAccess || {})
-            },
-            roleGroups: {
-                ...defaultPermissions.roleGroups,
-                ...(raw.roleGroups || {})
-            },
+            loginAccess: { admin: raw.loginAccess?.admin !== false, teacher: raw.loginAccess?.teacher !== false, staff: raw.loginAccess?.staff !== false },
+            roleGroups: { Admin: 'admin', Teacher: 'teacher', Staff: 'accountant' },
             customModules: normalizeCustomModules(raw.customModules || []),
             groups
         };
@@ -566,10 +572,12 @@
 
     function getHomePage(user, permissions) {
         const group = getGroupConfig(user, permissions);
+        const isAccountant = String(user?.groupKey || permissions?.roleGroups?.[user?.role] || '').toLowerCase() === 'accountant'
+            || String(user?.designation || '').trim().toLowerCase() === 'accountant';
         const registryEntry = pageRegistry[currentPage];
         if (user?.role === 'Admin' && group?.homePage) return group.homePage;
         if (user?.role === 'Student') return 'student_portal.html';
-        if (user?.role === 'Teacher') return 'teacher_portal.html';
+        if (user?.role === 'Teacher' && !isAccountant) return 'teacher_portal.html';
         if (group && group.homePage) {
             const homeEntry = pageRegistry[group.homePage];
             if (!homeEntry || group.permissions?.[homeEntry.moduleKey] !== 'none') {
@@ -585,7 +593,7 @@
         if (user?.role === 'Admin') return 'dashboard.html';
         if (user?.role === 'Student') return 'student_portal.html';
         if (user?.role === 'Branch') return 'students.html';
-        if (user?.role === 'Teacher') return 'teacher_portal.html';
+        if (user?.role === 'Teacher' && !isAccountant) return 'teacher_portal.html';
         if (user?.role === 'Staff' || user?.role === 'Principal') return 'dashboard.html';
         return 'index.html';
     }
@@ -619,7 +627,9 @@
 
         if (user.role === 'Admin') return true;
         if (user.role === 'Student' && pageName === 'student_portal.html') return true;
-        if (user.role === 'Teacher' && pageName === 'teacher_portal.html') return true;
+        if (user.role === 'Teacher' && pageName === 'teacher_portal.html'
+            && String(user.groupKey || '').toLowerCase() !== 'accountant'
+            && String(user.designation || '').toLowerCase() !== 'accountant') return true;
         return getModuleAccess(user, permissions, pageName) !== 'none';
     }
 
@@ -782,7 +792,6 @@
                     icon: 'shield',
                     children: [
                         { page: 'permissions.html', label: 'Permissions', icon: 'shield' },
-                        { page: 'designation-permissions.html', label: 'Designation Permissions', icon: 'shield-check' }
                     ]
                 },
                 { type: 'link', page: 'library.html', label: 'Library', icon: 'library' },
