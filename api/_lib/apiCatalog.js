@@ -3,6 +3,7 @@ const apiCatalog = {
     audience: 'External mobile app developer',
     note: 'Use these backend APIs only. The mobile-app folder in this repo is not required for external app development.',
     baseUrlExamples: [
+        'https://myownschooljand.com/api',
         'https://YOUR-DOMAIN.com/api',
         'http://YOUR-SERVER-IP:3000/api',
         'http://localhost:3000/api'
@@ -17,7 +18,8 @@ const apiCatalog = {
         { method: 'GET', path: '/api/ping', auth: false, group: 'System', description: 'Simple API ping.' },
         { method: 'POST', path: '/api/login', auth: false, group: 'Auth', description: 'Login for admin, principal, branch, student, teacher, and staff.' },
         { method: 'POST', path: '/api/session/heartbeat', auth: true, group: 'Auth', description: 'Keep logged-in session active.' },
-        { method: 'POST', path: '/api/session/end', auth: true, group: 'Auth', description: 'End logged-in session.' },
+        { method: 'POST', path: '/api/session/end', auth: true, group: 'Auth', description: 'Logout/end logged-in session. Mobile app should remove saved token after success.' },
+        { method: 'POST', path: '/api/upload', auth: false, group: 'Files', description: 'Upload assignment, syllabus, profile, lecture, or message file. Accepts multipart/form-data file field or JSON dataUrl/base64 and returns file.url.' },
 
         { method: 'GET', path: '/api/student/me', auth: true, group: 'Student Portal', description: 'Current student profile.' },
         { method: 'GET', path: '/api/students', auth: false, group: 'Students', description: 'List students.' },
@@ -25,6 +27,10 @@ const apiCatalog = {
         { method: 'DELETE', path: '/api/students/:id', auth: true, group: 'Students', description: 'Delete student.' },
         { method: 'GET', path: '/api/student-attendance', auth: false, group: 'Student Portal', description: 'Student attendance records.' },
         { method: 'POST', path: '/api/student-attendance', auth: false, group: 'Student Portal', description: 'Save student attendance records.' },
+        { method: 'GET', path: '/api/student-results', auth: false, group: 'Student Portal', description: 'Student exam results. Optional query: ?studentId=ID&classGrade=Class%205&examName=Mid%20Term&session=2026.' },
+        { method: 'POST', path: '/api/student-results', auth: false, group: 'Student Portal', description: 'Save/publish student result.' },
+        { method: 'GET', path: '/api/student-syllabus', auth: false, group: 'Student Portal', description: 'Student syllabus. Optional query: ?classGrade=Class%205&subject=English&term=Term%201&session=2026.' },
+        { method: 'POST', path: '/api/student-syllabus', auth: false, group: 'Student Portal', description: 'Save/publish syllabus item.' },
         { method: 'GET', path: '/api/date-sheet', auth: false, group: 'Student Portal', description: 'Published exam date sheet.' },
         { method: 'POST', path: '/api/date-sheet', auth: false, group: 'Student Portal', description: 'Save/publish exam date sheet.' },
         { method: 'GET', path: '/api/student-assignments', auth: false, group: 'Student Portal', description: 'Student assignment submissions.' },
@@ -41,6 +47,7 @@ const apiCatalog = {
         { method: 'POST', path: '/api/student-quizzes', auth: false, group: 'Student Portal', description: 'Save quiz.' },
         { method: 'GET', path: '/api/student-quiz-submissions', auth: false, group: 'Student Portal', description: 'Student quiz submissions.' },
         { method: 'POST', path: '/api/student-quiz-submissions', auth: false, group: 'Student Portal', description: 'Save quiz submission.' },
+        { method: 'GET', path: '/api/about-software', auth: false, group: 'Student Portal', description: 'About software details for app info screen.' },
 
         { method: 'GET', path: '/api/teacher/me', auth: true, group: 'Teacher Portal', description: 'Current teacher profile.' },
         { method: 'GET', path: '/api/teachers', auth: false, group: 'Teachers', description: 'List teachers with timetable/schedule data.' },
@@ -50,6 +57,8 @@ const apiCatalog = {
         { method: 'POST', path: '/api/teacher-attendance', auth: false, group: 'Teacher Portal', description: 'Save teacher attendance records.' },
         { method: 'GET', path: '/api/teacher-salaries', auth: false, group: 'Teacher Portal', description: 'Teacher salary records.' },
         { method: 'POST', path: '/api/teacher-salaries', auth: false, group: 'Teacher Portal', description: 'Save teacher salary record.' },
+        { method: 'GET', path: '/api/teacher-assigned-classes', auth: false, group: 'Teacher Portal', description: 'Assigned classes from teacher schedule and manual records. Optional query: ?teacherId=ID.' },
+        { method: 'POST', path: '/api/teacher-assigned-classes', auth: false, group: 'Teacher Portal', description: 'Save manual assigned class record.' },
 
         { method: 'GET', path: '/api/fees/payments', auth: false, group: 'Fees', description: 'Fee payment history.' },
         { method: 'GET', path: '/api/fees/due-balances', auth: false, group: 'Fees', description: 'Fee due balances.' },
@@ -65,7 +74,7 @@ const apiCatalog = {
         { method: 'POST', path: '/api/class-fees', auth: true, group: 'Fees', description: 'Save class-wise fee setup.' },
 
         { method: 'GET', path: '/api/messages', auth: true, group: 'Portal Communication', description: 'Messages for logged-in user or admin filter.' },
-        { method: 'POST', path: '/api/messages', auth: true, group: 'Portal Communication', description: 'Send portal message.' },
+        { method: 'POST', path: '/api/messages', auth: true, group: 'Portal Communication', description: 'Send portal message from Admin/Principal to Student, Teacher, or Staff recipients.' },
         { method: 'GET', path: '/api/special-notices?portal=student', auth: false, group: 'Portal Communication', description: 'Student portal notices.' },
         { method: 'GET', path: '/api/special-notices?portal=teacher', auth: false, group: 'Portal Communication', description: 'Teacher portal notices.' },
         { method: 'POST', path: '/api/special-notices', auth: false, group: 'Portal Communication', description: 'Save/publish special notice.' },

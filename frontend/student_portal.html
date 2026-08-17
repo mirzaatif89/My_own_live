@@ -2542,9 +2542,6 @@
             <button type="button" class="student-action-btn" data-student-action-target="studentCourseSection">
                 <i data-lucide="file-text"></i> Syllabus
             </button>
-            <button type="button" class="student-action-btn" data-student-action-target="studentAssignmentSection">
-                <i data-lucide="pencil-line"></i> Assignment
-            </button>
             <button type="button" class="student-action-btn" data-student-action-target="studentQuizSection">
                 <i data-lucide="circle-help"></i> Quiz
             </button>
@@ -3905,6 +3902,20 @@
             if (window.lucide) window.lucide.createIcons();
         }
 
+        async function loadStudentUploadedLecturesForPortal(student = getCurrentPortalStudent()) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/uploaded-lectures`);
+                if (!response.ok) throw new Error('Lectures unavailable.');
+                const result = await response.json().catch(() => ({}));
+                if (Array.isArray(result.lectures)) {
+                    localStorage.setItem(STUDENT_UPLOADED_LECTURE_KEY, JSON.stringify(result.lectures));
+                }
+            } catch (_error) {
+                // Keep cached lectures visible if the API is temporarily unavailable.
+            }
+            applyStudentUploadedLectures(student);
+        }
+
         function getPortalComplaintsForStudent(student = {}) {
             const senderId = String(student.id || student.studentCode || student.rollNo || loggedInUser?.id || '').trim().toLowerCase();
             return getPortalData(COMPLAINT_KEY)
@@ -4826,6 +4837,8 @@
                     await loadExecutedDateSheet();
                     await loadStudentDiaryForPortal(student);
                     await loadStudentCoursesForPortal(student);
+                    await loadStudentUploadedLecturesForPortal(student);
+                    await loadStudentResultsFromApi();
                     applyStudentAttendance(student);
                     applyStudentPerformance(student);
                     updateStudentNotifications(student);
@@ -4840,6 +4853,44 @@
                 return JSON.parse(localStorage.getItem(RESULT_ARCHIVE_KEY) || '[]');
             } catch (error) {
                 return [];
+            }
+        }
+
+        function mergeResultArchive(localResults = [], apiResults = []) {
+            const map = new Map();
+            [...apiResults, ...localResults].forEach((record) => {
+                if (!record) return;
+                const key = `${record.id || record.studentId || record.studentLookupId || record.studentName || 'result'}__${record.termTitle || record.examName || ''}`;
+                const normalized = {
+                    ...record,
+                    studentLookupId: record.studentLookupId || record.studentId || '',
+                    studentRollNo: record.studentRollNo || record.rollNo || '',
+                    studentGrade: record.studentGrade || record.classGrade || '',
+                    termTitle: record.termTitle || record.examName || '',
+                    positionGrade: record.positionGrade || record.grade || '',
+                    teacherRemarks: record.teacherRemarks || record.remarks || '',
+                    subjects: Array.isArray(record.subjects) ? record.subjects.map((item) => ({
+                        ...item,
+                        max: item.max || item.totalMarks || '',
+                        obtained: item.obtained || item.obtainedMarks || '',
+                        best: item.best || item.bestMarks || ''
+                    })) : []
+                };
+                map.set(key, { ...(map.get(key) || {}), ...normalized });
+            });
+            return [...map.values()];
+        }
+
+        async function loadStudentResultsFromApi() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/student-results`);
+                if (!response.ok) throw new Error('Results unavailable.');
+                const result = await response.json().catch(() => ({}));
+                if (Array.isArray(result.results)) {
+                    localStorage.setItem(RESULT_ARCHIVE_KEY, JSON.stringify(mergeResultArchive(loadResultArchive(), result.results)));
+                }
+            } catch (_error) {
+                // Keep locally cached results visible if the API is temporarily unavailable.
             }
         }
 
@@ -5765,6 +5816,8 @@
                 await loadExecutedDateSheet();
                 await loadStudentDiaryForPortal(student);
                 await loadStudentCoursesForPortal(student);
+                await loadStudentUploadedLecturesForPortal(student);
+                await loadStudentResultsFromApi();
                 await mergeStudentFeePaymentsIntoMonthlyStore();
                 applyStudentData(student);
                 await loadStudentMessages();
@@ -5779,6 +5832,8 @@
                     await loadExecutedDateSheet();
                     await loadStudentDiaryForPortal(fallbackStudent);
                     await loadStudentCoursesForPortal(fallbackStudent);
+                    await loadStudentUploadedLecturesForPortal(fallbackStudent);
+                    await loadStudentResultsFromApi();
                     await mergeStudentFeePaymentsIntoMonthlyStore();
                     applyStudentData(fallbackStudent);
                     await loadStudentMessages();

@@ -1,11 +1,13 @@
 {
   "info": {
-    "name": "My Own School CRM Mobile APIs",
+    "name": "My Own School Jand Mobile Portal APIs",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:3000/api" },
-    { "key": "token", "value": "" }
+    { "key": "baseUrl", "value": "https://myownschooljand.com/api" },
+    { "key": "token", "value": "" },
+    { "key": "studentId", "value": "STU-001" },
+    { "key": "teacherId", "value": "TCH-001" }
   ],
   "item": [
     {
@@ -22,12 +24,154 @@
       }
     },
     {
+      "name": "Auth - Heartbeat",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{baseUrl}}/session/heartbeat"
+      }
+    },
+    {
+      "name": "Auth - Logout",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{baseUrl}}/session/end"
+      }
+    },
+    {
+      "name": "Files - Upload JSON Base64",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"category\": \"assignment\",\n  \"fileName\": \"homework.pdf\",\n  \"mimeType\": \"application/pdf\",\n  \"base64\": \"BASE64_FILE_CONTENT\"\n}" },
+        "url": "{{baseUrl}}/upload"
+      }
+    },
+    {
       "name": "Student - Me",
       "request": {
         "method": "GET",
         "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
         "url": "{{baseUrl}}/student/me"
       }
+    },
+    {
+      "name": "Student - Attendance",
+      "request": { "method": "GET", "url": "{{baseUrl}}/student-attendance" }
+    },
+    {
+      "name": "Student - Results",
+      "request": { "method": "GET", "url": "{{baseUrl}}/student-results?studentId={{studentId}}" }
+    },
+    {
+      "name": "Student - Save Result",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"studentId\": \"{{studentId}}\",\n  \"studentName\": \"Student Name\",\n  \"rollNo\": \"12\",\n  \"classGrade\": \"Class 5\",\n  \"examName\": \"Mid Term\",\n  \"session\": \"2026\",\n  \"subjects\": [\n    { \"subject\": \"English\", \"totalMarks\": 100, \"obtainedMarks\": 85, \"grade\": \"A\" }\n  ],\n  \"totalMarks\": 100,\n  \"obtainedMarks\": 85,\n  \"percentage\": 85,\n  \"grade\": \"A\"\n}" },
+        "url": "{{baseUrl}}/student-results"
+      }
+    },
+    {
+      "name": "Student - Syllabus",
+      "request": { "method": "GET", "url": "{{baseUrl}}/student-syllabus?classGrade=Class%205" }
+    },
+    {
+      "name": "Student - Save Syllabus",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"classGrade\": \"Class 5\",\n  \"subject\": \"English\",\n  \"term\": \"Term 1\",\n  \"session\": \"2026\",\n  \"title\": \"English Term 1 Syllabus\",\n  \"description\": \"Chapters 1 to 5\",\n  \"chapters\": [\"Chapter 1\", \"Chapter 2\"]\n}" },
+        "url": "{{baseUrl}}/student-syllabus"
+      }
+    },
+    {
+      "name": "Student - Fee Payments",
+      "request": { "method": "GET", "url": "{{baseUrl}}/fees/payments" }
+    },
+    {
+      "name": "Student - Fee Due Balances",
+      "request": { "method": "GET", "url": "{{baseUrl}}/fees/due-balances" }
+    },
+    {
+      "name": "Student - Leave List",
+      "request": { "method": "GET", "url": "{{baseUrl}}/leave-requests?role=Student" }
+    },
+    {
+      "name": "Student - Submit Leave",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"applicantRole\": \"Student\",\n  \"applicantId\": \"{{studentId}}\",\n  \"fromDate\": \"2026-08-01\",\n  \"toDate\": \"2026-08-02\",\n  \"reason\": \"Medical leave\"\n}" },
+        "url": "{{baseUrl}}/leave-requests"
+      }
+    },
+    {
+      "name": "Student - Quizzes",
+      "request": { "method": "GET", "url": "{{baseUrl}}/student-quizzes" }
+    },
+    {
+      "name": "Student - Submit Quiz",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"quizId\": \"QUIZ_ID\",\n  \"studentId\": \"{{studentId}}\",\n  \"answers\": []\n}" },
+        "url": "{{baseUrl}}/student-quiz-submissions"
+      }
+    },
+    {
+      "name": "Student - Diary",
+      "request": { "method": "GET", "url": "{{baseUrl}}/student-diary" }
+    },
+    {
+      "name": "Student - Lectures",
+      "request": { "method": "GET", "url": "{{baseUrl}}/uploaded-lectures" }
+    },
+    {
+      "name": "Student - Notices",
+      "request": { "method": "GET", "url": "{{baseUrl}}/special-notices?portal=student" }
+    },
+    {
+      "name": "Student - Messages",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{baseUrl}}/messages"
+      }
+    },
+    {
+      "name": "Messages - Send From Admin Or Principal",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"targetRole\": \"Student\",\n  \"targetScope\": \"individual\",\n  \"recipientId\": \"{{studentId}}\",\n  \"recipientName\": \"Student Name\",\n  \"subject\": \"Fee reminder\",\n  \"body\": \"Please clear your dues.\"\n}" },
+        "url": "{{baseUrl}}/messages"
+      }
+    },
+    {
+      "name": "Student - Date Sheet",
+      "request": { "method": "GET", "url": "{{baseUrl}}/date-sheet" }
+    },
+    {
+      "name": "Student - Uploaded Assignments",
+      "request": { "method": "GET", "url": "{{baseUrl}}/uploaded-assignments" }
+    },
+    {
+      "name": "Student - Submit Assignment",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"studentId\": \"{{studentId}}\",\n  \"assignmentTitle\": \"Homework\",\n  \"subject\": \"Science\",\n  \"note\": \"Submitted from mobile app\"\n}" },
+        "url": "{{baseUrl}}/student-assignments"
+      }
+    },
+    {
+      "name": "Student - Complaints",
+      "request": { "method": "GET", "url": "{{baseUrl}}/complaints?role=Student" }
     },
     {
       "name": "Teacher - Me",
@@ -38,76 +182,49 @@
       }
     },
     {
-      "name": "Student - Attendance",
-      "request": { "method": "GET", "url": "{{baseUrl}}/student-attendance" }
-    },
-    {
       "name": "Teacher - Attendance",
       "request": { "method": "GET", "url": "{{baseUrl}}/teacher-attendance" }
     },
     {
-      "name": "Fees - Payments",
-      "request": { "method": "GET", "url": "{{baseUrl}}/fees/payments" }
+      "name": "Teacher - Salary Record",
+      "request": { "method": "GET", "url": "{{baseUrl}}/teacher-salaries" }
     },
     {
-      "name": "Portal - Student Notices",
-      "request": { "method": "GET", "url": "{{baseUrl}}/special-notices?portal=student" }
+      "name": "Teacher - Complaints",
+      "request": { "method": "GET", "url": "{{baseUrl}}/complaints?role=Teacher" }
     },
     {
-      "name": "Portal - Teacher Notices",
+      "name": "Teacher - Notices",
       "request": { "method": "GET", "url": "{{baseUrl}}/special-notices?portal=teacher" }
     },
     {
-      "name": "Leave - List",
-      "request": { "method": "GET", "url": "{{baseUrl}}/leave-requests" }
-    },
-    {
-      "name": "Leave - Submit",
+      "name": "Teacher - Messages",
       "request": {
-        "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": { "mode": "raw", "raw": "{\n  \"applicantRole\": \"Student\",\n  \"applicantId\": \"STUDENT_ID\",\n  \"fromDate\": \"2026-07-14\",\n  \"toDate\": \"2026-07-15\",\n  \"reason\": \"Leave reason\"\n}" },
-        "url": "{{baseUrl}}/leave-requests"
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{baseUrl}}/messages"
       }
     },
     {
-      "name": "Complaints - List",
-      "request": { "method": "GET", "url": "{{baseUrl}}/complaints?role=Student" }
+      "name": "Teacher - Assigned Classes",
+      "request": { "method": "GET", "url": "{{baseUrl}}/teacher-assigned-classes?teacherId={{teacherId}}" }
     },
     {
-      "name": "Complaints - Submit",
+      "name": "Teacher - Save Assigned Class",
       "request": {
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": { "mode": "raw", "raw": "{\n  \"senderRole\": \"Student\",\n  \"senderId\": \"STUDENT_ID\",\n  \"senderName\": \"Student Name\",\n  \"senderClass\": \"Class 5\",\n  \"subject\": \"Complaint subject\",\n  \"message\": \"Complaint details\"\n}" },
-        "url": "{{baseUrl}}/complaints"
+        "body": { "mode": "raw", "raw": "{\n  \"teacherId\": \"{{teacherId}}\",\n  \"teacherName\": \"Teacher Name\",\n  \"campusName\": \"Main Campus\",\n  \"classGrade\": \"Class 5\",\n  \"section\": \"A\",\n  \"subject\": \"English\",\n  \"day\": \"Monday\",\n  \"startTime\": \"09:00\",\n  \"endTime\": \"09:40\"\n}" },
+        "url": "{{baseUrl}}/teacher-assigned-classes"
       }
     },
     {
-      "name": "Complaints - Update",
-      "request": {
-        "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": { "mode": "raw", "raw": "{\n  \"status\": \"Resolved\",\n  \"reply\": \"School office reply\",\n  \"actionTaken\": \"Action taken details\"\n}" },
-        "url": "{{baseUrl}}/complaints/COMPLAINT_ID"
-      }
+      "name": "Teacher - Leave List",
+      "request": { "method": "GET", "url": "{{baseUrl}}/leave-requests?role=Teacher" }
     },
     {
-      "name": "Student - Submit Assignment",
-      "request": {
-        "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": { "mode": "raw", "raw": "{\n  \"studentId\": \"STUDENT_ID\",\n  \"assignmentTitle\": \"Homework\",\n  \"subject\": \"Science\",\n  \"note\": \"Submitted from mobile app\"\n}" },
-        "url": "{{baseUrl}}/student-assignments"
-      }
-    },
-    {
-      "name": "Student - Uploaded Lectures",
-      "request": { "method": "GET", "url": "{{baseUrl}}/uploaded-lectures" }
-    },
-    {
-      "name": "Student - Quizzes",
-      "request": { "method": "GET", "url": "{{baseUrl}}/student-quizzes" }
+      "name": "About Software",
+      "request": { "method": "GET", "url": "{{baseUrl}}/about-software" }
     }
   ]
 }

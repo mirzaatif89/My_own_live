@@ -63,9 +63,41 @@
     <script src="script.js?v=20260520-sidebar-classes-restore"></script>
     <script>
         const LECTURE_KEY = 'eduCore_uploaded_lectures';
+        const API_BASE_URL = '/api';
         function data(key) { try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch (_e) { return []; } }
         function save(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch (_e) { showAppAlert('File/data is too large to save.', 'Storage Full'); return false; } }
         function esc(value) { return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char])); }
+        function mergeLectures(localItems = [], apiItems = []) {
+            const map = new Map();
+            [...apiItems, ...localItems].forEach((item) => {
+                if (!item || !item.id) return;
+                map.set(String(item.id), { ...(map.get(String(item.id)) || {}), ...item });
+            });
+            return [...map.values()].sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+        }
+        async function loadLecturesFromApi() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/uploaded-lectures`);
+                if (!response.ok) throw new Error('Lectures API unavailable.');
+                const result = await response.json().catch(() => ({}));
+                if (!Array.isArray(result.lectures)) return;
+                save(LECTURE_KEY, mergeLectures(data(LECTURE_KEY), result.lectures));
+            } catch (_error) {
+                // Keep local lectures visible if API is temporarily unavailable.
+            }
+        }
+        async function syncLocalLecturesToApi() {
+            const items = data(LECTURE_KEY);
+            for (const item of items) {
+                try {
+                    await fetch(`${API_BASE_URL}/uploaded-lectures`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(item)
+                    });
+                } catch (_error) {}
+            }
+        }
         function populateClasses() {
             const students = data('eduCore_students');
             const classes = data('eduCore_classes');
@@ -90,7 +122,11 @@
             lectureSaveBtn.innerHTML = '<i data-lucide="save"></i> Update Lecture';
             lectureUploadForm.scrollIntoView({ behavior: 'smooth', block: 'start' }); if (window.lucide) lucide.createIcons();
         }
-        function deleteItem(id) { save(LECTURE_KEY, data(LECTURE_KEY).filter((item) => item.id !== id)); render(); }
+        async function deleteItem(id) {
+            save(LECTURE_KEY, data(LECTURE_KEY).filter((item) => item.id !== id));
+            try { await fetch(`${API_BASE_URL}/uploaded-lectures/${encodeURIComponent(id)}`, { method: 'DELETE' }); } catch (_error) {}
+            render();
+        }
         lectureUploadForm.addEventListener('submit', async (event) => {
             event.preventDefault();
             const editId = lectureUploadId.value;
@@ -101,9 +137,19 @@
             const items = data(LECTURE_KEY); const index = items.findIndex((entry) => entry.id === editId);
             if (index >= 0) items[index] = item; else items.push(item);
             if (!save(LECTURE_KEY, items)) return;
+            try {
+                await fetch(`${API_BASE_URL}/uploaded-lectures`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(item)
+                });
+            } catch (_error) {}
             event.target.reset(); lectureUploadId.value = ''; lectureSaveBtn.innerHTML = '<i data-lucide="save"></i> Save Lecture'; render(); showSuccessModal(editId ? 'Lecture Updated!' : 'Lecture Uploaded!', 'Lecture is visible in student portal.');
         });
-        populateClasses(); render(); if (window.lucide) lucide.createIcons();
+        populateClasses();
+        loadLecturesFromApi().then(syncLocalLecturesToApi).finally(render);
+        render();
+        if (window.lucide) lucide.createIcons();
     </script>
 </body>
 

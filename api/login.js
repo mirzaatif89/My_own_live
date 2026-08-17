@@ -30,6 +30,10 @@ async function resolveAdminCredentials(db) {
     }
 }
 
+function createSessionId(role, id) {
+    return `${String(role || 'user').toLowerCase()}_${String(id || '0')}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
 module.exports = createHandler({
     POST: async ({ res, db, body }) => {
         const { username, password } = body || {};
@@ -40,10 +44,12 @@ module.exports = createHandler({
         if (username === adminEmail && password === adminPass) {
             const permissions = await loadPermissions(db);
             const groupKey = permissions.roleGroups.Admin || 'admin';
-            const token = jwt.sign({ id: 'admin', role: 'Admin' }, JWT_SECRET, { expiresIn: '1d' });
+            const sessionId = createSessionId('Admin', 'admin');
+            const token = jwt.sign({ id: 'admin', role: 'Admin', sessionId }, JWT_SECRET, { expiresIn: '1d' });
             sendJson(res, 200, {
                 success: true,
                 token,
+                sessionId,
                 user: { id: 'admin', fullName: 'Administrator', role: 'Admin', username: adminEmail, groupKey },
                 permissions
             });
@@ -57,10 +63,12 @@ module.exports = createHandler({
                 return;
             }
             const groupKey = permissions.roleGroups.Principal || 'principal';
-            const token = jwt.sign({ id: 'principal', role: 'Principal' }, JWT_SECRET, { expiresIn: '1d' });
+            const sessionId = createSessionId('Principal', 'principal');
+            const token = jwt.sign({ id: 'principal', role: 'Principal', sessionId }, JWT_SECRET, { expiresIn: '1d' });
             sendJson(res, 200, {
                 success: true,
                 token,
+                sessionId,
                 user: { id: 'principal', fullName: 'Principal', role: 'Principal', username: PRINCIPAL_USERNAME, groupKey },
                 permissions
             });
@@ -95,19 +103,29 @@ module.exports = createHandler({
         }
 
         let profileName = user.fullName;
+        let designationKey = '';
         if (user.role === 'Student') {
             const student = await Student.findByPk(user.profileId);
             profileName = student?.fullName || profileName;
         } else if (user.role === 'Teacher') {
             const teacher = await Teacher.findByPk(user.profileId);
             profileName = teacher?.fullName || profileName;
+            designationKey = String(teacher?.designation || 'teacher').trim().toLowerCase().replace(/[\s-]+/g, '_');
         } else if (user.role === 'Staff') {
             const staff = await Staff.findByPk(user.profileId);
             profileName = staff?.fullName || profileName;
+            designationKey = String(staff?.designation || 'staff').trim().toLowerCase().replace(/[\s-]+/g, '_');
         }
 
+        const designationRole = designationKey === 'admin' || designationKey === 'system_administrator'
+            ? 'Admin' : designationKey === 'teacher' ? 'Teacher' : user.role;
+        const designationGroupKey = designationRole === 'Admin' ? 'admin'
+            : designationKey === 'accountant' ? 'accountant'
+                : designationKey === 'teacher' ? 'teacher' : user.groupKey;
+
+        const sessionId = createSessionId(user.role, user.profileId);
         const token = jwt.sign(
-            { id: user.profileId, role: user.role, campusName: user.campusName || '' },
+            { id: user.profileId, role: designationRole, campusName: user.campusName || '', sessionId },
             JWT_SECRET,
             { expiresIn: '1d' }
         );
@@ -115,14 +133,16 @@ module.exports = createHandler({
         sendJson(res, 200, {
             success: true,
             token,
+            sessionId,
             permissions,
             user: {
                 id: user.profileId,
                 fullName: profileName,
-                role: user.role,
+                role: designationRole,
                 username: user.username,
                 campusName: user.campusName || '',
-                groupKey: user.groupKey || permissions.roleGroups[user.role] || roleKey
+                groupKey: designationGroupKey || permissions.roleGroups[designationRole] || roleKey,
+                ...(designationKey ? { designation: designationKey } : {})
             }
         });
     }

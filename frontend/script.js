@@ -1887,16 +1887,12 @@ function normalizeTeacherDesignation(designationValue = '', groupKeyValue = '') 
         return { designation: 'Computer Operator', groupKey: 'computer_operator' };
     }
 
-    if (
-        designation === 'admin' ||
-        designation === 'system administrator' ||
-        designation === 'principal' ||
-        designation === 'branch manager' ||
-        groupKey === 'admin' ||
-        groupKey === 'principal' ||
-        groupKey === 'branch_manager'
-    ) {
+    if (designation === 'admin' || designation === 'system administrator' || groupKey === 'admin') {
         return { designation: 'Admin', groupKey: 'admin' };
+    }
+
+    if (designation === 'accountant' || groupKey === 'accountant') {
+        return { designation: 'Accountant', groupKey: 'accountant' };
     }
 
     return { designation: 'Teacher', groupKey: 'teacher' };

@@ -1740,6 +1740,7 @@
         const RESULT_CARD_ARCHIVE_KEY = 'APEXIUMS_RESULT_CARD_ARCHIVE_V2';
         const RESULT_PUBLISH_SCHEDULE_KEY = 'APEXIUMS_RESULT_PUBLISH_SCHEDULE_V1';
         const RESULT_CARD_STUDENT_KEY = 'eduCore_students';
+        const API_BASE_URL = '/api';
         const defaultScheduleRows = [];
         const defaultSubjects = [];
         const defaultBehaviors = [];
@@ -2103,7 +2104,58 @@
             refreshResultCardPreview();
         }
 
-        function saveCurrentResultToArchive() {
+        function buildResultApiPayload(record = {}) {
+            const summary = getResultSummary(record);
+            const subjects = Array.isArray(record.subjects) ? record.subjects.map((item) => ({
+                subject: item.subject || '',
+                totalMarks: item.max || item.totalMarks || '',
+                obtainedMarks: item.obtained || item.obtainedMarks || '',
+                bestMarks: item.best || item.bestMarks || '',
+                grade: item.grade || ''
+            })) : [];
+
+            return {
+                ...record,
+                id: record.id || `${record.studentLookupId || record.studentName || 'RESULT'}-${record.termTitle || Date.now()}`,
+                studentId: record.studentLookupId || record.studentId || '',
+                studentName: record.studentName || '',
+                rollNo: record.rollNo || record.studentRollNo || '',
+                classGrade: record.classGrade || record.studentGrade || '',
+                examName: record.examName || record.termTitle || '',
+                session: record.session || new Date().getFullYear().toString(),
+                subjects,
+                totalMarks: summary.totalMarks,
+                obtainedMarks: summary.obtainedMarks,
+                percentage: summary.percentage,
+                grade: summary.positionGrade,
+                remarks: record.teacherRemarks || '',
+                publishedAt: record.publishedAt || new Date().toISOString()
+            };
+        }
+
+        async function syncResultRecordToApi(record = {}) {
+            const response = await fetch(`${API_BASE_URL}/student-results`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(buildResultApiPayload(record))
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || !result.success) {
+                throw new Error(result.message || 'Result API sync failed.');
+            }
+            return result;
+        }
+
+        async function syncResultArchiveToApi() {
+            const archive = loadResultArchive();
+            for (const record of archive) {
+                try {
+                    await syncResultRecordToApi(record);
+                } catch (_error) {}
+            }
+        }
+
+        async function saveCurrentResultToArchive() {
             const record = getCurrentResultRecord();
             if (!record.studentName) {
                 alert('Enter or load a student before saving the result card.');
@@ -2121,6 +2173,11 @@
             }
 
             saveResultArchive(archive);
+            try {
+                await syncResultRecordToApi(record);
+            } catch (error) {
+                alert(`Result saved locally, but API sync failed: ${error.message}`);
+            }
             populateResultPageSelectors();
             renderResultHistoryList();
             toggleExamSection('resultHistoryCard');
@@ -2570,6 +2627,7 @@
             populateResultPageSelectors();
             fillFormState(savedState);
             refreshResultCardPreview();
+            syncResultArchiveToApi();
             document.querySelectorAll('.exam-module-card').forEach((card) => {
                 card.addEventListener('click', () => toggleExamSection(card.dataset.target));
             });
