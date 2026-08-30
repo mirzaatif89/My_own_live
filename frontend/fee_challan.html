@@ -1007,6 +1007,16 @@
                 page-break-after: always;
             }
 
+            .challan-bulk-group .preview-sheet {
+                height: auto;
+                min-height: 0;
+            }
+
+            .challan-bulk-group:not(:last-child) {
+                break-after: page !important;
+                page-break-after: always !important;
+            }
+
             .challan-bulk-group:last-child {
                 break-after: auto;
                 page-break-after: auto;
