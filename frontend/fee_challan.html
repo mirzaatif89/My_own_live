@@ -1468,7 +1468,7 @@
             }
         };
         const challanFormFields = ['challanNumber', 'challanStudent', 'studentSid', 'studentAdmNo', 'studentClass', 'studentRollNo', 'fatherName', 'fatherMobile', 'challanSession', 'challanMonth', 'feeMonth', 'dueDate', 'baseAmount', 'payNowAmount', 'additionalCharges', 'discountValue', 'particulars', 'schoolName', 'schoolAddress', 'urduNote', 'challanNotes'];
-        const printCopies = ['Parents Copy', 'School Copy', 'Information Copy'];
+        const printCopies = ['Student Copy', 'Office Copy', 'Parent Copy'];
         const CHALLAN_MONTHLY_FEES_KEY = 'eduCore_monthly_fees';
         const CHALLAN_PAYMENT_DETAILS_KEY = 'eduCore_payment_details';
         const CHALLAN_MONTHS = [
@@ -3338,16 +3338,9 @@
         }
 
         function buildBulkPrintSheetsMarkup(challans) {
-            const pages = [];
-            for (let index = 0; index < challans.length; index += 2) {
-                const studentsOnPage = challans.slice(index, index + 2);
-                pages.push(`
-                    <div class="challan-bulk-group bulk-two-students">
-                        ${studentsOnPage.map((row) => buildPrintMarkup(row.data, 'Challan Copy', row.qrState)).join('')}
-                    </div>
-                `);
-            }
-            return pages.join('');
+            // Keep the same three-copy contract for bulk and single printing.
+            // Each student gets one complete A4 page so all copies remain readable.
+            return challans.map((row) => buildBulkGroupMarkup(row.data, row.qrState)).join('');
         }
 
         function buildChallanKeyPart(value) {
