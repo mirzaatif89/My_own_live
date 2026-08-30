@@ -946,6 +946,27 @@
                 background: #fff;
             }
 
+            /* The app shell is fixed and clips overflow on screen. Reset those
+               viewport rules for printing so every bulk page can flow to the
+               printer instead of only the first A4 sheet being visible. */
+            .dashboard-container {
+                position: static !important;
+                inset: auto !important;
+                width: auto !important;
+                max-width: none !important;
+                height: auto !important;
+                min-height: 0 !important;
+                overflow: visible !important;
+            }
+
+            .main-content {
+                width: auto !important;
+                max-width: none !important;
+                height: auto !important;
+                min-height: 0 !important;
+                overflow: visible !important;
+            }
+
             .preview-print-sheet {
                 display: block;
                 padding: 0;
@@ -989,6 +1010,16 @@
             .challan-bulk-group:last-child {
                 break-after: auto;
                 page-break-after: auto;
+            }
+
+            /* Bulk mode prints one complete challan for each of two students.
+               This keeps every table inside the printable A4 area. */
+            .challan-bulk-group.bulk-two-students {
+                grid-template-rows: repeat(2, minmax(0, 1fr));
+            }
+
+            .challan-bulk-group.bulk-two-students .preview-sheet {
+                height: auto;
             }
 
             .challan-bulk-group + .challan-bulk-group {
@@ -3306,6 +3337,19 @@
             `;
         }
 
+        function buildBulkPrintSheetsMarkup(challans) {
+            const pages = [];
+            for (let index = 0; index < challans.length; index += 2) {
+                const studentsOnPage = challans.slice(index, index + 2);
+                pages.push(`
+                    <div class="challan-bulk-group bulk-two-students">
+                        ${studentsOnPage.map((row) => buildPrintMarkup(row.data, 'Challan Copy', row.qrState)).join('')}
+                    </div>
+                `);
+            }
+            return pages.join('');
+        }
+
         function buildChallanKeyPart(value) {
             return String(value || '')
                 .toLowerCase()
@@ -3550,8 +3594,14 @@
                 return;
             }
 
-            const classStudentIdSet = new Set(classStudents.map((student) => student?.id).filter(Boolean));
-            let selectedIds = Array.from(classPopupSelectedStudentIds || []).filter((id) => classStudentIdSet.has(id));
+            // Checkbox values are strings, while older student records can have numeric
+            // IDs. Compare a single normalized representation so selected students are
+            // not lost before the bulk print is generated.
+            const normalizeStudentId = (student) => String(student?.id ?? '').trim();
+            const classStudentIdSet = new Set(classStudents.map(normalizeStudentId).filter(Boolean));
+            let selectedIds = Array.from(classPopupSelectedStudentIds || [])
+                .map((id) => String(id ?? '').trim())
+                .filter((id) => classStudentIdSet.has(id));
             if (!selectedIds.length) {
                 const isAllCampuses = !selectedCampus;
                 const isAllClasses = !selectedClass;
@@ -3588,7 +3638,7 @@
                 return;
                 }
             }
-            const targetStudents = classStudents.filter((student) => selectedIds.includes(student?.id));
+            const targetStudents = classStudents.filter((student) => selectedIds.includes(normalizeStudentId(student)));
 
             const challanMonthLabel = document.getElementById('challanMonth').value.trim()
                 || new Date().toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }).replace(' ', ', ');
@@ -3634,13 +3684,16 @@
                 const paymentDetails = JSON.parse(localStorage.getItem(CHALLAN_PAYMENT_DETAILS_KEY) || '{}');
                 const studentPayments = paymentDetails[student.id] || {};
                 
-                // Bulk prints: single challan per student (current month + all pending dues).
+                // Bulk prints: one challan per selected student. With the All filter,
+                // students who have no previously recorded pending month must still
+                // receive a challan for the currently selected fee month.
                 let monthsToProcess = [];
                 if (statusFilter === 'paid') {
                     monthsToProcess = paidMonths;
                 } else {
-                    // pending / all -> print all pending months (dues challans)
-                    monthsToProcess = pendingMonths;
+                    monthsToProcess = pendingMonths.length
+                        ? pendingMonths
+                        : (statusFilter === 'all' ? [getEffectiveChallanFeeMonthLabel()] : []);
                 }
 
                 const monthsUnique = Array.from(new Set((monthsToProcess || []).map((m) => String(m || '').trim()).filter(Boolean)));
@@ -3799,7 +3852,7 @@
                     }
                 }
 
-                printSheet.innerHTML = challans.map(row => buildBulkGroupMarkup(row.data, row.qrState)).join('');
+                printSheet.innerHTML = buildBulkPrintSheetsMarkup(challans);
                 hideClassStudentsPopup();
                 await new Promise((resolve) => requestAnimationFrame(() => resolve()));
                 await waitForPrintImages(printSheet);
