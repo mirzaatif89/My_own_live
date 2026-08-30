@@ -978,14 +978,15 @@
             .preview-sheet {
                 border: 1px solid #475569;
                 margin: 0;
-                height: 89mm;
-                overflow: hidden;
+                min-height: 277mm;
+                height: auto;
+                overflow: visible;
                 box-sizing: border-box;
                 display: flex;
-                min-height: 0;
                 break-inside: avoid;
                 page-break-inside: avoid;
-                page-break-after: avoid;
+                break-after: page;
+                page-break-after: always;
                 background: #fff;
             }
 
@@ -994,42 +995,16 @@
             }
 
             .challan-bulk-group {
-                height: 269mm;
-                max-height: 269mm;
-                display: grid;
-                grid-template-rows: repeat(3, 1fr);
-                gap: 1mm;
-                margin: 0;
-                overflow: hidden;
-                break-inside: avoid;
-                page-break-inside: avoid;
-                break-after: page;
-                page-break-after: always;
-            }
-
-            .challan-bulk-group .preview-sheet {
                 height: auto;
-                min-height: 0;
+                max-height: none;
+                display: block;
+                margin: 0;
+                overflow: visible;
             }
 
-            .challan-bulk-group:not(:last-child) {
-                break-after: page !important;
-                page-break-after: always !important;
-            }
-
-            .challan-bulk-group:last-child {
+            .challan-bulk-group:last-child .preview-sheet:last-child {
                 break-after: auto;
                 page-break-after: auto;
-            }
-
-            /* Bulk mode prints one complete challan for each of two students.
-               This keeps every table inside the printable A4 area. */
-            .challan-bulk-group.bulk-two-students {
-                grid-template-rows: repeat(2, minmax(0, 1fr));
-            }
-
-            .challan-bulk-group.bulk-two-students .preview-sheet {
-                height: auto;
             }
 
             .challan-bulk-group + .challan-bulk-group {
