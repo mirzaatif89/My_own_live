@@ -3643,6 +3643,9 @@
 
             const challanMonthLabel = document.getElementById('challanMonth').value.trim()
                 || new Date().toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }).replace(' ', ', ');
+            // Bulk printing must use the fee month selected in the picker, not
+            // every outstanding month for each student.
+            const selectedBulkFeeMonth = String(getSelectedFeeMonthsFromPicker()[0] || challanMonthLabel).trim();
             const dueDateRaw = document.getElementById('dueDate').value;
 
             if (!dueDateRaw) {
@@ -3685,17 +3688,8 @@
                 const paymentDetails = JSON.parse(localStorage.getItem(CHALLAN_PAYMENT_DETAILS_KEY) || '{}');
                 const studentPayments = paymentDetails[student.id] || {};
                 
-                // Bulk prints: one challan per selected student. With the All filter,
-                // students who have no previously recorded pending month must still
-                // receive a challan for the currently selected fee month.
-                let monthsToProcess = [];
-                if (statusFilter === 'paid') {
-                    monthsToProcess = paidMonths;
-                } else {
-                    monthsToProcess = pendingMonths.length
-                        ? pendingMonths
-                        : (statusFilter === 'all' ? [getEffectiveChallanFeeMonthLabel()] : []);
-                }
+                // One selected fee month only, for every student in this bulk run.
+                const monthsToProcess = selectedBulkFeeMonth ? [selectedBulkFeeMonth] : [];
 
                 const monthsUnique = Array.from(new Set((monthsToProcess || []).map((m) => String(m || '').trim()).filter(Boolean)));
                 if (!monthsUnique.length) continue;
