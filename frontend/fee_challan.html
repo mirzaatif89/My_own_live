@@ -1470,6 +1470,7 @@
         };
         const challanFormFields = ['challanNumber', 'challanStudent', 'studentSid', 'studentAdmNo', 'studentClass', 'studentRollNo', 'fatherName', 'fatherMobile', 'challanSession', 'challanMonth', 'feeMonth', 'dueDate', 'baseAmount', 'payNowAmount', 'additionalCharges', 'discountValue', 'particulars', 'schoolName', 'schoolAddress', 'urduNote', 'challanNotes'];
         const printCopies = ['Student Copy', 'Office Copy', 'Parent Copy'];
+        const bulkPrintCopies = ['Student Copy', 'School Copy'];
         const CHALLAN_MONTHLY_FEES_KEY = 'eduCore_monthly_fees';
         const CHALLAN_PAYMENT_DETAILS_KEY = 'eduCore_payment_details';
         const CHALLAN_MONTHS = [
@@ -3340,7 +3341,9 @@
         }
 
         function buildBulkPrintSheetsMarkup(challans) {
-            const copies = challans.flatMap((row) => printCopies.map((copy) => buildPrintMarkup(row.data, copy, row.qrState)));
+            // Bulk printing uses two copies per student: one for the student and
+            // one for the school. Each pair stays together on one A4 page.
+            const copies = challans.flatMap((row) => bulkPrintCopies.map((copy) => buildPrintMarkup(row.data, copy, row.qrState)));
             const pages = [];
             for (let index = 0; index < copies.length; index += 2) {
                 pages.push(`<div class="challan-print-page">${copies.slice(index, index + 2).join('')}</div>`);
