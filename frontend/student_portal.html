@@ -2521,41 +2521,20 @@
             <button type="button" class="student-action-btn" data-student-action-target="studentFeeSection">
                 <i data-lucide="receipt"></i> Fees
             </button>
-            <button type="button" class="student-action-btn" data-student-action-target="studentResultSection">
-                <i data-lucide="clipboard-list"></i> Result
-            </button>
-            <button type="button" class="student-action-btn" data-student-action-target="studentLeaveSection">
-                <i data-lucide="calendar-minus"></i> Leave
-            </button>
-            <button type="button" class="student-action-btn" data-student-action-target="studentCourseSection">
-                <i data-lucide="book-marked"></i> Course
-            </button>
-            <button type="button" class="student-action-btn" data-student-action-target="studentTimeTableSection">
-                <i data-lucide="clock"></i> Time Table
-            </button>
-            <button type="button" class="student-action-btn" data-student-action-target="studentDateSheetSection">
-                <i data-lucide="calendar-days"></i> Date Sheet
-            </button>
-            <button type="button" class="student-action-btn" data-student-action-target="studentPerformanceSection">
-                <i data-lucide="trending-up"></i> Performance
-            </button>
             <button type="button" class="student-action-btn" data-student-action-target="studentCourseSection">
                 <i data-lucide="file-text"></i> Syllabus
-            </button>
-            <button type="button" class="student-action-btn" data-student-action-target="studentQuizSection">
-                <i data-lucide="circle-help"></i> Quiz
             </button>
             <button type="button" class="student-action-btn" data-student-action-target="studentLecturesSection">
                 <i data-lucide="presentation"></i> Lectures
             </button>
-            <button type="button" class="student-action-btn" data-student-action-target="studentSubmitAssignmentSection">
-                <i data-lucide="upload"></i> Submit Assignment
-            </button>
             <button type="button" class="student-action-btn" data-student-action-target="studentMessagesSection">
                 <i data-lucide="message-circle"></i> Messages
             </button>
-            <button type="button" class="student-action-btn" data-student-action-target="studentComplaintSection">
-                <i data-lucide="message-square"></i> Complain Box
+            <button type="button" class="student-action-btn" data-student-action-target="studentQuizSection">
+                <i data-lucide="circle-help"></i> Quiz
+            </button>
+            <button type="button" class="student-action-btn" data-student-action-target="studentSubmitAssignmentSection">
+                <i data-lucide="upload"></i> Assignments
             </button>
         </section>
 
@@ -2818,31 +2797,19 @@
             <h4>Assignments To Solve</h4>
             <div class="portal-content-list" id="studentAssignedAssignmentList"></div>
             <div class="empty-note" id="studentAssignedAssignmentEmpty">No assignment has been uploaded for your class yet.</div>
-            <form id="studentAssignmentForm">
-                <div class="result-filter-grid complaint-form-grid">
-                    <div class="portal-field">
-                        <label for="studentAssignmentTitle">Assignment Title</label>
-                        <input type="text" id="studentAssignmentTitle" class="form-control" required placeholder="e.g. Science Chapter 4">
-                    </div>
-                    <div class="portal-field">
-                        <label for="studentAssignmentSubject">Subject</label>
-                        <input type="text" id="studentAssignmentSubject" class="form-control" placeholder="e.g. Science">
-                    </div>
-                    <div class="portal-field" style="grid-column: 1 / -1;">
-                        <label for="studentAssignmentNote">Notes</label>
-                        <textarea id="studentAssignmentNote" class="form-control" rows="4" placeholder="Write any note for the teacher/admin"></textarea>
-                    </div>
-                    <div class="portal-field portal-file-box" style="grid-column: 1 / -1;">
-                        <label for="studentAssignmentFile">Upload Assignment File</label>
-                        <input type="file" id="studentAssignmentFile" class="form-control" required accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.txt">
-                        <div class="portal-file-help" id="studentAssignmentFileName">Attach assignment file: PDF, Word, image, or text.</div>
-                    </div>
+            <form id="studentAssignmentForm" hidden>
+                <input type="hidden" id="studentAssignmentId">
+                <h4 id="studentAssignmentSelectedTitle"></h4>
+                <div class="portal-field portal-file-box">
+                    <label for="studentAssignmentFile">Upload Solved Assignment</label>
+                    <input type="file" id="studentAssignmentFile" class="form-control" required accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.txt">
+                    <div class="portal-file-help" id="studentAssignmentFileName">Attach assignment file: PDF, Word, image, or text.</div>
                 </div>
                 <div class="portal-action-row">
-                    <button type="submit" class="btn btn-primary">Submit Assignment</button>
+                    <button type="submit" id="studentAssignmentSave" class="btn btn-primary">Save</button>
+                    <button type="button" class="btn" onclick="document.getElementById('studentAssignmentForm').hidden = true">Cancel</button>
                 </div>
-            </form>
-        </section>
+            </form>     </section>
 
         <section class="panel-card student-portal-section" id="studentMessagesSection" style="display:none; margin-bottom: 1.25rem;">
             <h3>Messages</h3>
@@ -3179,11 +3146,14 @@
 
         function downloadPortalAttachment(storageKey, itemId) {
             const item = getPortalData(storageKey).find((entry) => String(entry.id || '') === String(itemId || ''));
-            if (!item?.file?.dataUrl) {
+            if (!(item?.file?.url || item?.file?.dataUrl)) {
                 showAppAlert('Attachment file was not found.', 'Download Failed');
                 return;
             }
 
+            if (item.file.url) {
+                const link = document.createElement('a'); link.href = item.file.url; link.download = item.file.name || 'lecture'; link.click(); return;
+            }
             downloadPortalDataUrl(item.file.dataUrl, item.file.name || 'diary-file');
         }
 
@@ -3418,7 +3388,15 @@
             `).join('');
         }
 
+        let assignmentSubmissionCache = null;
+        function cacheAssignmentSubmissions(items) {
+            assignmentSubmissionCache = items;
+            try {
+                localStorage.setItem(STUDENT_ASSIGNMENT_SUBMISSION_KEY, JSON.stringify(items.map(({ fileData, ...item }) => item)));
+            } catch (_error) { /* Server and memory retain saved submissions when browser storage is full. */ }
+        }
         function getPortalData(key) {
+            if (key === STUDENT_ASSIGNMENT_SUBMISSION_KEY && assignmentSubmissionCache) return assignmentSubmissionCache;
             try {
                 return JSON.parse(localStorage.getItem(key) || '[]');
             } catch (_error) {
@@ -3581,29 +3559,54 @@
             if (window.lucide) window.lucide.createIcons();
         }
 
+        function getAssignedWork(student) {
+            const campus = normalizePortalCampusName(student.campusName || loggedInUser?.campusName || 'Main Campus');
+            return getClassWiseItems(STUDENT_UPLOADED_ASSIGNMENT_KEY, student).filter(item => !item.campusName || normalizePortalCampusName(item.campusName) === campus);
+        }
+        function openAssignmentSubmission(id) {
+            const student = getCurrentPortalStudent();
+            const item = getAssignedWork(student).find(item => String(item.id) === id);
+            if (!item || getStudentAssignmentSubmissions(student).some(entry => String(entry.assignmentId) === id)) return;
+            const form = document.getElementById('studentAssignmentForm');
+            form.reset();
+            document.getElementById('studentAssignmentId').value = id;
+            document.getElementById('studentAssignmentSelectedTitle').textContent = item.title || item.file?.name || 'Assignment';
+            updateStudentAssignmentFileLabel();
+            form.hidden = false;
+            form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
         function renderStudentUploadedAssignments(student = {}) {
             const list = document.getElementById('studentAssignedAssignmentList');
             const empty = document.getElementById('studentAssignedAssignmentEmpty');
             if (!list || !empty) return;
-
-            const assignments = getClassWiseItems(STUDENT_UPLOADED_ASSIGNMENT_KEY, student);
-            if (!assignments.length) {
-                list.innerHTML = '';
-                empty.style.display = 'block';
-                return;
-            }
-
-            empty.style.display = 'none';
-            list.innerHTML = assignments.map((item) => `
-                <article class="portal-content-card">
-                    <h4>${escapeHtml(item.file?.name || 'Assignment File')}</h4>
-                    <div class="portal-content-meta">
-                        Start: ${escapeHtml(item.startDate || '-')} | Due: ${escapeHtml(item.dueDate || '-')}
+            const assignments = getAssignedWork(student);
+            const submissions = getStudentAssignmentSubmissions(student);
+            empty.style.display = assignments.length ? 'none' : 'block';
+            list.innerHTML = assignments.map(item => {
+                const submitted = submissions.some(entry => String(entry.assignmentId) === String(item.id));
+                return `<article class="portal-content-card">
+                    <h4>${escapeHtml(item.title || item.file?.name || 'Assignment')}</h4>
+                    <div class="portal-content-meta">Start: ${escapeHtml(item.startDate || '-')} | Due: ${escapeHtml(item.dueDate || '-')}</div>
+                    <div class="portal-action-row">
+                        ${(item.file?.url || item.file?.dataUrl) ? `<a class="portal-download-btn" href="${escapeHtml(item.file.url || item.file.dataUrl)}" download="${escapeHtml(item.file.name || 'assignment')}">Download Assignment</a>` : ''}
+                        ${submitted ? '<span class="portal-download-btn" role="status">? Submitted</span>' : `<button type="button" class="btn btn-primary" data-submit-assignment="${escapeHtml(item.id)}">Submit Assignment</button>`}
                     </div>
-                    ${item.file?.dataUrl ? `<button type="button" class="portal-download-btn" onclick="downloadPortalAttachment('${STUDENT_UPLOADED_ASSIGNMENT_KEY}', '${escapeHtml(item.id || '')}')"><i data-lucide="download" width="16"></i> Download Assignment</button>` : ''}
-                </article>
-            `).join('');
-            if (window.lucide) window.lucide.createIcons();
+                </article>`;
+            }).join('');
+            list.querySelectorAll('[data-submit-assignment]').forEach(button => button.addEventListener('click', () => openAssignmentSubmission(button.dataset.submitAssignment)));
+        }
+        async function loadAssignmentSubmissionStatus() {
+            try {
+                const response = await fetch(API_BASE_URL + '/student-assignments', { headers: { Authorization: 'Bearer ' + authToken } });
+                if (!response.ok) return;
+                const result = await response.json();
+                if (Array.isArray(result.assignments)) {
+                    const merged = new Map(getPortalData(STUDENT_ASSIGNMENT_SUBMISSION_KEY).map(item => [item.id, item]));
+                    result.assignments.forEach(item => merged.set(item.id, item));
+                    cacheAssignmentSubmissions([...merged.values()]);
+                    renderStudentUploadedAssignments(getCurrentPortalStudent());
+                }
+            } catch (_error) { /* Use saved submission status offline. */ }
         }
 
         function updateStudentAssignmentFileLabel() {
@@ -3619,14 +3622,22 @@
         async function submitStudentAssignment(event) {
             event.preventDefault();
             const student = getCurrentPortalStudent();
-            const title = document.getElementById('studentAssignmentTitle').value.trim();
-            const subject = document.getElementById('studentAssignmentSubject').value.trim();
-            const note = document.getElementById('studentAssignmentNote').value.trim();
-            if (!title) {
-                showAppAlert('Assignment title is required.', 'Missing Assignment');
+            const assignmentId = document.getElementById('studentAssignmentId').value;
+            const assignment = getAssignedWork(student).find(item => String(item.id) === assignmentId);
+            if (!assignment) { showAppAlert('Please select the assignment again.', 'Select Assignment'); return; }
+            if (getStudentAssignmentSubmissions(student).some(item => String(item.assignmentId) === assignmentId)) {
+                document.getElementById('studentAssignmentForm').hidden = true;
+                renderStudentUploadedAssignments(student);
                 return;
             }
-
+            const button = document.getElementById('studentAssignmentSave');
+            if (button.disabled) return;
+            button.disabled = true;
+            button.textContent = 'Saving...';
+            try {
+            const title = assignment.title || assignment.file?.name || 'Assignment';
+            const subject = assignment.subject || '';
+            const note = '';
             let file = null;
             try {
                 file = await readPortalFile(document.getElementById('studentAssignmentFile'));
@@ -3646,6 +3657,8 @@
                 studentName: student.fullName || loggedInUser.fullName || 'Student',
                 rollNo: student.rollNo || '',
                 classGrade: student.classGrade || '',
+                assignmentId,
+                campusName: student.campusName || '',
                 assignmentTitle: title,
                 subject,
                 note,
@@ -3655,15 +3668,6 @@
                 submittedAt: new Date().toISOString(),
                 status: 'Submitted'
             };
-
-            const submissions = getPortalData(STUDENT_ASSIGNMENT_SUBMISSION_KEY);
-            submissions.unshift(payload);
-            try {
-                localStorage.setItem(STUDENT_ASSIGNMENT_SUBMISSION_KEY, JSON.stringify(submissions));
-            } catch (_error) {
-                showAppAlert('Assignment file is too large to save in browser storage.', 'Storage Full');
-                return;
-            }
 
             try {
                 const response = await fetch(`${API_BASE_URL}/student-assignments`, {
@@ -3679,14 +3683,23 @@
                     throw new Error(result?.message || 'Database sync failed.');
                 }
             } catch (error) {
-                showAppAlert(`Assignment saved locally, but database sync failed: ${error.message}`, 'Saved Locally');
+                showAppAlert(error.message || 'Please retry.', 'Submission Failed');
+                return;
             }
 
+            const submissions = getPortalData(STUDENT_ASSIGNMENT_SUBMISSION_KEY);
+            submissions.unshift(payload);
+            cacheAssignmentSubmissions(submissions);
+            document.getElementById('studentAssignmentForm').hidden = true;
             document.getElementById('studentAssignmentForm').reset();
+            renderStudentUploadedAssignments(student);
             updateStudentAssignmentFileLabel();
             renderStudentAssignmentSubmissions(student);
             updateStudentNotifications(student);
             showAppAlert('Your assignment has been submitted.', 'Assignment Submitted');
+            } catch (error) {
+                showAppAlert(error.message || 'Unable to save assignment. Please retry.', 'Assignment Error');
+            } finally { button.disabled = false; button.textContent = 'Save'; }
         }
 
         function getStudentQuizSubmissionKey(student = {}, quizId = '') {
@@ -3880,7 +3893,10 @@
             const empty = document.getElementById('studentUploadedLectureEmpty');
             if (!list || !empty) return;
 
-            const items = getClassWiseItems(STUDENT_UPLOADED_LECTURE_KEY, student);
+            const items = getClassWiseItems(STUDENT_UPLOADED_LECTURE_KEY, student).filter(item => {
+                const campus = normalizePortalCampusName(item.campusName || item.branchName || item.campus || '');
+                return !campus || campus === normalizePortalCampusName(student.campusName || loggedInUser?.campusName || 'Main Campus');
+            });
             if (!items.length) {
                 list.innerHTML = '';
                 empty.style.display = 'block';
@@ -3895,7 +3911,7 @@
                     <p>${escapeHtml(item.details || '-')}</p>
                     <div class="portal-action-row">
                         ${item.url ? `<a class="portal-download-btn" href="${escapeHtml(item.url)}" target="_blank" rel="noopener"><i data-lucide="external-link" width="16"></i> Open Link</a>` : ''}
-                        ${item.file?.dataUrl ? `<button type="button" class="portal-download-btn" onclick="downloadPortalAttachment('${escapeHtml(STUDENT_UPLOADED_LECTURE_KEY)}', '${escapeHtml(item.id || '')}')"><i data-lucide="download" width="16"></i> Download ${escapeHtml(item.file.name || 'File')}</button>` : ''}
+                        ${(item.file?.url || item.file?.dataUrl) ? `<button type="button" class="portal-download-btn" onclick="downloadPortalAttachment('${escapeHtml(STUDENT_UPLOADED_LECTURE_KEY)}', '${escapeHtml(item.id || '')}')"><i data-lucide="download" width="16"></i> Download ${escapeHtml(item.file.name || 'File')}</button>` : ''}
                     </div>
                 </article>
             `).join('');
@@ -5910,6 +5926,7 @@
             document.getElementById('printStudentResultBtn')?.addEventListener('click', printStudentResultCard);
             document.getElementById('studentLeaveForm')?.addEventListener('submit', submitStudentLeaveRequest);
             document.getElementById('studentLeaveFile')?.addEventListener('change', () => updateStudentLeaveFileLabel());
+            loadAssignmentSubmissionStatus();
             document.getElementById('studentAssignmentForm')?.addEventListener('submit', submitStudentAssignment);
             document.getElementById('studentAssignmentFile')?.addEventListener('change', updateStudentAssignmentFileLabel);
             document.getElementById('studentComplaintForm')?.addEventListener('submit', submitStudentComplaint);

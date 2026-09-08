@@ -92,6 +92,7 @@ app.get('/:routeName([a-zA-Z0-9_-]+)', (req, res, next) => {
 });
 
 app.use(express.static(FRONTEND_DIR));
+require('./lectureUploads')(app, { root: path.join(DATA_DIR, 'lecture-files'), authenticate: authenticateToken });
 
 function readRawRequestBuffer(req) {
     return new Promise((resolve, reject) => {
@@ -3824,6 +3825,16 @@ async function ensureTableColumns(tableName, columnDefinitions) {
 }
 
 async function ensureLegacySchema() {
+    await ensureTableColumns('StudentDiaries', {
+        campusName: { type: DataTypes.STRING, allowNull: true },
+        file: { type: DataTypes.TEXT('long'), allowNull: true },
+        createdByRole: { type: DataTypes.STRING, allowNull: true },
+        createdByTeacherId: { type: DataTypes.STRING, allowNull: true },
+        teacherId: { type: DataTypes.STRING, allowNull: true },
+        teacherName: { type: DataTypes.STRING, allowNull: true },
+        createdAtLabel: { type: DataTypes.STRING, allowNull: true }
+    });
+
     await ensureTableColumns('Students', {
         studentCode: { type: DataTypes.STRING, allowNull: true },
         fullName: { type: DataTypes.STRING, allowNull: true },

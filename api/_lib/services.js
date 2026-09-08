@@ -73,6 +73,7 @@ function buildModuleSet(defaultAccess = 'none', overrides = {}) {
 const defaultPermissions = {
     loginAccess: {
         admin: true,
+        superadmin: true,
         principal: true,
         branch: true,
         teacher: true,
@@ -88,6 +89,11 @@ const defaultPermissions = {
         Staff: 'staff'
     },
     groups: {
+        superadmin: {
+            name: 'Superadmin',
+            homePage: 'dashboard.html',
+            permissions: buildModuleSet('manage')
+        },
         admin: {
             name: 'System Administrators',
             homePage: 'dashboard.html',
@@ -219,7 +225,8 @@ const defaultPermissions = {
 function normalizePermissionsConfig(input = {}) {
     const raw = input && typeof input === 'object' ? input : {};
     const groupsInput = raw.groups && typeof raw.groups === 'object' ? raw.groups : {};
-    const allowedGroupKeys = new Set(['admin', 'teacher', 'accountant']);
+    const allowedGroupKeys = new Set(Object.keys(defaultPermissions.groups));
+    Object.keys(groupsInput).forEach((key) => allowedGroupKeys.add(String(key).toLowerCase()));
     const customModules = Array.isArray(raw.customModules) ? raw.customModules : [];
     const allowedHomePages = new Set(ALLOWED_HOME_PAGES);
     customModules.forEach((module) => {
@@ -236,26 +243,29 @@ function normalizePermissionsConfig(input = {}) {
         };
         const nextGroup = groupValue && typeof groupValue === 'object' ? groupValue : {};
         const requestedHomePage = String(nextGroup.homePage || baseGroup.homePage || 'dashboard.html');
-        acc[key] = {
-            name: String(nextGroup.name || baseGroup.name || key),
-            homePage: allowedHomePages.has(requestedHomePage) ? requestedHomePage : 'dashboard.html',
-            permissions: buildModuleSet('none', {
+            const actionPermissions = nextGroup.actionPermissions && typeof nextGroup.actionPermissions === 'object'
+                ? nextGroup.actionPermissions
+                : baseGroup.actionPermissions;
+            acc[key] = {
+                name: String(nextGroup.name || baseGroup.name || key),
+                homePage: allowedHomePages.has(requestedHomePage) ? requestedHomePage : 'dashboard.html',
+                permissions: buildModuleSet('none', {
                 ...baseGroup.permissions,
                 ...(nextGroup.permissions || {})
-            })
-        };
+                }),
+                ...(actionPermissions ? { actionPermissions } : {})
+            };
         return acc;
     }, {});
 
     return {
         loginAccess: {
             admin: raw.loginAccess?.admin !== false,
+            superadmin: raw.loginAccess?.superadmin !== false,
             teacher: raw.loginAccess?.teacher !== false,
             staff: raw.loginAccess?.staff !== false
         },
-        roleGroups: {
-            Admin: 'admin', Teacher: 'teacher', Staff: 'accountant'
-        },
+        roleGroups: { ...defaultPermissions.roleGroups, ...(raw.roleGroups || {}) },
         customModules,
         groups
     };

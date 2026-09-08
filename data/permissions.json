@@ -1,6 +1,7 @@
 {
   "loginAccess": {
     "admin": true,
+    "superadmin": true,
     "principal": true,
     "branch": true,
     "teacher": true,
@@ -15,6 +16,7 @@
   },
   "roleGroups": {
     "Admin": "superadmin",
+    "Superadmin": "superadmin",
     "Principal": "admin",
     "Branch": "computer_operator",
     "Teacher": "computer_operator",

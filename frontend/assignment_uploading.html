@@ -35,7 +35,8 @@
             <section class="schedule-panel">
                 <form id="assignmentUploadForm">
                     <div class="assignment-upload-grid">
-                        <div><label>Class</label><select id="assignmentUploadClass" required></select></div>
+                        <div><label for="assignmentUploadCampus">Campus</label><select id="assignmentUploadCampus" required><option value="">Select Campus</option></select></div>
+                        <div><label for="assignmentUploadClass">Class</label><select id="assignmentUploadClass" required disabled><option value="">Select Campus First</option></select></div>
                         <div><label>Start Date</label><input type="date" id="assignmentStartDate" required></div>
                         <div><label>Due Date</label><input type="date" id="assignmentDueDate" required></div>
                         <div><label>Assignment File</label><input type="file" id="assignmentUploadFile" required accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png,.webp,.txt"></div>
@@ -57,11 +58,33 @@
             try { localStorage.setItem(STUDENT_UPLOADED_ASSIGNMENT_KEY, JSON.stringify(items)); return true; }
             catch (_error) { showAppAlert('Assignment file is too large to save.', 'Storage Full'); return false; }
         }
-        function populateClasses() {
-            const students = data('eduCore_students');
-            const classes = data('eduCore_classes');
-            const names = [...new Set([...classes.map((item) => item?.section ? `${item.name} (${item.section})` : item?.name), ...students.map((student) => student?.classGrade)].map((value) => String(value || '').trim()).filter(Boolean))].sort();
-            assignmentUploadClass.innerHTML = '<option value="">Select Class</option>' + names.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join('');
+        function populateAssignmentCampuses(extra = []) {
+            const campuses = getUniqueCampusNames([...extra, ...data('eduCore_classes').map(item => item.campusName)].filter(Boolean));
+            populateCampusSelect('assignmentUploadCampus', campuses, 'Select Campus', assignmentUploadCampus.value);
+        }
+        function populateClasses(selected = '') {
+            const normalize = value => String(value || '').trim().toLowerCase();
+            const campus = normalize(assignmentUploadCampus.value);
+            const students = data('eduCore_students').filter(item => normalize(item.campusName || 'Main Campus') === campus);
+            const classes = data('eduCore_classes').filter(item => !item.campusName || normalize(item.campusName) === campus);
+            const names = campus ? [...new Set([...classes.map(item => item.section ? `${item.name} (${item.section})` : item.name), ...students.map(item => item.classGrade)].map(value => String(value || '').trim()).filter(Boolean))].sort() : [];
+            assignmentUploadClass.disabled = !campus;
+            assignmentUploadClass.innerHTML = `<option value="">${!campus ? 'Select Campus First' : names.length ? 'Select Class' : 'No Classes Available'}</option>` + names.map(name => `<option value="${esc(name)}">${esc(name)}</option>`).join('');
+            assignmentUploadClass.value = names.includes(selected) ? selected : '';
+        }
+        async function refreshAssignmentSelections() {
+            const campuses = await loadRegisteredCampusNames();
+            try {
+                const response = await fetch(API_BASE_URL + '/students');
+                if (response.ok) {
+                    const result = await response.json();
+                    const students = Array.isArray(result) ? result : result.students;
+                    if (Array.isArray(students)) localStorage.setItem('eduCore_students', JSON.stringify(students));
+                }
+            } catch (_error) { /* Keep cached options available offline. */ }
+            const selected = assignmentUploadClass.value;
+            populateAssignmentCampuses(campuses);
+            populateClasses(selected);
         }
         function readFile(input) {
             const file = input.files?.[0];
@@ -76,7 +99,7 @@
         function render() {
             const items = data(STUDENT_UPLOADED_ASSIGNMENT_KEY).sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
             if (!items.length) { assignmentUploadList.innerHTML = '<div class="empty-note">No assignment uploaded yet.</div>'; return; }
-            assignmentUploadList.innerHTML = `<table class="schedule-table"><thead><tr><th>Class</th><th>Start</th><th>Due</th><th>File</th><th>Action</th></tr></thead><tbody>${items.map((item) => `<tr><td>${esc(item.classGrade || '-')}</td><td>${esc(item.startDate || '-')}</td><td>${esc(item.dueDate || '-')}</td><td>${item.file?.dataUrl ? `<a class="assignment-file-name" href="${item.file.dataUrl}" download="${esc(item.file.name || 'assignment')}">${esc(item.file.name || 'Download')}</a>` : '-'}</td><td><div class="schedule-actions"><button type="button" class="schedule-action-btn delete" onclick="deleteAssignment('${esc(item.id)}')"><i data-lucide="trash-2" width="14"></i> Delete</button></div></td></tr>`).join('')}</tbody></table>`;
+            assignmentUploadList.innerHTML = `<table class="schedule-table"><thead><tr><th>Campus</th><th>Class</th><th>Start</th><th>Due</th><th>File</th><th>Action</th></tr></thead><tbody>${items.map((item) => `<tr><td>${esc(item.campusName || 'All Campuses')}</td><td>${esc(item.classGrade || '-')}</td><td>${esc(item.startDate || '-')}</td><td>${esc(item.dueDate || '-')}</td><td>${item.file?.dataUrl ? `<a class="assignment-file-name" href="${item.file.dataUrl}" download="${esc(item.file.name || 'assignment')}">${esc(item.file.name || 'Download')}</a>` : '-'}</td><td><div class="schedule-actions"><button type="button" class="schedule-action-btn delete" onclick="deleteAssignment('${esc(item.id)}')"><i data-lucide="trash-2" width="14"></i> Delete</button></div></td></tr>`).join('')}</tbody></table>`;
             if (window.lucide) window.lucide.createIcons();
         }
         function deleteAssignment(id) {
@@ -89,6 +112,7 @@
             try { file = await readFile(assignmentUploadFile); } catch (_error) { showAppAlert('Assignment file could not be attached.', 'File Error'); return; }
             const item = {
                 id: `UPLOADED-ASG-${Date.now()}`,
+                campusName: assignmentUploadCampus.value,
                 classGrade: assignmentUploadClass.value,
                 startDate: assignmentStartDate.value,
                 dueDate: assignmentDueDate.value,
@@ -96,15 +120,18 @@
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
-            if (!item.classGrade || !item.startDate || !item.dueDate || !item.file?.dataUrl) { showAppAlert('Class, dates, and assignment file are required.', 'Missing Assignment'); return; }
+            if (!item.campusName || !item.classGrade || !item.startDate || !item.dueDate || !item.file?.dataUrl) { showAppAlert('Campus, class, dates, and assignment file are required.', 'Missing Assignment'); return; }
             if (item.dueDate < item.startDate) { showAppAlert('Due date cannot be before start date.', 'Date Error'); return; }
             const items = data(STUDENT_UPLOADED_ASSIGNMENT_KEY);
             items.unshift(item);
             if (!save(items)) return;
             event.target.reset();
+            populateClasses();
             render();
             showSuccessModal('Assignment Submitted!', 'Students in the selected class can download this assignment in their portal.');
         });
+        assignmentUploadCampus.addEventListener("change", () => populateClasses());
+        populateAssignmentCampuses(); refreshAssignmentSelections();
         populateClasses(); render(); if (window.lucide) window.lucide.createIcons();
     </script>
 </body>

@@ -407,7 +407,8 @@
         registerCustomModules(raw.customModules || []);
         const moduleKeys = [...new Set(Object.values(pageRegistry).map((entry) => entry.moduleKey).filter(Boolean))];
         const rawGroups = raw.groups && typeof raw.groups === 'object' ? raw.groups : {};
-        const allowedGroupKeys = new Set(['admin', 'teacher', 'accountant']);
+        const allowedGroupKeys = new Set(Object.keys(defaultPermissions.groups));
+        Object.keys(rawGroups).forEach((key) => allowedGroupKeys.add(String(key).toLowerCase()));
         const groups = Object.entries({
             ...defaultPermissions.groups,
             ...rawGroups
@@ -429,7 +430,7 @@
 
         return {
             loginAccess: { admin: raw.loginAccess?.admin !== false, teacher: raw.loginAccess?.teacher !== false, staff: raw.loginAccess?.staff !== false },
-            roleGroups: { Admin: 'admin', Teacher: 'teacher', Staff: 'accountant' },
+            roleGroups: { ...defaultPermissions.roleGroups, ...(raw.roleGroups || {}) },
             customModules: normalizeCustomModules(raw.customModules || []),
             groups
         };

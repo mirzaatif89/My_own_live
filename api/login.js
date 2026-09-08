@@ -117,9 +117,10 @@ module.exports = createHandler({
             designationKey = String(staff?.designation || 'staff').trim().toLowerCase().replace(/[\s-]+/g, '_');
         }
 
-        const designationRole = designationKey === 'admin' || designationKey === 'system_administrator'
+        const designationRole = designationKey === 'admin' || designationKey === 'system_administrator' || designationKey === 'superadmin'
             ? 'Admin' : designationKey === 'teacher' ? 'Teacher' : user.role;
-        const designationGroupKey = designationRole === 'Admin' ? 'admin'
+        const designationGroupKey = designationKey === 'superadmin' ? 'superadmin'
+            : designationRole === 'Admin' ? 'admin'
             : designationKey === 'accountant' ? 'accountant'
                 : designationKey === 'teacher' ? 'teacher' : user.groupKey;
 

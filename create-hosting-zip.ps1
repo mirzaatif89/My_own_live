@@ -49,6 +49,7 @@ $filesToPack = $allFiles | Where-Object {
     }
 
     if ($relative -eq $Output) { return $false }
+    if ($relative -eq ".env" -or $relative -like ".env.*") { return $false }
     if ($_.Extension -ieq ".zip") { return $false }
     if ($_.Extension -ieq ".log") { return $false }
     return $true
