@@ -70,7 +70,7 @@
             <header class="header">
                 <div>
                     <h1>Student Assignments</h1>
-                    <p style="color: var(--text-secondary); margin-top: 0.25rem;">Review submitted assignments by class, student, subject, and upload file.</p>
+                    <p style="color: var(--text-secondary); margin-top: 0.25rem;">Download student work, add marks and remarks, or reopen assignments for resubmission.</p>
                 </div>
             </header>
 
@@ -104,7 +104,7 @@
                 </div>
 
                 <div class="assignment-filter-bar">
-                    <input type="search" id="assignmentSearch" placeholder="Search student, title, subject">
+                    <input type="search" id="assignmentSearch" placeholder="Search student, assignment, campus">
                     <select id="assignmentClassFilter">
                         <option value="">All Classes</option>
                     </select>
@@ -117,10 +117,10 @@
                             <th>Student</th>
                             <th>Roll No</th>
                             <th>Assignment</th>
-                            <th>Subject</th>
+                            <th>Campus</th>
                             <th>Submitted</th>
                             <th>File</th>
-                            <th>Note</th>
+                            <th>Review / Result</th>
                         </tr>
                     </thead>
                     <tbody id="assignmentTableBody">
@@ -153,12 +153,12 @@
 
         function downloadAssignmentFile(index) {
             const item = assignmentRows[index];
-            if (!item?.fileData) {
+            if (!(item?.fileData || item?.file?.url || item?.file?.dataUrl)) {
                 alert('No file is available for this assignment.');
                 return;
             }
             const link = document.createElement('a');
-            link.href = item.fileData;
+            link.href = item.fileData || item.file.url || item.file.dataUrl;
             link.download = item.fileName || 'assignment-file';
             link.style.display = 'none';
             document.body.appendChild(link);
@@ -214,16 +214,51 @@
                         <td>${escapeAssignmentHtml(item.studentName || '-')}</td>
                         <td>${escapeAssignmentHtml(item.rollNo || '-')}</td>
                         <td>${escapeAssignmentHtml(item.assignmentTitle || '-')}</td>
-                        <td>${escapeAssignmentHtml(item.subject || '-')}</td>
+                        <td>${escapeAssignmentHtml(item.campusName || '-')}</td>
                         <td>${escapeAssignmentHtml(item.submittedAt ? new Date(item.submittedAt).toLocaleString() : '-')}</td>
-                        <td>${item.fileData ? `<button type="button" class="assignment-file-link" onclick="downloadAssignmentFile(${originalIndex})"><i data-lucide="download" width="15"></i>${escapeAssignmentHtml(item.fileName || 'Download')}</button>` : '-'}</td>
-                        <td><div class="assignment-note">${escapeAssignmentHtml(item.note || '-')}</div></td>
+                        <td>${(item.fileData || item.file?.url || item.file?.dataUrl) ? `<button type="button" class="assignment-file-link" onclick="downloadAssignmentFile(${originalIndex})"><i data-lucide="download" width="15"></i>${escapeAssignmentHtml(item.fileName || 'Download')}</button>` : '-'}</td>
+                        <td style="min-width:260px">
+                            <form onsubmit="saveAssignmentReview(event, ${originalIndex}, false)">
+                                <strong>${escapeAssignmentHtml(item.status || 'Submitted')}</strong>
+                                <label style="display:block">Marks obtained <input id="reviewMarks${originalIndex}" type="number" min="0" step="0.5" value="${escapeAssignmentHtml(item.marks ?? '')}" style="width:90px"></label>
+                                <label style="display:block">Total marks <input id="reviewTotal${originalIndex}" type="number" min="1" step="0.5" value="${escapeAssignmentHtml(item.totalMarks ?? '')}" style="width:90px"></label>
+                                <label style="display:block">Result <select id="reviewResult${originalIndex}">${['Pending','Pass','Fail'].map(value => `<option ${(item.result || 'Pending') === value ? 'selected' : ''}>${value}</option>`).join('')}</select></label>
+                                <label style="display:block">Remarks <textarea id="reviewRemarks${originalIndex}" rows="2" style="width:100%">${escapeAssignmentHtml(item.remarks || '')}</textarea></label>
+                                <button type="submit" class="btn btn-primary">Save Review</button>
+                                <button type="button" class="btn" onclick="saveAssignmentReview(event, ${originalIndex}, true)">Reopen for Resubmission</button>
+                            </form>
+                        </td>
                     </tr>
                 `;
             }).join('');
             if (window.lucide) window.lucide.createIcons();
         }
 
+        async function saveAssignmentReview(event, index, reopen) {
+            event.preventDefault();
+            const item = assignmentRows[index];
+            const form = event.target.closest('form');
+            const controls = [...form.querySelectorAll('button')];
+            if (controls.some(button => button.disabled)) return;
+            const marksValue = document.getElementById('reviewMarks' + index).value;
+            const totalValue = document.getElementById('reviewTotal' + index).value;
+            const marks = marksValue === '' ? null : Number(marksValue);
+            const totalMarks = totalValue === '' ? null : Number(totalValue);
+            const result = document.getElementById('reviewResult' + index).value;
+            if ((marks !== null && (!Number.isFinite(marks) || marks < 0)) || (totalMarks !== null && (!Number.isFinite(totalMarks) || totalMarks <= 0)) || (marks !== null && (totalMarks === null || marks > totalMarks)) || (!reopen && result !== 'Pending' && (marks === null || totalMarks === null))) {
+                showAppAlert('Enter valid marks and total marks before marking Pass or Fail.', 'Invalid Marks'); return;
+            }
+            const review = { id: item.id, marks, totalMarks, result: reopen ? 'Pending' : result, remarks: document.getElementById('reviewRemarks' + index).value.trim(), status: reopen ? 'Reopened' : 'Reviewed', reviewedAt: new Date().toISOString() };
+            controls.forEach(button => button.disabled = true);
+            try {
+                const response = await fetch(API_BASE_URL + '/student-assignments', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (sessionStorage.getItem('eduCore_token') || '') }, body: JSON.stringify(review) });
+                const body = await response.json();
+                if (!response.ok || body.success === false) throw new Error(body.message || 'Review could not be saved.');
+                await loadAssignments();
+                showAppAlert(reopen ? 'Student can upload this assignment again.' : 'Marks and remarks saved.', reopen ? 'Assignment Reopened' : 'Review Saved');
+            } catch (error) { showAppAlert(error.message, 'Save Failed'); }
+            finally { controls.forEach(button => button.disabled = false); }
+        }
         async function loadAssignments() {
             const token = sessionStorage.getItem('eduCore_token') || '';
             try {
@@ -235,7 +270,7 @@
                     throw new Error(result?.message || 'Assignments could not be loaded.');
                 }
                 assignmentRows = Array.isArray(result.assignments) ? result.assignments : [];
-                localStorage.setItem(ASSIGNMENT_LOCAL_KEY, JSON.stringify(assignmentRows));
+                try { localStorage.setItem(ASSIGNMENT_LOCAL_KEY, JSON.stringify(assignmentRows.map(({fileData, ...item}) => item))); } catch (_error) { /* Keep authoritative server records in memory. */ }
             } catch (error) {
                 try {
                     assignmentRows = JSON.parse(localStorage.getItem(ASSIGNMENT_LOCAL_KEY) || '[]');
@@ -244,6 +279,12 @@
                 }
             }
 
+            const latest = new Map();
+            assignmentRows.sort((a, b) => String(b.submittedAt || '').localeCompare(String(a.submittedAt || ''))).forEach(item => {
+                const key = item.assignmentId ? [item.studentId || item.studentCode, item.assignmentId].join('|') : item.id;
+                if (!latest.has(key)) latest.set(key, item);
+            });
+            assignmentRows = [...latest.values()];
             populateAssignmentClassFilter(assignmentRows);
             renderAssignments();
         }

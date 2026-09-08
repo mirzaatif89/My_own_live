@@ -3563,10 +3563,14 @@
             const campus = normalizePortalCampusName(student.campusName || loggedInUser?.campusName || 'Main Campus');
             return getClassWiseItems(STUDENT_UPLOADED_ASSIGNMENT_KEY, student).filter(item => !item.campusName || normalizePortalCampusName(item.campusName) === campus);
         }
+        function latestAssignmentSubmission(student, id) {
+            return getStudentAssignmentSubmissions(student).find(entry => String(entry.assignmentId) === String(id));
+        }
         function openAssignmentSubmission(id) {
             const student = getCurrentPortalStudent();
             const item = getAssignedWork(student).find(item => String(item.id) === id);
-            if (!item || getStudentAssignmentSubmissions(student).some(entry => String(entry.assignmentId) === id)) return;
+            const previous = latestAssignmentSubmission(student, id);
+            if (!item || (previous && previous.status !== 'Reopened')) return;
             const form = document.getElementById('studentAssignmentForm');
             form.reset();
             document.getElementById('studentAssignmentId').value = id;
@@ -3583,13 +3587,15 @@
             const submissions = getStudentAssignmentSubmissions(student);
             empty.style.display = assignments.length ? 'none' : 'block';
             list.innerHTML = assignments.map(item => {
-                const submitted = submissions.some(entry => String(entry.assignmentId) === String(item.id));
+                const review = latestAssignmentSubmission(student, item.id);
+                const submitted = review && review.status !== 'Reopened';
                 return `<article class="portal-content-card">
                     <h4>${escapeHtml(item.title || item.file?.name || 'Assignment')}</h4>
                     <div class="portal-content-meta">Start: ${escapeHtml(item.startDate || '-')} | Due: ${escapeHtml(item.dueDate || '-')}</div>
                     <div class="portal-action-row">
                         ${(item.file?.url || item.file?.dataUrl) ? `<a class="portal-download-btn" href="${escapeHtml(item.file.url || item.file.dataUrl)}" download="${escapeHtml(item.file.name || 'assignment')}">Download Assignment</a>` : ''}
-                        ${submitted ? '<span class="portal-download-btn" role="status">? Submitted</span>' : `<button type="button" class="btn btn-primary" data-submit-assignment="${escapeHtml(item.id)}">Submit Assignment</button>`}
+                        ${submitted ? '<span class="portal-download-btn" role="status">Submitted</span>' : `<button type="button" class="btn btn-primary" data-submit-assignment="${escapeHtml(item.id)}">${review?.status === 'Reopened' ? 'Resubmit Assignment' : 'Submit Assignment'}</button>`}
+                        ${review ? `<div style="width:100%"><strong>${escapeHtml(review.status === 'Reopened' ? 'Reopened for resubmission' : review.result || 'Pending review')}</strong>${review.marks != null ? `<p>Marks: ${escapeHtml(review.marks)} / ${escapeHtml(review.totalMarks ?? '-')}</p>` : ''}${review.remarks ? `<p>Remarks: ${escapeHtml(review.remarks)}</p>` : ''}</div>` : ''}
                     </div>
                 </article>`;
             }).join('');
@@ -3625,7 +3631,8 @@
             const assignmentId = document.getElementById('studentAssignmentId').value;
             const assignment = getAssignedWork(student).find(item => String(item.id) === assignmentId);
             if (!assignment) { showAppAlert('Please select the assignment again.', 'Select Assignment'); return; }
-            if (getStudentAssignmentSubmissions(student).some(item => String(item.assignmentId) === assignmentId)) {
+            const previous = latestAssignmentSubmission(student, assignmentId);
+            if (previous && previous.status !== 'Reopened') {
                 document.getElementById('studentAssignmentForm').hidden = true;
                 renderStudentUploadedAssignments(student);
                 return;
@@ -3651,7 +3658,8 @@
             }
 
             const payload = {
-                id: `ASG-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                id: previous?.id || `ASG-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                marks: null, totalMarks: null, result: 'Pending', remarks: '', reviewedAt: null,
                 studentId: student.id || loggedInUser.id || '',
                 studentCode: student.studentCode || '',
                 studentName: student.fullName || loggedInUser.fullName || 'Student',
@@ -3687,7 +3695,7 @@
                 return;
             }
 
-            const submissions = getPortalData(STUDENT_ASSIGNMENT_SUBMISSION_KEY);
+            const submissions = getPortalData(STUDENT_ASSIGNMENT_SUBMISSION_KEY).filter(item => item.id !== payload.id);
             submissions.unshift(payload);
             cacheAssignmentSubmissions(submissions);
             document.getElementById('studentAssignmentForm').hidden = true;
@@ -5927,6 +5935,8 @@
             document.getElementById('studentLeaveForm')?.addEventListener('submit', submitStudentLeaveRequest);
             document.getElementById('studentLeaveFile')?.addEventListener('change', () => updateStudentLeaveFileLabel());
             loadAssignmentSubmissionStatus();
+            setInterval(() => { if (!document.hidden) loadAssignmentSubmissionStatus(); }, 15000);
+            window.addEventListener('focus', loadAssignmentSubmissionStatus);
             document.getElementById('studentAssignmentForm')?.addEventListener('submit', submitStudentAssignment);
             document.getElementById('studentAssignmentFile')?.addEventListener('change', updateStudentAssignmentFileLabel);
             document.getElementById('studentComplaintForm')?.addEventListener('submit', submitStudentComplaint);
