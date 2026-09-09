@@ -22,7 +22,23 @@ const io = new Server(server, { cors: { origin: '*' } });
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const FRONTEND_DIR = path.join(PROJECT_ROOT, 'frontend');
-const DATA_DIR = path.join(PROJECT_ROOT, 'data');
+const LEGACY_DATA_DIR = path.join(PROJECT_ROOT, 'data');
+const isCpanelHost = process.platform !== 'win32' && /^\/home\/[^/]+$/.test(process.env.HOME || '');
+const DATA_DIR = process.env.APP_DATA_DIR || (isCpanelHost ? path.join(process.env.HOME, '.myownschool-data') : LEGACY_DATA_DIR);
+
+function migrateLegacyData() {
+    if (path.resolve(DATA_DIR) === path.resolve(LEGACY_DATA_DIR) || !fs.existsSync(LEGACY_DATA_DIR)) return;
+    for (const entry of ['mobile_api_store', 'lecture-files', 'permissions.json', 'permissions-detailed.json', 'date_sheet.json', 'admin_credentials.json']) {
+        const source = path.join(LEGACY_DATA_DIR, entry);
+        const destination = path.join(DATA_DIR, entry);
+        if (fs.existsSync(source) && !fs.existsSync(destination)) {
+            fs.mkdirSync(path.dirname(destination), { recursive: true });
+            fs.cpSync(source, destination, { recursive: true });
+        }
+    }
+}
+
+migrateLegacyData();
 fs.mkdirSync(DATA_DIR, { recursive: true });
 const MOBILE_API_STORE_DIR = path.join(DATA_DIR, 'mobile_api_store');
 fs.mkdirSync(MOBILE_API_STORE_DIR, { recursive: true });

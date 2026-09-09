@@ -1,7 +1,11 @@
 const fs = require('fs');
 const path = require('path');
 
-const STORE_DIR = path.join(process.cwd(), 'data', 'mobile_api_store');
+const projectRoot = path.resolve(__dirname, '..', '..');
+const legacyDataDir = path.join(projectRoot, 'data');
+const isCpanelHost = process.platform !== 'win32' && /^\/home\/[^/]+$/.test(process.env.HOME || '');
+const dataDir = process.env.APP_DATA_DIR || (isCpanelHost ? path.join(process.env.HOME, '.myownschool-data') : legacyDataDir);
+const STORE_DIR = path.join(dataDir, 'mobile_api_store');
 fs.mkdirSync(STORE_DIR, { recursive: true });
 
 function safeStoreName(name = '') {
