@@ -1938,8 +1938,8 @@ app.post('/api/students', authenticateToken, async (req, res) => {
         }
 
         for (const item of data) {
-            const normalizedUsername = String(item.username || '').trim();
             const existing = item.id ? await Student.findByPk(item.id) : null;
+            const normalizedUsername = String(item.username ?? existing?.username ?? '').trim();
             Object.assign(item, await studentPasswordFields(item, existing || {}));
             item.email = normalizeOptionalEmail(item.email);
             item.username = normalizedUsername || null;

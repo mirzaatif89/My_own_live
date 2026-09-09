@@ -753,6 +753,8 @@ function bindPasswordToggles() {
     document.addEventListener('click', (event) => {
         const toggleBtn = event.target.closest('[data-toggle-password]');
         if (!toggleBtn) return;
+        // Buttons with an inline handler have already handled this click.
+        if (toggleBtn.hasAttribute('onclick')) return;
         const targetId = toggleBtn.getAttribute('data-toggle-password');
         event.preventDefault();
         togglePasswordVisibility(targetId, toggleBtn);
