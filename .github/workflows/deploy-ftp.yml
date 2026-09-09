@@ -8,7 +8,7 @@ on:
 
 concurrency:
   group: live-deploy-ftp
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -32,7 +32,7 @@ jobs:
           FTP_PORT: ${{ secrets.FTP_PORT }}
         run: |
           missing=()
-          for v in FTP_SERVER FTP_USERNAME FTP_PASSWORD FTP_PORT; do
+          for v in FTP_SERVER FTP_USERNAME FTP_PASSWORD; do
             if [ -z "${!v}" ]; then
               missing+=("$v")
             fi
@@ -53,7 +53,7 @@ jobs:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          port: ${{ secrets.FTP_PORT }}
+          port: ${{ secrets.FTP_PORT || '21' }}
           protocol: ftp
           local-dir: ./
           server-dir: ./
@@ -64,14 +64,24 @@ jobs:
             **/.github/**
             **/node_modules/**
             **/.env
-            **/data/permissions.json
-            **/data/date_sheet.json
-            **/data/admin_credentials.json
+            data/**
+            tests/**
+            docs/**
+            apkapp/**
+            mobile-app/**
+            tools/**
+            **/.agents/**
+            **/.codex/**
+            **/.vscode/**
+            **/*.apk
+            **/*.zip
+            **/*.log
             **/.deploy-backup/**
             **/server.log
             **/stderr.log
 
-      - name: Skip deploy (missing required FTP secrets)
+      - name: Report blocked deployment (missing required FTP secrets)
         if: ${{ steps.precheck.outputs.ready != 'true' }}
         run: |
-          echo "Skipping FTP deploy. Missing secrets: ${{ steps.precheck.outputs.missing }}"
+          echo "::error::Live deployment did not run. Configure these repository Actions secrets: ${{ steps.precheck.outputs.missing }}"
+          exit 1
