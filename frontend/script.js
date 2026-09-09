@@ -861,7 +861,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const username = document.getElementById('email').value.trim();
-            const password = document.getElementById('password').value.trim();
+            const password = document.getElementById('password').value;
             const btn = loginForm.querySelector('button[type="submit"]');
             const originalBtnText = btn.innerText;
 
@@ -5892,8 +5892,8 @@ async function handleStudentFormSubmit(e) {
         localSaveResult = saveStudentsWithLocalFallback(students, newStudent);
         students = localSaveResult.students;
     } catch (error) {
-        await showAppAlert(error.message || 'Student could not be saved in the browser.', 'Save Failed');
-        return;
+        if (!isStorageQuotaError(error)) throw error;
+        localSaveResult = { students, student: newStudent };
     }
 
     let syncResult = await syncToSQLDetailed('students', [localSaveResult.student]);

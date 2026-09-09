@@ -6,6 +6,8 @@ const {
     PRINCIPAL_USERNAME,
     bcrypt,
     jwt,
+    upsertAuthUser,
+    isPasswordHash,
     loadPermissions
 } = require('./_lib/services');
 
@@ -82,7 +84,13 @@ module.exports = createHandler({
         }
 
         const { User, Student, Teacher, Staff } = db.models;
-        const user = await User.findOne({ where: userWhere });
+        let user = await User.findOne({ where: userWhere });
+        const studentProfile = user?.role === 'Student'
+            ? await Student.findByPk(user.profileId)
+            : !user ? await Student.findOne({ where: userWhere }) : null;
+        if (studentProfile && !user) {
+            user = { id: 'student_' + studentProfile.id, profileId: studentProfile.id, role: 'Student', username: studentProfile.username, email: studentProfile.email, password: studentProfile.password, fullName: studentProfile.fullName, campusName: studentProfile.campusName };
+        }
 
         if (!user) {
             sendJson(res, 401, { success: false, message: 'Invalid credentials' });
@@ -96,12 +104,16 @@ module.exports = createHandler({
             return;
         }
 
-        const isMatch = await bcrypt.compare(password, user.password);
+        const storedPassword = studentProfile?.password || user.password;
+        const isMatch = storedPassword && typeof password === 'string' && (isPasswordHash(storedPassword)
+            ? await bcrypt.compare(password, storedPassword)
+            : password === storedPassword);
         if (!isMatch) {
             sendJson(res, 401, { success: false, message: 'Invalid credentials' });
             return;
         }
 
+        if (studentProfile) await upsertAuthUser(User, { ...user, id: 'student_' + studentProfile.id, profileId: studentProfile.id, role: 'Student', password: isPasswordHash(storedPassword) ? storedPassword : await bcrypt.hash(storedPassword, 10), plainPassword: studentProfile.plainPassword });
         let profileName = user.fullName;
         let designationKey = '';
         if (user.role === 'Student') {

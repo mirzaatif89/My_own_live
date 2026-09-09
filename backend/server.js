@@ -1,3 +1,4 @@
+const { studentPasswordFields } = require('../api/_lib/studentCredentials');
 const express = require('express');
 const fs = require('fs');
 const http = require('http');
@@ -1114,17 +1115,20 @@ app.post('/api/login', async (req, res) => {
         // was not created (or contains an old password). Recover those records
         // from the profile table and repair the auth row during login.
         let profileFallback = null;
-        if (!user || user.role === 'Teacher' || user.role === 'Staff') {
+        if (!user || ['Student', 'Teacher', 'Staff'].includes(user.role)) {
             const profileWhere = normalizedIdentity.includes('@')
                 ? { [Op.or]: [{ username: normalizedIdentity }, { email: normalizedIdentity.toLowerCase() }] }
                 : { username: normalizedIdentity };
-            profileFallback = await Teacher.findOne({ where: profileWhere })
-                || await sequelize.models.Staff.findOne({ where: profileWhere });
+            profileFallback = user?.role === 'Student'
+                ? await Student.findByPk(user.profileId)
+                : user?.role === 'Teacher' ? await Teacher.findByPk(user.profileId)
+                : user?.role === 'Staff' ? await sequelize.models.Staff.findByPk(user.profileId)
+                : await Student.findOne({ where: profileWhere }) || await Teacher.findOne({ where: profileWhere }) || await sequelize.models.Staff.findOne({ where: profileWhere });
         }
 
         if (user || profileFallback) {
             const permissions = readPermissions();
-            const baseRole = user?.role || (profileFallback instanceof sequelize.models.Teacher ? 'Teacher' : 'Staff');
+            const baseRole = user?.role || (profileFallback instanceof Student ? 'Student' : profileFallback instanceof Teacher ? 'Teacher' : 'Staff');
             const roleKey = String(baseRole || '').toLowerCase();
             if (permissions.loginAccess[roleKey] === false) {
                 return res.status(403).json({ success: false, message: `${baseRole} login is currently disabled by admin.` });
@@ -1138,7 +1142,7 @@ app.post('/api/login', async (req, res) => {
             if (isMatch) {
                 const profileId = user?.profileId || profileFallback.id;
                 const currentUser = user || {
-                    id: `${roleKey === 'teacher' ? 'teacher' : 'staff'}_${profileId}`,
+                    id: `${roleKey}_${profileId}`,
                     profileId,
                     role: baseRole,
                     username: profileFallback.username,
@@ -1935,18 +1939,14 @@ app.post('/api/students', authenticateToken, async (req, res) => {
 
         for (const item of data) {
             const normalizedUsername = String(item.username || '').trim();
-            const rawPassword = item.plainPassword || item.password || '';
+            const existing = item.id ? await Student.findByPk(item.id) : null;
+            Object.assign(item, await studentPasswordFields(item, existing || {}));
             item.email = normalizeOptionalEmail(item.email);
             item.username = normalizedUsername || null;
             await ensureUniqueStudentIdentity(Student, User, item);
-            if (normalizedUsername && item.password && !isPasswordHash(item.password)) {
-                item.password = await bcrypt.hash(item.password, 10);
-            }
             if (!normalizedUsername) {
                 item.password = null;
                 item.plainPassword = null;
-            } else {
-                item.plainPassword = rawPassword || null;
             }
 
             await Student.upsert(item);

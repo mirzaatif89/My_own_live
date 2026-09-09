@@ -1,3 +1,4 @@
+const { studentPasswordFields } = require('../_lib/studentCredentials');
 const { createHandler, sendJson } = require('../_lib/http');
 const { getDb } = require('../_lib/db');
 const {
@@ -19,13 +20,12 @@ module.exports = createHandler({
         const { Student, User } = db.models;
 
         for (const item of data) {
-            const rawPassword = item.plainPassword || item.password || '';
+            const existing = item.id ? await Student.findByPk(item.id) : null;
+            item.username = String(item.username ?? existing?.username ?? '').trim() || null;
+            Object.assign(item, await studentPasswordFields(item, existing || {}));
             item.email = normalizeOptionalEmail(item.email);
             await ensureUniqueStudentIdentity(Student, User, item, Op);
-            if (item.password && !isPasswordHash(item.password)) {
-                item.password = await bcrypt.hash(item.password, 10);
-            }
-            item.plainPassword = rawPassword;
+
 
             await Student.upsert(item);
             await upsertAuthUser(User, {
