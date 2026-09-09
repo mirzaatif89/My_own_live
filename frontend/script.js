@@ -5705,6 +5705,17 @@ function normalizeDateInputValue(value) {
 
 async function handleStudentFormSubmit(e) {
     e.preventDefault();
+    const button = document.querySelector('#studentForm button[type="submit"]');
+    if (button?.disabled) return;
+    const original = button?.innerHTML;
+    if (button) { button.disabled = true; button.textContent = 'Saving to server...'; }
+    try { await saveStudentFormToServer(e); }
+    catch (error) { await showAppAlert(error.message || 'Student update failed. Please retry.', 'Student Save Failed'); }
+    finally { if (button) { button.disabled = false; button.innerHTML = original; } }
+}
+
+async function saveStudentFormToServer(e) {
+    e.preventDefault();
     const idField = document.getElementById('studentId');
     const isEdit = idField.value !== '';
 
@@ -5914,7 +5925,7 @@ async function handleStudentFormSubmit(e) {
         }
     }
     if (!syncResult.success) {
-        saveData(STORAGE_KEY_STUDENTS, previousStudents, { skipSync: true });
+        try { saveData(STORAGE_KEY_STUDENTS, previousStudents, { skipSync: true }); } catch (_error) { /* Always report the server error even when local storage is full. */ }
         renderStudents();
         await showAppAlert(
             syncResult.error || 'Student could not be saved to the database. Please login again and try once more.',
@@ -5929,7 +5940,7 @@ async function handleStudentFormSubmit(e) {
         console.warn('Student list refresh failed:', error.message);
     }
 
-    pushNotification('Student Updated', `Account for "${newStudent.fullName}" saved and activated.`, 'user');
+    try { pushNotification('Student Updated', `Account for "${newStudent.fullName}" saved and activated.`, 'user'); } catch (_error) { /* Notifications must not block save confirmation. */ }
     toggleStudentForm();
     populateQuickStudentFilters();
     renderStudents();
