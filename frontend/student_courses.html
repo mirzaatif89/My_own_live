@@ -62,7 +62,7 @@
     </div>
     <div id="successModal" class="success-overlay"><div class="success-modal"><div class="success-icon-wrap"><i data-lucide="check-circle"></i></div><h2 id="successTitle">Success!</h2><p id="successMessage" style="color:var(--text-secondary); margin:1rem 0 2rem;"></p><button class="btn btn-primary" style="width:100%;" onclick="closeSuccessModal()">Great!</button></div></div>
     <script src="auth.js?v=20260520-sidebar-requested-order"></script>
-    <script src="script.js?v=20260520-sidebar-classes-restore"></script>
+    <script src="script.js?v=20260909-course-save"></script>
     <script>
         const STUDENT_COURSE_KEY = 'eduCore_student_courses';
         const COURSE_API_BASE = typeof getApiBaseUrl === 'function'
@@ -101,30 +101,21 @@
             studentCourseList.innerHTML = `<table class="schedule-table"><thead><tr><th>Campus</th><th>Class</th><th>Title</th><th>Details</th><th>File</th><th>Action</th></tr></thead><tbody>${courses.map((item) => `<tr><td>${esc(item.campusName || 'All Campuses')}</td><td>${esc(item.classGrade)}</td><td>${esc(item.title)}</td><td>${esc(item.details)}</td><td>${item.file?.dataUrl ? `<a href="${item.file.dataUrl}" download="${esc(item.file.name || 'file')}">${esc(item.file.name || 'Download')}</a>` : '-'}</td><td><div class="schedule-actions"><button class="schedule-action-btn edit" onclick="editCourse('${item.id}')"><i data-lucide="edit-2" width="14"></i> Edit</button><button class="schedule-action-btn delete" onclick="deleteCourse('${item.id}')"><i data-lucide="trash-2" width="14"></i> Delete</button></div></td></tr>`).join('')}</tbody></table>`;
             lucide.createIcons();
         }
-        function mergeCourses(remote = [], cached = []) {
-            const map = new Map();
-            [...cached, ...remote].forEach((item) => {
-                if (!item?.id) return;
-                map.set(String(item.id), { ...(map.get(String(item.id)) || {}), ...item });
-            });
-            return Array.from(map.values());
-        }
+        let courseRevision = 0;
+        let courseSaving = false;
         async function loadCourses() {
+            const revision = courseRevision;
             try {
-                const cachedCourses = data(STUDENT_COURSE_KEY);
-                const response = await fetch(`${COURSE_API_BASE}/student-courses`);
-                const result = await response.json().catch(() => ({}));
+                const response = await fetch(`${COURSE_API_BASE}/student-courses`, { cache: 'no-store' });
+                const result = await response.json();
                 if (!response.ok || !result.success || !Array.isArray(result.courses)) {
                     throw new Error(result.message || 'Courses could not be loaded.');
                 }
-                save(STUDENT_COURSE_KEY, mergeCourses(result.courses, cachedCourses));
-                const remoteIds = new Set(result.courses.map((item) => String(item.id || '')));
-                const localOnlyCourses = cachedCourses.filter((item) => item?.id && !remoteIds.has(String(item.id)));
-                for (const item of localOnlyCourses) {
-                    await saveCourseToApi(item);
-                }
+                // A load started before a save must never replace the saved list.
+                if (revision !== courseRevision) return;
+                save(STUDENT_COURSE_KEY, result.courses);
             } catch (_error) {
-                // Keep local courses visible if the API is temporarily unavailable.
+                // Cached records are for display only; never publish them on page load.
             }
             render();
         }
@@ -136,14 +127,29 @@
             });
             const result = await response.json().catch(() => ({}));
             if (!response.ok || !result.success) {
-                throw new Error(result.message || 'Course could not be saved.');
+                throw new Error(result.message || result.error || 'Course could not be saved.');
             }
-            if (Array.isArray(result.courses)) save(STUDENT_COURSE_KEY, result.courses);
-            return result.course || item;
+            const saved = result.course;
+            const matches = (record) => record && ['id', 'campusName', 'classGrade', 'title', 'details'].every(key => record[key] === item[key])
+                && (record.file?.name || '') === (item.file?.name || '')
+                && (record.file?.dataUrl || '') === (item.file?.dataUrl || '');
+            if (!matches(saved) || !Array.isArray(result.courses) || !result.courses.some(matches)) {
+                throw new Error('Server did not confirm this class and course. Your form has been kept; please retry after the latest deployment.');
+            }
+            // Confirm persistence before clearing the form or showing success.
+            const check = await fetch(`${COURSE_API_BASE}/student-courses`, { cache: 'no-store' });
+            const persisted = await check.json();
+            if (!check.ok || !persisted.success || !Array.isArray(persisted.courses) || !persisted.courses.some(matches)) {
+                throw new Error('Course could not be verified on the server. Your form has been kept.');
+            }
+            if (!save(STUDENT_COURSE_KEY, persisted.courses)) throw new Error('Course saved on server, but browser storage is full.');
+            return saved;
         }
         function editCourse(id) {
             const item = data(STUDENT_COURSE_KEY).find((entry) => entry.id === id);
             if (!item) return;
+            if (courseSaving) return;
+            studentCourseFile.value = '';
             studentCourseId.value = item.id; studentCourseCampus.value = item.campusName || ''; studentCourseClass.value = item.classGrade || ''; studentCourseTitle.value = item.title || ''; studentCourseDetails.value = item.details || '';
             document.querySelector('#studentCourseForm button[type="submit"]').innerHTML = '<i data-lucide="save"></i> Update Course';
             studentCourseForm.scrollIntoView({ behavior: 'smooth', block: 'start' }); lucide.createIcons();
@@ -164,22 +170,32 @@
         }
         studentCourseForm.addEventListener('submit', async (event) => {
             event.preventDefault();
+            if (courseSaving) return;
+            const form = event.target;
             const editId = studentCourseId.value;
             const existing = data(STUDENT_COURSE_KEY).find((item) => item.id === editId);
-            const file = await readFile(studentCourseFile);
-            const item = { id: editId || `COURSE-${Date.now()}`, campusName: studentCourseCampus.value, classGrade: studentCourseClass.value, title: studentCourseTitle.value.trim(), details: studentCourseDetails.value.trim(), file: file || existing?.file || null, createdAt: existing?.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+            // Snapshot fields before reading the attachment asynchronously.
+            const item = { id: editId || `COURSE-${crypto.randomUUID()}`, campusName: studentCourseCampus.value, classGrade: studentCourseClass.value, title: studentCourseTitle.value.trim(), details: studentCourseDetails.value.trim(), createdAt: existing?.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
             if (!item.campusName || !item.classGrade || !item.title || !item.details) { showAppAlert('Campus, class, title, and details are required.', 'Missing Course'); return; }
-            const items = data(STUDENT_COURSE_KEY);
-            const index = items.findIndex((entry) => entry.id === editId);
-            if (index >= 0) items[index] = item; else items.push(item);
-            if (!save(STUDENT_COURSE_KEY, items)) return;
+            courseSaving = true;
+            courseRevision += 1;
+            const controls = Array.from(form.elements).map(control => [control, control.disabled]);
             try {
+                const fileRead = readFile(studentCourseFile);
+                controls.forEach(([control]) => { control.disabled = true; });
+                item.file = await fileRead || existing?.file || null;
                 await saveCourseToApi(item);
+                form.reset(); studentCourseId.value = '';
+                document.querySelector('#studentCourseForm button[type="submit"]').innerHTML = '<i data-lucide="save"></i> Save Course';
+                render();
+                showSuccessModal(editId ? 'Course Updated!' : 'Course Saved!', `${item.title} saved for ${item.classGrade} (${item.campusName}) and is visible in student portal.`);
             } catch (error) {
                 showAppAlert(error.message || 'Course could not be published.', 'Publish Failed');
-                return;
+            } finally {
+                controls.forEach(([control, disabled]) => { control.disabled = disabled; });
+                courseSaving = false;
+                courseRevision += 1;
             }
-            event.target.reset(); studentCourseId.value = ''; document.querySelector('#studentCourseForm button[type="submit"]').innerHTML = '<i data-lucide="save"></i> Save Course'; render(); showSuccessModal(editId ? 'Course Updated!' : 'Course Saved!', 'Class course is visible in student portal.');
         });
         populateCampuses(); populateClasses(); loadCourses(); lucide.createIcons();
     </script>
