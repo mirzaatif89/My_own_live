@@ -18,6 +18,11 @@ module.exports = createHandler({
     POST: async ({ res, db, body }) => {
         const data = Array.isArray(body) ? body : [body];
         const { Student, User } = db.models;
+        const ids = data.map((item) => String(item?.id || '').trim()).filter(Boolean);
+        if (!data.length || ids.length !== data.length) {
+            sendJson(res, 400, { success: false, message: 'Every student record must include an ID.' });
+            return;
+        }
 
         for (const item of data) {
             const existing = item.id ? await Student.findByPk(item.id) : null;
@@ -41,6 +46,20 @@ module.exports = createHandler({
             });
         }
 
-        sendJson(res, 200, { success: true });
+        const savedRows = await Student.findAll({
+            where: { id: [...new Set(ids)] },
+            attributes: ['id']
+        });
+        const savedIds = new Set(savedRows.map((row) => String(row.id)));
+        const missingIds = [...new Set(ids)].filter((id) => !savedIds.has(id));
+        if (missingIds.length) {
+            sendJson(res, 500, {
+                success: false,
+                message: `Database did not confirm ${missingIds.length} student record(s).`
+            });
+            return;
+        }
+
+        sendJson(res, 200, { success: true, savedIds: [...savedIds], totalStudents: await Student.count() });
     }
 }, { getDb });

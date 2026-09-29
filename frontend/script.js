@@ -5947,10 +5947,21 @@ async function saveStudentFormToServer(e) {
         return;
     }
 
+    let refreshedStudents = null;
     try {
-        await refreshStudentsFromSQL();
+        refreshedStudents = await refreshStudentsFromSQL();
     } catch (error) {
         console.warn('Student list refresh failed:', error.message);
+    }
+
+    if (Array.isArray(refreshedStudents) && !refreshedStudents.some((student) => String(student?.id) === String(newStudent.id))) {
+        try { saveData(STORAGE_KEY_STUDENTS, previousStudents, { skipSync: true }); } catch (_error) { /* Keep the database verification error visible. */ }
+        renderStudents();
+        await showAppAlert(
+            'The server accepted the request, but the student was not returned from the database. The student was not confirmed as saved. Please try again or contact the system administrator.',
+            'Student Save Not Confirmed'
+        );
+        return;
     }
 
     try { pushNotification('Student Updated', `Account for "${newStudent.fullName}" saved and activated.`, 'user'); } catch (_error) { /* Notifications must not block save confirmation. */ }

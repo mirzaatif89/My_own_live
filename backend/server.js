@@ -1939,6 +1939,9 @@ app.post('/api/students', authenticateToken, async (req, res) => {
         const User = sequelize.models.User;
 
         const ids = data.map((item) => String(item?.id || '').trim()).filter(Boolean);
+        if (!data.length || ids.length !== data.length) {
+            return res.status(400).json({ success: false, message: 'Every student record must include an ID.' });
+        }
         const existingRows = ids.length
             ? await Student.findAll({ where: { id: ids }, attributes: ['id'] })
             : [];
@@ -1988,9 +1991,19 @@ app.post('/api/students', authenticateToken, async (req, res) => {
             });
         }
 
+        const savedRows = await Student.findAll({
+            where: { id: [...new Set(ids)] },
+            attributes: ['id']
+        });
+        const savedIds = new Set(savedRows.map((row) => String(row.id)));
+        const missingIds = [...new Set(ids)].filter((id) => !savedIds.has(id));
+        if (missingIds.length) {
+            throw new Error(`Database did not confirm ${missingIds.length} student record(s).`);
+        }
+
         const allStudents = await Student.findAll();
         io.emit('students_update', allStudents);
-        res.json({ success: true });
+        res.json({ success: true, savedIds: [...savedIds], totalStudents: allStudents.length });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
