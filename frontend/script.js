@@ -5957,8 +5957,12 @@ async function saveStudentFormToServer(e) {
     if (Array.isArray(refreshedStudents) && !refreshedStudents.some((student) => String(student?.id) === String(newStudent.id))) {
         try { saveData(STORAGE_KEY_STUDENTS, previousStudents, { skipSync: true }); } catch (_error) { /* Keep the database verification error visible. */ }
         renderStudents();
+        const backendVerifiedWrite = Array.isArray(syncResult.result?.savedIds);
+        const verificationMessage = backendVerifiedWrite
+            ? 'The API reported a confirmed database write, but the student list did not return that record. The live API may be reading from a different database instance. Check the cPanel Node.js app database settings and restart the app.'
+            : 'The live API accepted the save but did not return database verification details. Its backend update may not be deployed or restarted yet. In cPanel, pull/deploy the latest backend code, restart the Node.js app, then try again. This student was not confirmed as saved.';
         await showAppAlert(
-            'The server accepted the request, but the student was not returned from the database. The student was not confirmed as saved. Please try again or contact the system administrator.',
+            verificationMessage,
             'Student Save Not Confirmed'
         );
         return;
