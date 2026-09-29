@@ -362,6 +362,16 @@
         loggedInUser = null;
     }
 
+    // A partially saved login must not send the user back and forth between
+    // the public login page and a protected page. Treat the stored identity
+    // and token as one session and clear both if either part is missing.
+    if (!loggedInUser || !authToken) {
+        sessionStorage.removeItem('loggedInUser');
+        sessionStorage.removeItem('eduCore_token');
+        sessionStorage.removeItem('eduCore_session_id');
+        loggedInUser = null;
+    }
+
     function normalizeCustomModules(modules = []) {
         const builtInPages = new Set(Object.entries(pageRegistry)
             .filter(([, config]) => !config.custom)
@@ -1344,13 +1354,18 @@
 
         if (publicPages.has(currentPage)) {
             if (loggedInUser && authToken) {
-                redirectToAllowedHome(loggedInUser, permissions);
+                const homePage = toRoutePath(getHomePage(loggedInUser, permissions));
+                if (window.location.pathname !== homePage) {
+                    window.location.replace(homePage);
+                }
             }
             return;
         }
 
         if (!loggedInUser || !authToken) {
-            forceLoginRedirect();
+            if (window.location.pathname !== '/login') {
+                forceLoginRedirect();
+            }
             return;
         }
 

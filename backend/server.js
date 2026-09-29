@@ -48,8 +48,8 @@ const PERMISSIONS_FILE = path.join(DATA_DIR, 'permissions.json');
 const DETAILED_PERMISSIONS_FILE = path.join(DATA_DIR, 'permissions-detailed.json');
 const DATE_SHEET_FILE = path.join(DATA_DIR, 'date_sheet.json');
 const ADMIN_CREDENTIALS_FILE = path.join(DATA_DIR, 'admin_credentials.json');
-const PRINCIPAL_USERNAME = process.env.PRINCIPAL_USERNAME || 'principal@school.com';
-const PRINCIPAL_PASSWORD = process.env.PRINCIPAL_PASSWORD || 'Principal123';
+const PRINCIPAL_USERNAME = process.env.PRINCIPAL_USERNAME || '';
+const PRINCIPAL_PASSWORD = process.env.PRINCIPAL_PASSWORD || '';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
@@ -803,11 +803,20 @@ async function enforceActionPermission(req, res, moduleKey, actionKey) {
             return false;
         }
 
-        const allowed = checkDesignationActionPermission(designationKey, moduleKey, actionKey);
+        const rolePermissions = readPermissions();
+        const groupKey = role === 'Staff'
+            ? String(req.user?.groupKey || rolePermissions.roleGroups?.Staff || 'accountant').trim().toLowerCase()
+            : (designationKey === 'accountant'
+                ? 'accountant'
+                : String(req.user?.groupKey || rolePermissions.roleGroups?.Teacher || 'teacher').trim().toLowerCase());
+        const roleAction = rolePermissions.groups?.[groupKey]?.actionPermissions?.[moduleKey]?.[actionKey];
+        const allowed = typeof roleAction === 'boolean'
+            ? roleAction
+            : checkDesignationActionPermission(designationKey, moduleKey, actionKey);
         if (!allowed) {
             res.status(403).json({
                 success: false,
-                message: `Permission denied: ${designationKey} cannot ${actionKey} in ${moduleKey}.`
+                message: `Permission denied: ${groupKey} cannot ${actionKey} in ${moduleKey}.`
             });
             return false;
         }
@@ -821,8 +830,8 @@ async function enforceActionPermission(req, res, moduleKey, actionKey) {
 
 function getDefaultAdminCredentials() {
     return {
-        username: process.env.ADMIN_USERNAME || 'Myownschool',
-        password: process.env.ADMIN_PASSWORD || 'myownschool1122'
+        username: process.env.ADMIN_USERNAME || '',
+        password: process.env.ADMIN_PASSWORD || ''
     };
 }
 

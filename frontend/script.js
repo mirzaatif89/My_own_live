@@ -1902,7 +1902,7 @@ function normalizeTeacherDesignation(designationValue = '', groupKeyValue = '') 
     return { designation: 'Teacher', groupKey: 'teacher' };
 }
 
-function setDesignationSelectValue(selectId, value, fallbackGroupKey) {
+function setDesignationSelectValue(selectId, value, fallbackGroupKey, { allowLegacyOption = true } = {}) {
     const select = document.getElementById(selectId);
     if (!select) return;
     const normalized = String(value || '').trim();
@@ -1912,14 +1912,16 @@ function setDesignationSelectValue(selectId, value, fallbackGroupKey) {
     }
 
     const existingOption = Array.from(select.options).find((option) => option.value === normalized);
-    if (!existingOption) {
+    if (!existingOption && allowLegacyOption) {
         const option = document.createElement('option');
         option.value = normalized;
         option.textContent = normalized;
         option.dataset.groupKey = fallbackGroupKey;
         select.appendChild(option);
     }
-    select.value = normalized;
+    select.value = existingOption || allowLegacyOption
+        ? normalized
+        : (Array.from(select.options).some((option) => option.value === 'Teacher') ? 'Teacher' : '');
 }
 
 function validateStudentIdentityInputs({ studentId = '', studentCode = '', username = '', email = '' }) {
@@ -2509,6 +2511,15 @@ function canCurrentUserPerformAction(moduleKey, actionKey) {
     if (user.role === 'Branch') return false;
 
     if (user.role === 'Teacher' || user.role === 'Staff') {
+        try {
+            const config = JSON.parse(sessionStorage.getItem('eduCore_permissions_config') || '{}');
+            const groupKey = String(user.groupKey || config.roleGroups?.[user.role] || '').trim().toLowerCase();
+            const roleAction = config.groups?.[groupKey]?.actionPermissions?.[moduleKey]?.[actionKey];
+            if (typeof roleAction === 'boolean') return roleAction;
+        } catch (_error) {
+            // Fall back to designation permissions if cached role permissions are unavailable.
+        }
+
         const designationKey = getCurrentUserDesignationKey();
         const designationPerms = getCachedDesignationPermissions(designationKey);
         return designationPerms?.actionPermissions?.[moduleKey]?.[actionKey] === true;
@@ -7868,6 +7879,7 @@ function toggleTeacherForm(editMode = false) {
     if (container.style.display === 'block' && !editMode) {
         container.style.display = 'none';
         form.reset();
+        updateTeacherSubjectField();
         document.getElementById('teacherId').value = '';
     } else {
         container.style.display = 'block';
@@ -7877,6 +7889,7 @@ function toggleTeacherForm(editMode = false) {
 
         if (!editMode) {
             form.reset();
+            updateTeacherSubjectField();
             document.getElementById('teacherId').value = '';
             const teacherCodeField = document.getElementById('teacherCode');
             if (teacherCodeField) teacherCodeField.value = generateEntityCode(STORAGE_KEY_TEACHERS, 'TCH');
@@ -7898,7 +7911,7 @@ function validateTeacherRequiredFields() {
         ['tCampusName', 'Campus'],
         ['tGender', 'Gender'],
         ['tDesignation', 'Designation'],
-        ['tSubject', 'Subject']
+        ...(document.getElementById('tDesignation')?.value === 'Teacher' ? [['tSubject', 'Subject']] : [])
     ];
 
     const missingField = requiredFields.find(([fieldId]) => {
@@ -7912,6 +7925,18 @@ function validateTeacherRequiredFields() {
     field?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     field?.focus();
     return `${missingField[1]} is required.`;
+}
+
+function updateTeacherSubjectField() {
+    const designation = document.getElementById('tDesignation');
+    const subject = document.getElementById('tSubject');
+    if (!designation || !subject) return;
+
+    const isTeachingRole = designation.value === 'Teacher';
+    subject.required = isTeachingRole;
+    subject.disabled = !isTeachingRole;
+    subject.placeholder = isTeachingRole ? '' : 'Not needed for this designation';
+    if (!isTeachingRole) subject.value = '';
 }
 
 function isStorageQuotaError(error) {
@@ -8112,6 +8137,9 @@ function bindTeacherFormSubmit() {
     const teacherForm = document.getElementById('teacherForm');
     if (!teacherForm || teacherForm.dataset.submitBound === '1') return;
     teacherForm.dataset.submitBound = '1';
+    const designation = document.getElementById('tDesignation');
+    designation?.addEventListener('change', updateTeacherSubjectField);
+    updateTeacherSubjectField();
     teacherForm.onsubmit = (event) => {
         handleTeacherFormSubmit(event);
         return false;
@@ -8384,8 +8412,9 @@ function editTeacher(t) {
     document.getElementById('tQualification').value = t.qualification || '';
     document.getElementById('tCampusName').value = t.campusName || '';
     document.getElementById('tGender').value = t.gender || '';
-    setDesignationSelectValue('tDesignation', normalizedTeacherDesignation.designation, normalizedTeacherDesignation.groupKey);
+    setDesignationSelectValue('tDesignation', normalizedTeacherDesignation.designation, normalizedTeacherDesignation.groupKey, { allowLegacyOption: false });
     document.getElementById('tSubject').value = t.subject;
+    updateTeacherSubjectField();
     if (document.getElementById('tFingerprintData')) document.getElementById('tFingerprintData').value = t.fingerprintData || '';
     document.getElementById('tSalary').value = t.salary || '0';
     if (document.getElementById('tBankName')) document.getElementById('tBankName').value = t.bankName || '';

@@ -19,8 +19,8 @@ const io = new Server(server, { cors: { origin: '*' } });
 const JWT_SECRET = process.env.JWT_SECRET || 'eduCore_secret_key_2026';
 const PERMISSIONS_FILE = path.join(__dirname, 'permissions.json');
 const DATE_SHEET_FILE = path.join(__dirname, 'date_sheet.json');
-const PRINCIPAL_USERNAME = process.env.PRINCIPAL_USERNAME || 'principal@school.com';
-const PRINCIPAL_PASSWORD = process.env.PRINCIPAL_PASSWORD || 'Principal123';
+const PRINCIPAL_USERNAME = process.env.PRINCIPAL_USERNAME || '';
+const PRINCIPAL_PASSWORD = process.env.PRINCIPAL_PASSWORD || '';
 
 app.use(cors());
 app.use(express.json({ limit: '25mb' }));
@@ -609,8 +609,8 @@ app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
 
     try {
-        const adminEmail = process.env.ADMIN_USERNAME || 'Myownschool';
-        const adminPass = process.env.ADMIN_PASSWORD || 'myownschool1122';
+        const adminEmail = process.env.ADMIN_USERNAME || '';
+        const adminPass = process.env.ADMIN_PASSWORD || '';
 
         if (username === adminEmail && password === adminPass) {
             const permissions = readPermissions();
