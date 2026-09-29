@@ -5955,9 +5955,37 @@ async function saveStudentFormToServer(e) {
 
     try { pushNotification('Student Updated', `Account for "${newStudent.fullName}" saved and activated.`, 'user'); } catch (_error) { /* Notifications must not block save confirmation. */ }
     toggleStudentForm();
-    populateQuickStudentFilters();
-    renderStudents();
+    if (!isEdit) {
+        revealNewStudentInList(newStudent);
+    } else {
+        populateQuickStudentFilters();
+        renderStudents();
+    }
     showSuccessModal('Student Registered!', `The account for ${newStudent.fullName} is now active. They can log in using username: ${usernameInput}`);
+}
+
+function revealNewStudentInList(student) {
+    const searchInput = document.getElementById('studentSearchInput');
+    if (searchInput) {
+        searchInput.value = '';
+        searchInput.placeholder = 'Search';
+    }
+    studentColumnSearchFilter = null;
+
+    const activeCampus = getGlobalCampusFilterForCurrentUser();
+    const newCampus = String(student?.campusName || '').trim();
+    if (activeCampus && activeCampus.toLowerCase() !== 'all' && newCampus
+        && normalizeCampusFilterValue(activeCampus) !== normalizeCampusFilterValue(newCampus)) {
+        setSavedGlobalCampusFilter(newCampus);
+    }
+
+    const quickFilter = document.getElementById('studentQuickFilter');
+    if (quickFilter && getLoggedInUser()?.role !== 'Branch') {
+        setStudentQuickFilterSelectedValues(['all']);
+    }
+    populateQuickStudentFilters();
+    syncStudentQuickFilterMultiUI();
+    renderStudents('');
 }
 
 function bindStudentFormSubmit() {
