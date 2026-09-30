@@ -6845,7 +6845,7 @@ function runStudentSearchFromInput(inputElement) {
     }
 }
 
-function renderStudents(term = '') {
+function renderStudents(term = null) {
     const tbody = document.getElementById('studentTableBody');
     if (!tbody) return;
 
