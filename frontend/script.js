@@ -392,8 +392,13 @@ async function syncToSQLDetailed(endpoint, data) {
     try {
         const token = sessionStorage.getItem('eduCore_token') || '';
         console.log(`Syncing ${endpoint}: Sending ${Array.isArray(data) ? data.length : 1} items`);
+        const normalizedEndpoint = String(endpoint || '').replace(/^\/+|\/+$/g, '');
 
-        const response = await fetch(`${API_BASE_URL}/${endpoint}`, {
+        // cPanel's web server treats names that match folders under /api (for
+        // example /api/students) as directories and redirects them with 301.
+        // A redirected POST can lose its method/body, so call the canonical
+        // trailing-slash route directly.
+        const response = await fetch(`${API_BASE_URL}/${normalizedEndpoint}/`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -404,9 +409,13 @@ async function syncToSQLDetailed(endpoint, data) {
 
         console.log(`API response status for ${endpoint}: ${response.status}`);
 
+        if (response.redirected) {
+            throw new Error('The server redirected this save request. Please check the API route configuration.');
+        }
+
         const result = await parseJsonResponse(response, 'Server sync failed.');
 
-        if (!response.ok || result?.success === false) {
+        if (!response.ok || result?.success !== true || Array.isArray(result)) {
             const errorMsg = result?.message || result?.error || 'Server sync failed.';
             console.error(`Sync failed for ${endpoint}:`, errorMsg);
             throw new Error(errorMsg);
@@ -6874,11 +6883,6 @@ function renderStudents(term = '') {
     if (loggedInUser?.role === 'Branch' && loggedInUser.campusName) {
         campusSet = new Set([String(loggedInUser.campusName).toLowerCase()]);
     }
-    const globalCampus = getGlobalCampusFilterForCurrentUser();
-    if (globalCampus && globalCampus !== 'all') {
-        campusSet = new Set([String(globalCampus).toLowerCase()]);
-    }
-
     const students = getArrayData(STORAGE_KEY_STUDENTS);
     const filtered = students.filter(s =>
         (
@@ -7364,11 +7368,6 @@ function printStudentsList() {
     if (loggedInUser?.role === 'Branch' && loggedInUser.campusName) {
         campusSet = new Set([String(loggedInUser.campusName).toLowerCase()]);
     }
-    const globalCampus = getGlobalCampusFilterForCurrentUser();
-    if (globalCampus && globalCampus !== 'all') {
-        campusSet = new Set([String(globalCampus).toLowerCase()]);
-    }
-
     const students = getArrayData(STORAGE_KEY_STUDENTS);
     const filtered = students
         .filter((s) =>
@@ -7796,12 +7795,7 @@ function populateStudentQuickFilterOptions() {
     if (trigger) trigger.disabled = false;
     if (container) container.classList.remove('disabled');
 
-    const globalCampus = getGlobalCampusFilterForCurrentUser();
-    if (globalCampus && globalCampus !== 'all') {
-        setStudentQuickFilterSelectedValues([`campus:${globalCampus}`]);
-    } else {
-        setStudentQuickFilterSelectedValues(previousSelected);
-    }
+    setStudentQuickFilterSelectedValues(previousSelected);
     buildStudentQuickFilterMultiMenu(needsRebuild);
 }
 
