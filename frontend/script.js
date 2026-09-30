@@ -6631,29 +6631,21 @@ function handleStudentQuickFilterCheckboxToggle(event) {
     const value = String(checkbox.getAttribute('data-filter-value') || '').trim();
     if (!value) return;
 
-    const optionByValue = new Map(Array.from(quickFilter.options || []).map((option) => [String(option.value), option]));
-    const allOption = optionByValue.get('all');
+    const menu = document.getElementById('studentQuickFilterMenu');
+    const checkedValues = Array.from(menu?.querySelectorAll('input[type="checkbox"][data-filter-value]') || [])
+        .filter((item) => item.checked)
+        .map((item) => String(item.getAttribute('data-filter-value') || '').trim())
+        .filter(Boolean);
 
-    if (value === 'all' && checkbox.checked) {
-        Array.from(optionByValue.values()).forEach((option) => {
-            option.selected = option.value === 'all';
-        });
-        syncStudentQuickFilterMultiUI();
-        quickFilter.dispatchEvent(new Event('change'));
-        return;
-    }
-
-    const option = optionByValue.get(value);
-    if (option) option.selected = checkbox.checked;
-    if (checkbox.checked && allOption) allOption.selected = false;
-
-    const selectedValues = getStudentQuickFilterSelectedValues(quickFilter);
-    if (!selectedValues.length || (selectedValues.length === 1 && selectedValues[0] === 'all')) {
-        if (allOption) allOption.selected = true;
-    }
-
+    // Read the just-clicked checkbox state directly, then mirror it to the
+    // hidden select. This keeps “All Students” exclusive and lets multiple
+    // other filters stay selected together.
+    const nextValues = value === 'all' && checkbox.checked
+        ? ['all']
+        : checkedValues.filter((item) => item !== 'all');
+    setStudentQuickFilterSelectedValues(nextValues.length ? nextValues : ['all']);
     syncStudentQuickFilterMultiUI();
-    quickFilter.dispatchEvent(new Event('change'));
+    renderStudents();
 }
 
 function buildStudentQuickFilterMultiMenu(forceRebuild = false) {
