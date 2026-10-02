@@ -129,6 +129,45 @@ function setupNavigation() {
     });
 }
 
+function setupInquiryDialog() {
+    const dialog = document.getElementById('inquiryDialog');
+    if (!dialog) return;
+
+    const closeNavigation = () => {
+        const links = document.getElementById('siteNavLinks');
+        const toggle = document.querySelector('.menu-toggle');
+        links?.classList.remove('open');
+        toggle?.setAttribute('aria-expanded', 'false');
+    };
+
+    document.querySelectorAll('[data-open-inquiry]').forEach((button) => {
+        button.addEventListener('click', () => {
+            closeNavigation();
+            const statusNode = document.getElementById('inquiryFormStatus');
+            statusNode?.classList.remove('error');
+            if (statusNode) statusNode.textContent = '';
+            if (typeof dialog.showModal === 'function') {
+                if (!dialog.open) dialog.showModal();
+            } else {
+                dialog.setAttribute('open', '');
+            }
+        });
+    });
+
+    dialog.querySelectorAll('[data-close-inquiry]').forEach((button) => {
+        button.addEventListener('click', () => {
+            if (typeof dialog.close === 'function') dialog.close();
+            else dialog.removeAttribute('open');
+        });
+    });
+
+    dialog.addEventListener('click', (event) => {
+        if (event.target !== dialog) return;
+        if (typeof dialog.close === 'function') dialog.close();
+        else dialog.removeAttribute('open');
+    });
+}
+
 function setupInquiryForm() {
     const form = document.getElementById('inquiryForm');
     if (!form) return;
@@ -183,7 +222,7 @@ function setupInquiryForm() {
         } finally {
             if (submitButton) {
                 submitButton.disabled = false;
-                submitButton.innerHTML = '<i data-lucide="send"></i> Submit Application';
+                submitButton.innerHTML = '<i data-lucide="send"></i> Send inquiry';
                 if (window.lucide) window.lucide.createIcons();
             }
         }
@@ -192,7 +231,9 @@ function setupInquiryForm() {
 
 document.addEventListener('DOMContentLoaded', () => {
     setupNavigation();
+    setupInquiryDialog();
     setupInquiryForm();
     loadWebsiteData();
+    setText('copyrightYear', new Date().getFullYear());
     if (window.lucide) window.lucide.createIcons();
 });
